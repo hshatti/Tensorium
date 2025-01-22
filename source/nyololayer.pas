@@ -35,6 +35,7 @@ type
     procedure deltaClass(const index, class_id, stride: SizeInt; const avg_cat: PSingle);
     procedure averageDeltas(const class_index, box_index, stride: SizeInt);
     procedure processBatch(arg:pointer);
+    function boxAsTensor(const index:SizeInt):TSingleTensor;
   public
     n, classes, maxBoxes, total : SizeInt;
     tuneSize, TruthSize, truths, embeddingSize, embeddingLayerId, trackHistorySize, detsForTrack, detsForShow : SizeInt;
@@ -55,15 +56,20 @@ type
 
     function getDetectionCount(const aThreshold:Single; const ABatch:SizeInt=0):SizeInt;
 
-    function getDetections(const _w, _h, netw, neth: SizeInt; const thresh: single; const dets: PDetection;  const relative, letter: boolean; const abatch: SizeInt=0): SizeInt;
+    function getDetections(const _w, _h, netw, neth: SizeInt; const thresh: single; const dets: PDetection;  const relative : boolean = false; const letter: boolean = false; const abatch: SizeInt=0): SizeInt;
 
     procedure correctBoxes(const dets: PDetection; const n, w, h, netw, neth: SizeInt; const relative, letter: boolean);
     procedure forward(var state: TNNetState); override;
     procedure backward(var state: TNNetState); override;
+{$ifdef USE_OPENCL}
+    procedure forwardGPU(var state: TNNetState); override;
+    procedure backwardGPU(var state: TNNetState); override;
+{$endif}
   end;
 
 implementation
-uses math, nnet, steroids;
+uses math, nnet
+  {$ifdef USE_MULTITHREADING} , steroids{$endif};
 
 function ifthen(const val:boolean;const iftrue:single ; const iffalse:single =0.0):single;overload; inline;
 begin
@@ -281,6 +287,7 @@ var
     i: SizeInt;
 begin
     layerType := ltYOLO;
+    ActivationType := acLOGISTIC;
     n := An;
     total := Atotal;
     batch := Abatch;
@@ -374,20 +381,24 @@ var
     i, _n, obj_index: SizeInt;
 begin
     result := 0;
+    {$ifdef USE_OPENCL}
+    if output.wasGPU() then output.pullFromDevice();
+    {$endif}
     for i := 0 to w * h -1 do
         for _n := 0 to n -1 do
             begin
                 //obj_index := aBatch*outputs + _n*(classes + 4+1)*w*h + 4*w*h + i;
                 obj_index := entryIndex(ABatch, _n * w * h + i, 4);
-                if //not isnan(l.output[obj_index]) and
+                if
+                   //not isnan(output.Data[obj_index]) and
                    (output.Data[obj_index] > aThreshold) then
                     inc(result)
             end;
 end;
 
 function TYoloLayer.getDetections(const _w, _h, netw, neth: SizeInt;
-  const thresh: single; const dets: PDetection;
-  const relative, letter: boolean; const abatch: SizeInt): SizeInt;
+  const thresh: single; const dets: PDetection; const relative: boolean;
+  const letter: boolean; const abatch: SizeInt): SizeInt;
 var
     i, j, _n, row, col, obj_index, box_index, class_index: SizeInt;
     predictions: PSingle;
@@ -403,10 +414,12 @@ begin
                 begin
                     obj_index := entryIndex(abatch, _n * w * h+i, 4);
                     objectness := predictions[obj_index];
-                    if //not isnan(objectness) and
+                    if
+                      //not isnan(objectness) and
                        (objectness > thresh) then
                         begin
                             box_index := entryIndex(abatch, _n * w * h+i, 0);
+                            dets[result].id := result;
                             dets[result].bbox := getBox(mask.Data[_n], box_index, col, row, netw, neth, w * h);
                             dets[result].objectness := objectness;
                             dets[result].classes := classes;
@@ -463,8 +476,8 @@ begin
     for i := 0 to n -1 do
         begin
             b := dets[i].bbox;
-            b.x := (b.x-deltaw / 2.0 / netw) / ratiow;
-            b.y := (b.y-deltah / 2.0 / neth) / ratioh;
+            b.x := (b.x - deltaw / 2.0 / netw) / ratiow;
+            b.y := (b.y - deltah / 2.0 / neth) / ratioh;
             b.w := b.w * (1 / ratiow);
             b.h := b.h * (1 / ratioh);
             if not relative then
@@ -754,6 +767,16 @@ begin
                   end;
 end;
 
+function TYoloLayer.boxAsTensor(const index: SizeInt): TSingleTensor;
+var i : SizeInt;
+begin
+  assert((index>=0) and (index < classes+5));
+  result.resize([n ,output.h, output.w]);
+  for i:=0 to n-1 do
+      move(output.data[(i*(classes +5)+index)*h*w], result.data[i*h*w], h*w*sizeof(single))
+
+end;
+
 procedure TYoloLayer.forward(var state: TNNetState);
 var bbox_index , obj_index, iteration_num, b, _n, start_point: SizeInt;
     counter_reject, counter_all, i, progress_it, counter, num_deltas_per_anchor: SizeInt;
@@ -761,6 +784,7 @@ var bbox_index , obj_index, iteration_num, b, _n, start_point: SizeInt;
     progress, ep_loss_threshold, cur_max, cur_avg , cur_std, rolling_std
       , rolling_max, rolling_avg, final_badlebels_threshold
       , cur_percent, progress_badlabels, badlabels_threshold, loss: Single;
+    t:TSingleTensor;
 begin
   {$ifdef USE_TELEMETRY}
   if benchmark then metrics.forward.start(layerType);
@@ -768,19 +792,28 @@ begin
 
   state.input.copyTo(output);
   for b := 0 to batch -1 do
-      for _n := 0 to n -1 do
+      for _n := 0 to n -1 do       // _n is the channel
           begin
-              bbox_index := entryIndex(b, _n * w * h, 0);
+
+              bbox_index := entryIndex(b, _n * w * h, 0); // 1st pixel of 1st image from each channel
               if not newCoords then
                   begin
-                      activate_array(pointer(output.data + bbox_index), 2 * w * h, acLOGISTIC);
-                      obj_index := entryIndex(b, _n * w * h, 4);
-                      activate_array(pointer(output.Data + obj_index), (1+classes) * w * h, acLOGISTIC)
+
+                      activate_array(pointer(output.data + bbox_index), 2 * w * h, acLOGISTIC); // activate 1st 2 images only for each channel
+
+                      //_n := location div (w * h);
+                      //loc := location mod (w * h);
+                      //result := aBatch*outputs + _n*(classes + 4+1)*w*h + entry*w*h + loc
+
+                      obj_index := entryIndex(b, _n * w * h, 4); // fifth image of each channel
+                      activate_array(pointer(output.Data + obj_index), (1+classes) * w * h, acLOGISTIC) // activate the fifth image and all the rest classifying images in each channel
                   end;
               //scal_add_cpu(2 * l.w * l.h, l.scale_x_y, -0.5 * (l.scale_x_y-1), l.output+bbox_index, 1)
               if scaleXY<>1 then
                   output.FusedMultiplyAdd(scaleXY, 0.5*(1-scaleXY), bbox_index, 2*w*h);
           end;
+  //output.printStat;
+  //readln;
 
   if state.isTraining then begin
 
@@ -815,10 +848,15 @@ begin
             ThreadArgs[b].tot_giou_loss := 0;
             ThreadArgs[b].count := 0;
             ThreadArgs[b].class_count := 0;
+            {$ifdef USE_MULTITHREADING}
             threads[b] := ExecuteInThread(processBatch, @threadArgs[b]);
+            {$else}
+            processBatch(@ThreadArgs[b]);
+            {$endif}
             //if pthread_create( and threads[b], 0, process_batch,  and (yolo_args[b])) then
                 //error('Thread creation failed', DARKNET_LOC)
         end;
+    {$ifdef USE_MULTITHREADING}
     for b := 0 to batch -1 do
         begin
             //pthread_join(threads[b], 0);
@@ -829,6 +867,7 @@ begin
             //count         := count         + threadArgs[b].count;
             //class_count   := class_count   + threadArgs[b].class_count
         end;
+    {$endif}
     //free(yolo_args);
     //free(threads);
     net := TNNet(state.net);
@@ -953,6 +992,44 @@ procedure TYoloLayer.backward(var state: TNNetState);
 begin
   state.delta.add(delta)
 end;
+
+{$ifdef USE_OPENCL}
+procedure TYoloLayer.forwardGPU(var state: TNNetState);
+var
+  _n, bbox_index, b, obj_index: SizeInt;
+begin
+  {$ifdef USE_TELEMETRY}
+  if benchmark then metrics.forward.start(layerType);
+  {$endif}
+  if not state.input.wasGPU() then state.input.pushToDevice;
+  output.setOCL;
+  ocl.copy(state.input.size(), state.input.devData, 0, 1, output.devData, 0, 1);
+  for b := 0 to batch -1 do
+      for _n := 0 to n -1 do
+          begin
+              bbox_index := entryIndex(b, _n * w * h, 0);
+              if not newCoords then
+                  begin
+                      ocl.ActivateArray(2 * w * h, output.devData, bbox_index, longint(acLOGISTIC));
+                      obj_index := entryIndex(b, _n * w * h, 4);
+                      ocl.ActivateArray((1+classes) * w * h, output.devData , obj_index, longint(acLOGISTIC))
+                  end;
+              //scal_add_cpu(2 * l.w * l.h, l.scale_x_y, -0.5 * (l.scale_x_y-1), l.output+bbox_index, 1)
+              if scaleXY<>1 then
+                  ocl.fmavss(2*w*h, output.devData, bbox_index, scaleXY, 0.5*(1-scaleXY), output.devData);
+          end;
+
+  {$ifdef USE_TELEMETRY}
+  ocl.finish();
+  if benchmark then metrics.forward.finish(layerType);
+  {$endif}
+end;
+
+procedure TYoloLayer.backwardGPU(var state: TNNetState);
+begin
+
+end;
+{$endif}
 
 end.
 

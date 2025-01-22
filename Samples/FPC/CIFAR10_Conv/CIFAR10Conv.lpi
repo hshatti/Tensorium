@@ -1,0 +1,186 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CONFIG>
+  <ProjectOptions>
+    <Version Value="12"/>
+    <PathDelim Value="\"/>
+    <General>
+      <Flags>
+        <MainUnitHasCreateFormStatements Value="False"/>
+        <MainUnitHasTitleStatement Value="False"/>
+        <MainUnitHasScaledStatement Value="False"/>
+      </Flags>
+      <SessionStorage Value="InProjectDir"/>
+      <Title Value="CIFAR10Conv"/>
+      <UseAppBundle Value="False"/>
+      <ResourceType Value="res"/>
+    </General>
+    <BuildModes>
+      <Item Name="Debug" Default="True"/>
+      <Item Name="Release">
+        <CompilerOptions>
+          <Version Value="11"/>
+          <PathDelim Value="\"/>
+          <Target>
+            <Filename Value="CIFAR10Conv"/>
+          </Target>
+          <SearchPaths>
+            <OtherUnitFiles Value="..\..\..\source;..\..\..\source\3rdparty\cudnn\source;..\..\..\source\3rdparty\clblast\source;..\..\..\source\3rdparty\oneAPI\mkl\source"/>
+            <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
+          </SearchPaths>
+          <Parsing>
+            <SyntaxOptions>
+              <SyntaxMode Value="Delphi"/>
+            </SyntaxOptions>
+          </Parsing>
+          <CodeGeneration>
+            <SmartLinkUnit Value="True"/>
+            <Optimizations>
+              <OptimizationLevel Value="3"/>
+            </Optimizations>
+          </CodeGeneration>
+          <Linking>
+            <Debugging>
+              <GenerateDebugInfo Value="False"/>
+              <RunWithoutDebug Value="True"/>
+              <DebugInfoType Value="dsDwarf3"/>
+              <UseExternalDbgSyms Value="True"/>
+            </Debugging>
+            <LinkSmart Value="True"/>
+          </Linking>
+          <Other>
+            <CustomOptions Value="-CfAVX2
+-OpCOREAVX2
+-dUSE_AVX2
+-dUSE_MULTITHREADING
+-dUSE_TELEMETRY
+-dUSE_CUDNN"/>
+            <OtherDefines Count="11">
+              <Define0 Value="USE_OPENCL"/>
+              <Define1 Value="USE_AVX2"/>
+              <Define2 Value="USE_OPENBLAS"/>
+              <Define3 Value="USE_MKL"/>
+              <Define4 Value="USE_MULTITHREADING"/>
+              <Define5 Value="CLBLASTCONV"/>
+              <Define6 Value="USE_TELEMETRY"/>
+              <Define7 Value="CL_EVENTS"/>
+              <Define8 Value="CL_BLAST"/>
+              <Define9 Value="BIG_MATRECIES"/>
+              <Define10 Value="USE_CUDNN"/>
+            </OtherDefines>
+          </Other>
+        </CompilerOptions>
+      </Item>
+    </BuildModes>
+    <PublishOptions>
+      <Version Value="2"/>
+      <UseFileFilters Value="True"/>
+    </PublishOptions>
+    <RunParams>
+      <FormatVersion Value="2"/>
+    </RunParams>
+    <Units>
+      <Unit>
+        <Filename Value="CIFAR10Conv.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\3dparty\cudnn\include\cudnn_graph.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\3dparty\cudnn\include\cudnn_ops.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\3dparty\cudnn\include\cudnn_cnn.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\termesc.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\nnopencl.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="nnOpenCL"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\nopmetrics.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="nOpMetrics"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\nrnnlayer.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="nRNNLayer"/>
+      </Unit>
+    </Units>
+  </ProjectOptions>
+  <CompilerOptions>
+    <Version Value="11"/>
+    <PathDelim Value="\"/>
+    <Target>
+      <Filename Value="CIFAR10Conv"/>
+    </Target>
+    <SearchPaths>
+      <OtherUnitFiles Value="..\..\..\source;..\..\..\source\3rdparty\clblast\source;..\..\..\source\3rdparty\cudnn\source;..\..\..\source\3rdparty\oneAPI\mkl\source"/>
+      <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
+    </SearchPaths>
+    <Parsing>
+      <SyntaxOptions>
+        <SyntaxMode Value="Delphi"/>
+        <IncludeAssertionCode Value="True"/>
+      </SyntaxOptions>
+    </Parsing>
+    <CodeGeneration>
+      <Checks>
+        <IOChecks Value="True"/>
+        <RangeChecks Value="True"/>
+        <OverflowChecks Value="True"/>
+        <StackChecks Value="True"/>
+      </Checks>
+      <VerifyObjMethodCallValidity Value="True"/>
+    </CodeGeneration>
+    <Linking>
+      <Debugging>
+        <DebugInfoType Value="dsDwarf3"/>
+        <UseHeaptrc Value="True"/>
+        <TrashVariables Value="True"/>
+        <UseExternalDbgSyms Value="True"/>
+      </Debugging>
+    </Linking>
+    <Other>
+      <CustomOptions Value="-CfAVX2
+-OpCOREAVX2
+-dUSE_AVX2
+-dUSE_MKL
+-dUSE_TELEMETRY"/>
+      <OtherDefines Count="11">
+        <Define0 Value="USE_OPENCL"/>
+        <Define1 Value="USE_AVX2"/>
+        <Define2 Value="USE_OPENBLAS"/>
+        <Define3 Value="USE_MKL"/>
+        <Define4 Value="USE_MULTITHREADING"/>
+        <Define5 Value="CLBLASTCONV"/>
+        <Define6 Value="USE_TELEMETRY"/>
+        <Define7 Value="CL_EVENTS"/>
+        <Define8 Value="CL_BLAST"/>
+        <Define9 Value="BIG_MATRECIES"/>
+        <Define10 Value="USE_CUDNN"/>
+      </OtherDefines>
+    </Other>
+  </CompilerOptions>
+  <Debugging>
+    <Exceptions>
+      <Item>
+        <Name Value="EAbort"/>
+      </Item>
+      <Item>
+        <Name Value="ECodetoolError"/>
+      </Item>
+      <Item>
+        <Name Value="EFOpenError"/>
+      </Item>
+    </Exceptions>
+  </Debugging>
+</CONFIG>

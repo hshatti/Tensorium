@@ -9,7 +9,7 @@ unit nActivation;
 interface
 
 uses
-  SysUtils, math, NTypes, nTensors
+  SysUtils, math, NTypes, nTensors, typinfo
   {$ifdef USE_MULTITHREADING}
   , steroids
   {$endif}
@@ -350,7 +350,8 @@ end;
 function tanh_activate(const x:single):single;inline;
 begin
   //result := 2 / (1 + exp(ensureRange(-2 * x, minSingleExp, maxSingleExp))) - 1
-  result:= (exp(2*x)-1)/(exp(2*x)+1);
+  result := 2 / (1 + exp(-2 * x)) - 1
+  //result:= (exp(2*x)-1)/(exp(2*x)+1);
 end;
 
 function softplus_activate(const x, threshold : single):single;inline;
@@ -607,7 +608,7 @@ begin
           //acNORM_CHAN_SOFTMAX_MAXVAL:
           //           ;
           else
-            assert(false, '[Activation] : not Implemented')
+            assert(false, '[Activation] :'+GetEnumName(TypeInfo(TActivationType), ord(a))+' not Implemented')
       end;
 end;
 

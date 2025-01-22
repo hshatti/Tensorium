@@ -405,6 +405,7 @@ var i:integer;
 begin
   for i:=0 to High(Pool) do begin
     Pool[i].Terminate;
+
     {$ifdef FPC}
     RTLEventSetEvent(Pool[i].Fire);
     {$else}
@@ -775,7 +776,7 @@ initialization
 
 
 finalization
-  freeAndNil(MP);
-  freeAndNil(MP2);
   freeAndNil(MP3);
+  freeAndNil(MP2);
+  freeAndNil(MP);
 end.

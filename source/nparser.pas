@@ -16,6 +16,7 @@ uses
   , nAddLayer
   , nConnectedlayer
   , nConvolutionLayer
+  , nRNNLayer
   , nDropOutLayer
   , nAvgPoolLayer
   , nCostLayer
@@ -27,7 +28,6 @@ uses
   , nBatchNormLayer
   , nUpSampleLayer
   , nYoloLayer
-
   ;
 
 type
@@ -53,6 +53,7 @@ type
     function parseDropOut(const opt:TCFGSection):TDropOutLayer;
     function parseConcat(const opt:TCFGSection):TConcatLayer;
     function parseAdd(const opt:TCFGSection):TAddLayer;
+    function parseRNN(const opt:TCFGSection):TRNNLayer;
     function parseUpSample(const opt:TCFGSection):TUpSampleLayer;
     function parseBatchNorm(const opt:TCFGSection):TBatchNormLayer;
     function parseYolo(const opt:TCFGSection):TYoloLayer;
@@ -67,11 +68,17 @@ type
     procedure loadConvolutionalWeights(var l: TConvolutionalLayer; var fp: file);
     procedure loadAddWeights(var l: TAddLayer; var fp: file);
 
+    procedure saveConnectedWeights(var l: TConnectedLayer; var fp: file; const transpose: boolean);
+    procedure saveBatchNormWeights(var l: TBatchNormLayer; var fp: file);
+    procedure saveConvolutionalWeights(var l: TConvolutionalLayer; var fp: file);
+    procedure saveAddWeights(var l: TAddLayer; var fp: file);
+
 
   public
     constructor Create(const filename:string; const ABatch:SizeInt=0; const ATimeSteps:SizeInt = 0);
     destructor Destroy; override;
     procedure loadWeights(const filename:string; cutoff:SizeInt=0);
+    procedure saveWeights(const filename:string);
 
   end;
 
@@ -133,7 +140,7 @@ end;
 
 function TDarknetParser.parseConnected(const opt: TCFGSection): TConnectedLayer;
 begin
-  result := TConnectedLayer.Create(params.batch, params.inputs,
+  result := TConnectedLayer.Create(params.batch, params.timeSteps, params.inputs,
          opt.getInt('output', 1),
          TActivationType.fromString(opt.getStr('activation', 'relu')),
          opt.getBool('batch_normalize', false){, params.net.adam});
@@ -311,7 +318,7 @@ begin
           writeln(' [dropout] - Both parameters are set, only the parameter will be used: dropblock_size_abs = %d ', dropblock_size_abs);
           dropblock_size_rel := 0
       end;
-  result := TDropoutLayer.Create(params.batch, params.inputs, probability, dropblock, dropblock_size_rel, dropblock_size_abs, params.w, params.h, params.c);
+  result := TDropoutLayer.Create(params.batch, probability, params.inputs, params.c, params.h, params.w, dropblock, dropblock_size_rel, dropblock_size_abs);
   result.outW := params.w;
   result.outH := params.h;
   result.outC := params.c;
@@ -480,6 +487,18 @@ begin
 
 end;
 
+function TDarknetParser.parseRNN(const opt: TCFGSection): TRNNLayer;
+var
+  output, hidden, logistic:SizeInt;
+  act : TActivationType;
+begin
+  output := opt.getInt('output', 1);
+  hidden := opt.getInt('hidden', 1);
+  act := TActivationType.fromString(opt.getStr('activation', 'logistic'));
+  logistic := opt.getInt('logistic', 0);
+  result := TRNNLayer.Create(params.batch, params.inputs, hidden, output, params.timeSteps, act, opt.getBool('batch_normalize', false), logistic);
+end;
+
 function TDarknetParser.parseUpSample(const opt: TCFGSection): TUpSampleLayer;
 begin
   result := TUpSampleLayer.Create(params.batch, params.w, params.h, params.c, opt.getInt( 'stride', 2), opt.getFloat( 'scale', 1, true));
@@ -634,7 +653,7 @@ var
   tree_file: String;
 begin
   groups := opt.getInt('groups', 1, true);
-  result :=TSoftmaxLayer.Create(params.batch, params.inputs, groups);
+  result :=TSoftmaxLayer.Create(params.batch, params.inputs*params.timeSteps, groups);
   result.temperature := opt.getFloat( 'temperature', 1, true);
   tree_file := opt.getStr( 'tree', '');
   if tree_file<>'' then
@@ -709,10 +728,11 @@ begin
     neural.batch:= ABatch;
   if ATimeSteps>0 then
     neural.batch:= ATimeSteps;
-  if neural.batch < neural.timeSteps then
-    neural.batch := neural.timeSteps;
+  //if neural.batch < neural.timeSteps then
+  //  neural.batch := neural.timeSteps;
 
-  params.batch:=neural.batch;
+
+  params.batch := neural.batch;
   params.timeSteps:=neural.timeSteps;
 
   if params.w*params.h*params.c<>0 then
@@ -784,6 +804,10 @@ begin
       ltUPSAMPLE  :
         begin
           layers[count] := parseUpSample(CFG.Sections[i]);
+        end;
+      ltRNN :
+        begin
+          layers[count] := parseRNN(CFG.Sections[i]);
         end;
       ltCONTRASTIVE :
         begin
@@ -862,7 +886,7 @@ begin
   //Neural.try_fix_nan := options.getInt('try_fix_nan', 0, true);
   Neural.batch := Neural.batch div subdivs;
   mini_batch := Neural.batch;
-  Neural.batch := Neural.batch * Neural.timeSteps;
+  Neural.batch := Neural.batch {* Neural.timeSteps};
   Neural.subdivisions := subdivs;
   //Neural.weights_reject_freq := options.getInt('weights_reject_freq', 0, true);
   Neural.equiDistantPoint := options.getInt('equidistant_point', 0, true);
@@ -1109,6 +1133,55 @@ begin
 
 end;
 
+procedure TDarknetParser.saveConnectedWeights(var l: TConnectedLayer;
+  var fp: file; const transpose: boolean);
+var buf : TSingleTensor;
+begin
+  l.biases.saveToFile(fp);
+  if transpose then begin
+      buf.resize([l.weights.w, l.weights.h()]);
+      l.weights.matTranspose(buf);
+      buf.SaveToFile(fp);
+  end else
+    l.weights.SaveToFile(fp);
+  l.weights.saveToFile(fp);
+  if l.isBatchNormalized and (not l.dontLoadScales) then
+      begin
+          l.scales.saveToFile(fp);
+          l.rolling_mean.saveToFile(fp);
+          l.rolling_variance.saveToFile(fp)
+      end;
+end;
+
+procedure TDarknetParser.saveBatchNormWeights(var l: TBatchNormLayer;
+  var fp: file);
+begin
+  l.biases.saveToFile(fp);
+  l.scales.saveToFile(fp);
+  l.rolling_mean.saveToFile(fp);
+  l.rolling_variance.saveToFile(fp);
+end;
+
+procedure TDarknetParser.saveConvolutionalWeights(var l: TConvolutionalLayer;
+  var fp: file);
+begin
+  l.biases.saveToFile(fp);
+  if l.isBatchNormalized and (not l.dontloadscales) then
+      begin
+          l.scales.saveToFile(fp);
+
+          l.rolling_mean.saveToFile(fp);
+
+          l.rolling_variance.saveToFile(fp);
+      end;
+  l.weights.saveToFile(fp);
+end;
+
+procedure TDarknetParser.saveAddWeights(var l: TAddLayer; var fp: file);
+begin
+  l.weights.saveToFile(fp);
+end;
+
 procedure TDarknetParser.loadWeights(const filename: string; cutoff: SizeInt);
 var
   fp : file;
@@ -1160,17 +1233,17 @@ begin
           loadConnectedWeights(TConnectedLayer(l), fp, transpose);
         ltBATCHNORM :
           loadBatchNormWeights(TBatchNormLayer(l), fp);
+        ltRNN :
+          begin
+              loadConnectedWeights(TRNNLayer(l).InputLayer, fp, transpose);
+              loadConnectedWeights(TRNNLayer(l).selfLayer, fp, transpose);
+              loadConnectedWeights(TRNNLayer(l).outputLayer, fp, transpose);
+          end;
         //ltCRNN :
         //  begin
         //      load_convolutional_weights(l.input_layer[0], fp);
         //      load_convolutional_weights(l.self_layer[0], fp);
         //      load_convolutional_weights(l.output_layer[0], fp)
-        //  end;
-        //ltRNN :
-        //  begin
-        //      load_connected_weights(l.input_layer[0], fp, transpose);
-        //      load_connected_weights(l.self_layer[0], fp, transpose);
-        //      load_connected_weights(l.output_layer[0], fp, transpose)
         //  end;
         //ltGRU :
         //  begin
@@ -1226,6 +1299,104 @@ begin
       inc(i)
   end;
   closeFile(fp)
+end;
+
+procedure TDarknetParser.saveWeights(const filename: string);
+var fp:file;
+    o, i:SizeInt;
+    l:TBaseLayer;
+    major, minor, rev: SizeInt;
+begin
+  assign(fp, filename);
+  major := 2000;
+  minor := 1;
+  rev   := 1;
+  Rewrite(fp, 1);
+  Blockwrite(fp, major, sizeof(int32) * 1, o);
+  Blockwrite(fp, minor, sizeof(int32) * 1, o);
+  Blockwrite(fp, rev, sizeof(int32) * 1, o);
+  Blockwrite(fp, neural.seen, sizeof(uint64)* 1, o);
+  i := 0;
+  while (i < Neural.layerCount()) do begin
+      l := Neural.layers[i];
+      case l.layerType of
+        ltCONVOLUTIONAL:
+          if (l is TBaseConvolutionalLayer) and ((l as TConvolutionalLayer).shareLayer = nil) then
+            saveConvolutionalWeights(TConvolutionalLayer(l), fp);
+        ltSHORTCUT :
+          if (l.weights.Size() > 0) then
+            saveAddWeights(TAddLayer(l), fp);
+        ltCONNECTED :
+          saveConnectedWeights(TConnectedLayer(l), fp, false);
+        ltBATCHNORM :
+          saveBatchNormWeights(TBatchNormLayer(l), fp);
+        ltRNN :
+          begin
+              saveConnectedWeights(TRNNLayer(l).InputLayer, fp, false);
+              saveConnectedWeights(TRNNLayer(l).selfLayer, fp, false);
+              saveConnectedWeights(TRNNLayer(l).outputLayer, fp, false);
+          end;
+        //ltIMPLICIT :
+        //  load_implicit_weights(l, fp);
+        //ltCRNN :
+        //  begin
+        //      load_convolutional_weights(l.input_layer[0], fp);
+        //      load_convolutional_weights(l.self_layer[0], fp);
+        //      load_convolutional_weights(l.output_layer[0], fp)
+        //  end;
+        //ltGRU :
+        //  begin
+        //      load_connected_weights(l.wz[0], fp, transpose);
+        //      load_connected_weights(l.wr[0], fp, transpose);
+        //      load_connected_weights(l.wh[0], fp, transpose);
+        //      load_connected_weights(l.uz[0], fp, transpose);
+        //      load_connected_weights(l.ur[0], fp, transpose);
+        //      load_connected_weights(l.uh[0], fp, transpose)
+        //  end;
+        //ltLSTM :
+        //  begin
+        //      load_connected_weights(l.wf[0], fp, transpose);
+        //      load_connected_weights(l.wi[0], fp, transpose);
+        //      load_connected_weights(l.wg[0], fp, transpose);
+        //      load_connected_weights(l.wo[0], fp, transpose);
+        //      load_connected_weights(l.uf[0], fp, transpose);
+        //      load_connected_weights(l.ui[0], fp, transpose);
+        //      load_connected_weights(l.ug[0], fp, transpose);
+        //      load_connected_weights(l.uo[0], fp, transpose)
+        //  end;
+        //ltConvLSTM :
+        //  begin
+        //      if l.peephole then
+        //          begin
+        //              load_convolutional_weights(l.vf[0], fp);
+        //              load_convolutional_weights(l.vi[0], fp);
+        //              load_convolutional_weights(l.vo[0], fp)
+        //          end;
+        //      load_convolutional_weights(l.wf[0], fp);
+        //      if not l.bottleneck then
+        //          begin
+        //              load_convolutional_weights(l.wi[0], fp);
+        //              load_convolutional_weights(l.wg[0], fp);
+        //              load_convolutional_weights(l.wo[0], fp)
+        //          end;
+        //      load_convolutional_weights(l.uf[0], fp);
+        //      load_convolutional_weights(l.ui[0], fp);
+        //      load_convolutional_weights(l.ug[0], fp);
+        //      load_convolutional_weights(l.uo[0], fp)
+        //  end;
+        //ltLOCAL :
+        //  begin
+        //      locations := l.out_w * l.out_h;
+        //      size := l.size * l.size * l.c * l.n * locations;
+        //      BlockRead(fp, l.biases, sizeof(Single)* l.outputs, o);
+        //      BlockRead(fp, l.weights, sizeof(Single)* size, o);
+        //  end;
+
+      end;
+      inc(i)
+  end;
+  closeFile(fp)
+
 end;
 
 { TLearningRatePolicyHelper }

@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CONFIG>
+  <ProjectOptions>
+    <Version Value="12"/>
+    <PathDelim Value="\"/>
+    <General>
+      <Flags>
+        <MainUnitHasCreateFormStatements Value="False"/>
+        <MainUnitHasTitleStatement Value="False"/>
+        <MainUnitHasScaledStatement Value="False"/>
+      </Flags>
+      <SessionStorage Value="InProjectDir"/>
+      <Title Value="MNISTConnected"/>
+      <UseAppBundle Value="False"/>
+      <ResourceType Value="res"/>
+    </General>
+    <BuildModes>
+      <Item Name="Debug" Default="True"/>
+      <Item Name="Release">
+        <CompilerOptions>
+          <Version Value="11"/>
+          <PathDelim Value="\"/>
+          <Target>
+            <Filename Value="MNISTConnected"/>
+          </Target>
+          <SearchPaths>
+            <OtherUnitFiles Value="..\..\..\source;..\..\..\source\3rdparty\oneAPI\mkl\source;..\..\..\source\3rdparty\openblas\source;..\..\..\source\3rdparty\cudnn\source"/>
+            <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
+          </SearchPaths>
+          <CodeGeneration>
+            <SmartLinkUnit Value="True"/>
+            <Optimizations>
+              <OptimizationLevel Value="3"/>
+            </Optimizations>
+          </CodeGeneration>
+          <Linking>
+            <Debugging>
+              <GenerateDebugInfo Value="False"/>
+              <RunWithoutDebug Value="True"/>
+            </Debugging>
+            <LinkSmart Value="True"/>
+          </Linking>
+          <Other>
+            <CustomOptions Value="-dUSE_TELEMETRY
+-dUSE_AVX2
+-dUSE_MULTITHREADING"/>
+            <OtherDefines Count="8">
+              <Define0 Value="USE_TELEMETRY"/>
+              <Define1 Value="USE_AVX2"/>
+              <Define2 Value="USE_MULTITHREADING"/>
+              <Define3 Value="USE_OPENCL"/>
+              <Define4 Value="CL_EVENTS"/>
+              <Define5 Value="USE_MKL"/>
+              <Define6 Value="BIG_MATRECIES"/>
+              <Define7 Value="USE_OPENBLAS"/>
+            </OtherDefines>
+          </Other>
+        </CompilerOptions>
+      </Item>
+    </BuildModes>
+    <PublishOptions>
+      <Version Value="2"/>
+      <UseFileFilters Value="True"/>
+    </PublishOptions>
+    <RunParams>
+      <FormatVersion Value="2"/>
+    </RunParams>
+    <Units>
+      <Unit>
+        <Filename Value="MNISTConnected.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+    </Units>
+  </ProjectOptions>
+  <CompilerOptions>
+    <Version Value="11"/>
+    <PathDelim Value="\"/>
+    <Target>
+      <Filename Value="MNISTConnected"/>
+    </Target>
+    <SearchPaths>
+      <OtherUnitFiles Value="..\..\..\source;..\..\..\source\3rdparty\clblast\source;..\..\..\source\3rdparty\openblas\source;..\..\..\source\3rdparty\oneAPI\mkl\source"/>
+      <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
+    </SearchPaths>
+    <Parsing>
+      <SyntaxOptions>
+        <IncludeAssertionCode Value="True"/>
+      </SyntaxOptions>
+    </Parsing>
+    <CodeGeneration>
+      <Checks>
+        <IOChecks Value="True"/>
+        <RangeChecks Value="True"/>
+        <OverflowChecks Value="True"/>
+        <StackChecks Value="True"/>
+      </Checks>
+      <VerifyObjMethodCallValidity Value="True"/>
+    </CodeGeneration>
+    <Linking>
+      <Debugging>
+        <DebugInfoType Value="dsDwarf3"/>
+        <UseHeaptrc Value="True"/>
+        <TrashVariables Value="True"/>
+        <UseExternalDbgSyms Value="True"/>
+      </Debugging>
+    </Linking>
+    <Other>
+      <CustomOptions Value="-dUSE_TELEMETRY
+-dUSE_AVX2
+-dUSE_MULTITHREADING"/>
+      <OtherDefines Count="8">
+        <Define0 Value="USE_TELEMETRY"/>
+        <Define1 Value="USE_AVX2"/>
+        <Define2 Value="USE_MULTITHREADING"/>
+        <Define3 Value="USE_OPENCL"/>
+        <Define4 Value="CL_EVENTS"/>
+        <Define5 Value="USE_MKL"/>
+        <Define6 Value="BIG_MATRECIES"/>
+        <Define7 Value="USE_OPENBLAS"/>
+      </OtherDefines>
+    </Other>
+  </CompilerOptions>
+  <Debugging>
+    <Exceptions>
+      <Item>
+        <Name Value="EAbort"/>
+      </Item>
+      <Item>
+        <Name Value="ECodetoolError"/>
+      </Item>
+      <Item>
+        <Name Value="EFOpenError"/>
+      </Item>
+    </Exceptions>
+  </Debugging>
+</CONFIG>

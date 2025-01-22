@@ -11,6 +11,9 @@ uses
 {$ifdef USE_OPENCL}
   {$ifdef CL_BLAST} , clblast {$endif}
 {$endif}
+  {$ifdef USE_TELEMETRY}
+  , nOpMetrics
+  {$endif}
   ;
 
 type
@@ -18,7 +21,7 @@ type
   { TConnectedLayer }
 
   TConnectedLayer = class(TBaseLayer)
-    constructor Create(const ABatch, AInputs, aOutputs: SizeInt; const AActivationType:TActivationType= acLINEAR; AIsBatchNormalized:boolean=false);
+    constructor Create(const ABatch, ASteps, AInputs, aOutputs: SizeInt; const AActivationType:TActivationType= acLINEAR; AIsBatchNormalized:boolean=false);
     procedure setBatch(ABatch:SizeInt); override;
     procedure setTrain(ATrain: boolean); override;
     procedure forward(var state: TNNetState); override;
@@ -36,11 +39,13 @@ implementation
 
 { TConnectedLayer }
 
-constructor TConnectedLayer.Create(const ABatch, AInputs, aOutputs: SizeInt;
-  const AActivationType: TActivationType; AIsBatchNormalized: boolean);
+constructor TConnectedLayer.Create(const ABatch, ASteps, AInputs,
+  aOutputs: SizeInt; const AActivationType: TActivationType;
+  AIsBatchNormalized: boolean);
 var randomRange:Single;
 begin
   batch                 := ABatch;
+  Steps                 := ASteps;
   layerType             := ltCONNECTED;
   ActivationType        := AActivationType;
   inputs                := AInputs;
@@ -48,7 +53,7 @@ begin
   outputs               := aOutputs;
   isBatchNormalized     := AIsBatchNormalized;
 
-  output                := TSingleTensor.Create([batch , outputs], Batch);
+  output                := TSingleTensor.Create([steps, batch , outputs], Batch, steps);
   weights               := TSingleTensor.Create([outputs , inputs]);
   randomRange           := sqrt(2/inputs);
   weights.UniformDistribution(-randomRange, randomRange);
@@ -64,8 +69,8 @@ begin
     variance_delta      := TSingleTensor.Create([outputs]);
     rolling_mean        := TSingleTensor.Create([outputs]);
     rolling_variance    := TSingleTensor.Create([outputs]);
-    x                   := TSingleTensor.Create([batch, outputs], Batch);
-    x_norm              := TSingleTensor.Create([batch, outputs], Batch)
+    x                   := TSingleTensor.Create([steps, batch, outputs], Batch, steps);
+    x_norm              := TSingleTensor.Create([steps, batch, outputs], Batch, steps)
   end;
 
 end;
@@ -76,14 +81,14 @@ begin
   Batch := ABatch;
   inputShape[0] := ABatch;
 
-  output.reSize([batch , outputs], Batch) ;
+  output.reSize([steps, batch , outputs], Batch, steps) ;
 
   if FTrain then
-      delta.reSize([batch , outputs], Batch) ;
+      delta.reSize([steps, batch , outputs], Batch, steps) ;
 
   if isBatchNormalized then begin
-    x.reSize([batch, outputs], Batch);
-    x_norm.reSize([batch, outputs], Batch);
+    x.reSize([steps, batch, outputs], Batch, steps);
+    x_norm.reSize([steps, batch, outputs], Batch, steps);
   end;
 end;
 
@@ -93,7 +98,7 @@ begin
   FTrain := ATrain;
 
   if FTrain then begin
-    delta                 := TSingleTensor.Create([batch , outputs], Batch);
+    delta                 := TSingleTensor.Create([steps, batch , outputs], Batch, steps);
     weight_updates        := TSingleTensor.Create([inputs , outputs]);
     bias_updates          := TSingleTensor.Create([outputs]);
   end else begin
@@ -104,6 +109,7 @@ begin
 end;
 
 procedure TConnectedLayer.forward(var state: TNNetState);
+var outputStep, inputStep, offset:SizeInt;
 begin
   {$ifdef USE_TELEMETRY}
   if benchmark then metrics.forward.start(layerType);
@@ -114,19 +120,22 @@ begin
   {$ifdef USE_TELEMETRY}
   if benchmark then tensorMetrics.start(opGemm);
   {$endif}
+  inputStep  := batch * inputs;
+  outputStep := batch * outputs;
+  offset   := state.step*outputStep;
   TSingleTensor.gemm(CblasRowMajor, CblasNoTrans, CblasTrans, batch, outputs, inputs, 1
-    , state.input^, inputs
-    , weights, inputs
-    , 0, output, outputs);
+    , state.input^.Data + state.step*inputStep, inputs
+    , weights.Data, inputs
+    , 0, output.data + offset, outputs);
   {$ifdef USE_TELEMETRY}
   if benchmark then tensorMetrics.finish(opGemm);
   {$endif}
     //state.input.matMul(weights, output, CblasNoTrans, CblasTrans);
-  if isBatchNormalized and (batch > 1) then begin
+  if isBatchNormalized then begin
       if state.isTraining then begin
           //mean_cpu(output.data , batch, outputs, 1, mean.data);
           //variance_cpu(output.data , mean, batch, outputs, 1, variance.data);
-          output.MeansAndVars(mean, variance);
+          output.MeansAndVars(mean, variance, offset, outputStep);
 
           //scal_cpu(outputs, 0.95, rolling_mean, 1);
           //axpy_cpu(outputs, 0.05, mean, 1, rolling_mean, 1);
@@ -139,28 +148,30 @@ begin
           rolling_variance.axpy(0.05, variance);
 
           //copy_cpu(l.outputs * l.batch, l.output, 1, l.x, 1);
-          output.CopyTo(x);
+          output.CopyTo(x, offset, 1, offset, 1, outputStep);
 
           //normalize_cpu(output, mean, variance, batch, outputs, 1);
-          output.Normalize(mean, variance);
+          output.Normalize(mean, variance, offset, outputStep);
 
           //copy_cpu(l.outputs * l.batch, l.output, 1, l.x_norm, 1)
-          output.copyTo(x_norm)
+          output.copyTo(x_norm, outputStep, 1, offset, 1, outputStep)
       end else
           //normalize each column
           //normalize_cpu(output, rolling_mean, rolling_variance, batch, outputs, 1);
-          output.Normalize(rolling_mean, rolling_variance);
+          output.Normalize(rolling_mean, rolling_variance, offset, outputStep);
 
       //scale_bias(l.output, l.scales, l.batch, l.outputs, 1);
-      output.Multiply(scales);
-  end;
+      output.Multiply(scales, offset, outputStep);
+      output.add(biases, offset, outputStep);
+      //output.FusedMultiplyAdd(scales, biases);
+  end else
 
   //for i := 0 to batch -1 do
   //    TSingleTensor.axpysvv(outputs, 1, biases.data, 1, output.data+i * outputs, 1);
-  output.add(biases);
+    output.add(biases, offset, outputStep);
 
   //activate_array(l.output, l.outputs * l.batch, l.activation);
-  activate();
+  activate(offset);
 
   //write(#$1b'[2J'#$1b'[H');
   //output.print(psGray);
@@ -171,32 +182,35 @@ begin
 end;
 
 procedure TConnectedLayer.backward(var state: TNNetState);
+var offset, stepSize:SizeInt;
 begin
   {$ifdef USE_TELEMETRY}
   if benchmark then metrics.backward.start(layerType);
   {$endif}
+  stepSize := batch * outputs;
+  offset   := state.step * stepSize;
   //gradient_array(l.output, l.outputs * l.batch, l.activation, l.delta);
-  Derivative;
+  Derivative(offset);
   //for i := 0 to batch -1 do
   //    TSingleTensor.axpysvv(outputs, 1, delta.data+i * outputs, 1, bias_updates.data, 1);
-  bias_updates.add(delta);
+  bias_updates.add(delta, offset);
 
   //if l.batch_normalize then
   if isBatchNormalized and (batch > 1) then begin
       // spatial dot (x_norm . delta) then add to scale_updates
       //backward_scale_cpu(x_norm, delta, batch, outputs, 1, scale_updates);
-      scale_updates.addDots(x_norm, delta);
+      scale_updates.addDots(x_norm, delta, offset);
 
       // add scales to all delta batches
       //scale_bias(delta, scales, batch, outputs, 1);
-      delta.add(scales);
+      delta.Multiply(scales, offset,  stepSize);
 
       //mean_delta_cpu(delta, variance, batch, outputs, 1, mean_delta);
       //variance_delta_cpu(x, delta, mean, variance, batch, outputs, 1, variance_delta);
-      delta.MeansAndVarsDelta(delta, x, mean, variance, mean_delta, variance_delta);
+      delta.MeansAndVarsDelta(delta, x, mean, variance, mean_delta, variance_delta, offset);
 
       //normalize_delta_cpu(x, mean, variance, mean_delta, variance_delta, batch, outputs, 1, delta)
-      delta.normalizeDelta(x, mean, variance, mean_delta, variance_delta, delta);
+      delta.normalizeDelta(x, mean, variance, mean_delta, variance_delta, delta, offset);
   end;
 
   {$ifdef USE_TELEMETRY}
@@ -208,17 +222,17 @@ begin
       //sgemm(0, 0, l.batch, l.inputs, l.outputs, 1, l.delta, l.outputs, l.weights, l.inputs, 1, state.delta, l.inputs)
 
   TSingleTensor.gemm(CblasRowMajor, CblasTrans, CblasNoTrans, outputs, inputs, batch, 1
-  , delta, outputs
-  , state.input^, inputs
-  , 1, weight_updates, inputs);
+  , delta.Data + offset, outputs
+  , state.input^.Data + state.step*inputs, inputs
+  , 1, weight_updates.Data, inputs);
 
   if assigned(state.delta) and assigned(state.delta.Data) then
       TSingleTensor.gemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, batch, inputs, outputs, 1
-      , delta, outputs
-      , weights, inputs
-      , 1, state.delta^, inputs);
+      , delta.Data + offset, outputs
+      , weights.Data, inputs
+      , 1, state.delta^.Data + state.step*inputs, inputs);
   {$ifdef USE_TELEMETRY}
-   if benchmark then tensorMetrics.finish(opGemm);
+  if benchmark then tensorMetrics.finish(opGemm);
   {$endif}
       //delta.matMul(weights, state.delta)
 
@@ -291,10 +305,6 @@ begin
 
   //output.fill(0);
 
-  {$ifdef USE_TELEMETRY}
-    if benchmark then tensorMetrics.start(opGemm);
-  {$endif}
-
   //writeln(clearscr);
   if not state.input.wasGPU() then  begin
       state.input.pushToDevice;
@@ -328,7 +338,7 @@ begin
           {$IFDEF CL_EVENTS}
           , 1, pointer(state.events), pointer(state.events));
           {$ELSE}
-          , 0, nil, nil);
+          );
           {$ENDIF}
   {$ENDIF}
 
@@ -339,50 +349,64 @@ begin
   //          , 0, output.Data  , outputs
   //          );
 
-  //ocl.finish();
-  //ocl.waitForEvents(batch, pointer(events));
-  {$ifdef USE_TELEMETRY}
-  if benchmark then tensorMetrics.finish(opGemm);
-  {$endif}
 
   if isBatchNormalized and (batch > 1) then begin
+      {$ifdef USE_TELEMETRY}
+      //ocl.waitForEvents(batch, pointer(events));
+      if benchmark then metrics.forward.start(ltBATCHNORM);
+      {$endif}
+      if not scales.wasGPU() then scales.pushToDevice;
+      if not rolling_mean.wasGPU() then rolling_mean.pushToDevice;
+      if not rolling_variance.wasGPU() then rolling_variance.pushToDevice;
       if state.isTraining then begin
-              output.MeansAndVars(mean, variance);
+          //output.MeansAndVars(mean, variance);
+          //rolling_mean.Multiply(0.95);
+          //rolling_mean.axpy(0.05, mean);
+          //rolling_variance.Multiply(0.95);
+          //rolling_variance.axpy(0.05, variance);
+          //output.CopyTo(x);
+          //output.Normalize(mean, variance);
+          //output.copyTo(x_norm)
 
-              rolling_mean.Multiply(0.95);
-              rolling_mean.axpy(0.05, mean);
-
-              rolling_variance.Multiply(0.95);
-              rolling_variance.axpy(0.05, variance);
-
-              output.CopyTo(x);
-
-              output.Normalize(mean, variance);
-
-              output.copyTo(x_norm)
+          ocl.meanAndVars(mean.Size(), output.size(), output.Groups, output.devData, mean.devData, variance.devData);
+          ocl.scale(rolling_mean.size(), 0.95, rolling_mean.devData, 1);
+          ocl.axpy(rolling_mean.Size(), 0.05, mean.devData, 1, rolling_mean.devData, 1);
+          ocl.scale(rolling_variance.Size(), 0.95, rolling_variance.devData, 1);
+          ocl.axpy(rolling_variance.size(), 0.05, variance.devData, 1, rolling_variance.devData, 1);
+          ocl.copy(output.Size(), output.devData, 0, 1, x.devData, 0, 1);
+          ocl.normalize(mean.Size(), output.size(), output.groups, mean.devData, 1, variance.devData, 1, output.devData);
+          ocl.copy(output.size(), output.devData, 0, 1, x_norm.devData ,0, 1);
       end else
-          output.Normalize(rolling_mean, rolling_variance);
+          //output.Normalize(rolling_mean, rolling_variance);
+          ocl.normalize(rolling_mean.Size(), output.size(), output.Groups, rolling_mean.devData, 1, rolling_variance.devData, 1, output.devData);
 
       output.Multiply(scales);
+      {$ifdef USE_TELEMETRY}
+      ocl.finish();
+      if benchmark then metrics.forward.finish(ltBATCHNORM);
+      {$endif}
   end;
 
-  ocl.forwardBias(output.groupSize(), output.devData, 1, biases.devData, 1, output.groups
+  ocl.forwardBias(output.Size(), output.devData, biases.size(), biases.devData, 1, output.groups
   {$IFDEF CL_EVENTS}
   , 1, pointer(state.events), pointer(state.events));
   {$ELSE}
-  , 0, nil, nil);
+  );
   {$ENDIF}
-  //ocl.finish();
-  //ocl.waitForEvents(batch, pointer(events));
+  {$ifdef USE_TELEMETRY}
+  if benchmark then metrics.act.start(ActivationType);
+  {$endif}
 
-
-  ocl.ActivateArray(output.devData, output.size, longint(ActivationType)
+  ocl.ActivateArray(output.size(), output.devData, 0, longint(ActivationType)
   {$IFDEF CL_EVENTS}
   , 1, pointer(state.events), pointer(state.events));
   {$ELSE}
-  , 0, nil, nil);
+  );
   {$ENDIF}
-
+  {$ifdef USE_TELEMETRY}
+  ocl.finish();
+  if benchmark then metrics.act.finish(ActivationType);
+  {$endif}
   //Activate;
   //output.pullFromDevice(t);
   //writeln(state.index, ' FC FW: ');
@@ -412,37 +436,42 @@ begin
   if not weight_updates.wasGPU() then weight_updates.pushToDevice;
 
 
-  ocl.DeriveArray(output.devData, output.size, longint(ActivationType), delta.devData
+  ocl.DeriveArray(output.size(), output.devData, 0, longint(ActivationType), delta.devData
   {$IFDEF CL_EVENTS}
   , 1, pointer(state.events), pointer(state.events));
   {$ELSE}
-  , 0, nil, nil);
+  );
   {$ENDIF}
   //ocl.waitForEvents(batch, pointer(events));
   //ocl.finish();
 
-  ocl.backwardBias(bias_updates.size, bias_updates.devData, 1, delta.devData, 1, batch
+  ocl.backwardBias(bias_updates.size(), bias_updates.devData, delta.Size(), delta.devData, 1, batch
   {$IFDEF CL_EVENTS}
   , 1, pointer(state.events), pointer(state.events));
   {$ELSE}
-  , 0, nil, nil);
+  );
   {$ENDIF}
   //ocl.waitForEvents(batch, pointer(events));
-  //ocl.finish();
 
   if isBatchNormalized and (batch > 1) then begin
-      scale_updates.addDots(x_norm, delta);
+      {$ifdef USE_TELEMETRY}
+      metrics.backward.start(ltBATCHNORM);
+      {$endif}
+      //scale_updates.addDots(x_norm, delta);
+      //delta.add(scales);
+      //TSingleTensor.MeansAndVarsDelta(delta, x, mean, variance, mean_delta, variance_delta);
+      //TSingleTensor.normalizeDelta(x, mean, variance, mean_delta, variance_delta, delta);
 
-      delta.add(scales);
-
-      delta.MeansAndVarsDelta(delta, x, mean, variance, mean_delta, variance_delta);
-
-      delta.normalizeDelta(x, mean, variance, mean_delta, variance_delta, delta);
+      ocl.addDots(delta.Size(), scale_updates.Size(), delta.groups, x_norm.devData, delta.devData, scale_updates.devData);
+      ocl.forwardScale(delta.size(), delta.devData, scales.Size(), scales.devData, 1, delta.groups);
+      ocl.meansAndVarsDelta(delta.size(), mean.size(), delta.groups, delta.devData, x.devData, mean.devData, variance.devData, mean_delta.devData, variance_delta.devData);
+      ocl.normalizeDelta(delta.size(), mean.size(), delta.groups, delta.devData, x.devData, mean.devData, variance.devData, mean_delta.devData, variance_delta.devData);
+      {$ifdef USE_TELEMETRY}
+      ocl.finish();
+      metrics.backward.finish(ltBATCHNORM);
+      {$endif}
   end;
 
-  {$ifdef USE_TELEMETRY}
-  if benchmark then tensorMetrics.start(opGemm);
-  {$endif}
 //
   {$IFDEF CL_BLAST}
   ocl.FErr := integer(CLBlastSgemm(CLBlastLayoutRowMajor, CLBlastTransposeYes, CLBlastTransposeNo
@@ -465,12 +494,9 @@ begin
     {$IFDEF CL_EVENTS}
     , 1, pointer(state.events), pointer(state.events));
     {$ELSE}
-     , 0, nil, nil);
+    );
     {$ENDIF}
   {$ENDIF}
-  //ocl.waitForEvents(batch, pointer(events));
-  //ocl.finish();
-
   if assigned(state.delta) and assigned(state.delta^.devData) then begin
       if not weights.wasGPU then weights.pushToDevice;
       //if not state.delta.wasGPU() then state.delta.pushToDevice;
@@ -495,7 +521,7 @@ begin
           {$IFDEF CL_EVENTS}
           , 1, pointer(state.events), pointer(state.events));
           {$ELSE}
-          , 0, nil, nil);
+          );
           {$ENDIF}
    {$ENDIF}
       //ocl.waitForEvents(batch, pointer(events));
@@ -503,23 +529,6 @@ begin
 
   end ;
 
-  //backward(state);
-  //writeln(slinebreak,state.index,' FC delta :');
-  //delta.pullFromDevice(t);
-  //delta.printStat(); t.printStat();
-  //writeln(' diff : ', t.sumSqrDiff(delta):1:6);
-  //t.free;
-  //writeln(state.index,' FC state.delta :');
-  //state.delta.pullFromDevice(t);
-  //state.delta.printStat(); t.printStat();
-  //writeln(' diff : ', t.sumSqrDiff(state.delta^):1:6);
-  //readln;
-
-  //ocl.waitForEvents(batch, pointer(events));
-
-  {$ifdef USE_TELEMETRY}
-   if benchmark then tensorMetrics.finish(opGemm);
-  {$endif}
   {$ifdef USE_TELEMETRY}
   if benchmark then metrics.backward.finish(layerType);
   {$endif}
@@ -538,38 +547,38 @@ begin
   if not weights.wasGPU() then weights.pushToDevice;
   if not weight_updates.wasGPU() then weight_updates.pushToDevice;
 
-  ocl.axpy(biases.Size(), args.learningRate / args.batch, bias_updates.devData, 1, biases.devData, 1
+  ocl.axpy(biases.size(), args.learningRate / args.batch, bias_updates.devData, 1, biases.devData, 1
   {$IFDEF CL_EVENTS}
   , 1, pointer(events), pointer(events) );
   {$ELSE}
-  , 0, nil, nil);
+  );
   {$ENDIF}
   //ocl.waitForEvents(batch, pointer(events));
   //ocl.finish();
 
-  ocl.scale(bias_updates.Size(), args.momentum, bias_updates.devData, 1
+  ocl.scale(bias_updates.size(), args.momentum, bias_updates.devData, 1
   {$IFDEF CL_EVENTS}
   , 1, pointer(events), pointer(events) );
   {$ELSE}
-  , 0, nil, nil);
+  );
   {$ENDIF}
   //ocl.waitForEvents(batch, pointer(events));
   //ocl.finish();
 
-  ocl.axpy(weight_updates.Size(), -args.decay * args.batch, weights.devData, 1, weight_updates.devData, 1
+  ocl.axpy(weight_updates.size(), -args.decay * args.batch, weights.devData, 1, weight_updates.devData, 1
   {$IFDEF CL_EVENTS}
   , 1, pointer(events), pointer(events) );
   {$ELSE}
-  , 0, nil, nil);
+  );
   {$ENDIF}
   //ocl.waitForEvents(batch, pointer(events));
   //ocl.finish();
 
-  ocl.axpy(weights.Size(), args.learningRate / args.batch, weight_updates.devData, 1, weights.devData, 1
+  ocl.axpy(weights.size(), args.learningRate / args.batch, weight_updates.devData, 1, weights.devData, 1
   {$IFDEF CL_EVENTS}
   , 1, pointer(events), pointer(events) );
   {$ELSE}
-  , 0, nil, nil);
+  );
   {$ENDIF}
   //ocl.waitForEvents(batch, pointer(events));
   //ocl.finish();
@@ -578,20 +587,23 @@ begin
   {$IFDEF CL_EVENTS}
   , 1, pointer(events), pointer(events) );
   {$ELSE}
-  , 0, nil, nil);
+  );
   {$ENDIF}
   //ocl.waitForEvents(batch, pointer(events));
   //ocl.finish();
 
   if isBatchNormalized and (batch > 1) then begin
-      scales.axpy(args.learningRate / args.batch, scale_updates);
-      scale_updates.Multiply(args.momentum);
+      //scales.axpy(args.learningRate / args.batch, scale_updates);
+      //scale_updates.Multiply(args.momentum);
+      ocl.axpy(scales.size(), args.learningRate / args.batch, scale_updates.devData, 1, scales.devData, 1);
+      ocl.scale(scale_updates.size(), args.momentum, scale_updates.devData, 1);
   end;
 
   //update(args);
   inherited ;
 
   {$ifdef USE_TELEMETRY}
+  ocl.finish();
   if benchmark then metrics.update.finish(layerType);
   {$endif}
 end;
