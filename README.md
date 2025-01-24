@@ -3,7 +3,11 @@ A platform agnostic fast tensor manipulation library using SIMD instructions whe
 
 ## Quick examples
   make sure to have the `source` folder in the units search path, or optionally if using **FreePascal** then use the fpc switch `-Fu./source` 
-  include the nTensors unit in the uses section `uses nTensors;`
+  
+  include the nTensors unit in the uses section 
+  ```pascal
+  uses {other units.., } SysUtils, nTensors;
+  ```
 
   _the generic `TTensor<T>` is a record not a class, thus, it will always reside in the stack,
     all the heap allocation or disposal operations will automatically follow the life time of the TTensor variable scope, no need for any memory management._
