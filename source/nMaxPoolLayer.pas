@@ -255,7 +255,7 @@ begin
   end else begin
       if not AvgPool then
           indexes.free;
-      delta.free
+      //delta.free
   end;
   if assigned(inputLayer) then
       prepareAntialiase(inputLayer.stride_x, inputLayer.stride_y);

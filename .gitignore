@@ -47,6 +47,7 @@ __*/
 *meta.txt
 
 #misc media
+python/
 *.jpg
 *.bmp
 *.mkv

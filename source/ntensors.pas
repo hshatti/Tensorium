@@ -5656,11 +5656,11 @@ begin
   FShape := nil;
   FDimSizes := nil;
   FStrides := nil;
+  Data := nil;
   if length(DynData)>0 then
   begin
     groups := 0;
     steps := 0;
-    //Data := nil;
     //setLength(DynData, 0);
     DynData := nil;
     exit;

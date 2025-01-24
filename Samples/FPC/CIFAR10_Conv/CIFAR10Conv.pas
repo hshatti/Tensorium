@@ -201,7 +201,7 @@ begin
     data.x.Data :=t1.Data;
     data.y.Data :=l1.Data;
 
-    cost := {cost +} Neural.trainEpoch(Data);
+    cost := cost + Neural.trainEpoch(Data);
     k := PollKeyEvent;
     if keyPressed then
       Break;
@@ -214,8 +214,6 @@ begin
     output.pullFromDevice;
     output.argMax(Predicted.data + (j mod READ_MEASURE)*READ_BATCH);
     sampled.argMax(Truth.data + (j mod READ_MEASURE)*READ_BATCH);
-    write(cost:1:6, #13);
-    continue;
     if j mod READ_MEASURE = READ_MEASURE-1 then begin
       cost := cost / READ_MEASURE ;
       costDelta := costDelta - cost;
@@ -301,34 +299,34 @@ begin
   Neural.Batch := READ_TEST;
 
   cursorClearUp();
-  while true do try
-    cursorAbsPos();
-    i := random(CF10.TEST_COUNT div READ_TEST);
-    CF10.read(-1, i);
-    CF10.TestingData.toSingles(t1.Data);
-    CF10.TestingLabels.toSingles(l1.Data);
-    t1.normalize();//t1.FusedMultiplyAdd(1/127, -1);
-
-    t1.print(psColor24, READ_TEST);
-
-    writeln('truth');
-    l1.argMax(truth.Data);
-    l1.print(psGray);
-    truth.print;
-    writeln(sLineBreak, 'Predicted');
-    Neural.Input := t1;
-    //Neural.input.reshape([READ_TEST, CF10.IMAGE_SIZE], READ_TEST);
-    Neural.predict(Neural.input);
-    Neural.output().argMax(predicted.Data);
-    Neural.output().print(psGray);
-    predicted.print();
-
-    writeln('Press [Enter] for next random digit, [Ctrl-C] to exit ...');
-    readln(c);
-    if LowerCase(c) = 'q' then break;
-  except on E:Exception do
-    writeln(E.Message)
-  end;
+  //while true do try
+  //  cursorAbsPos();
+  //  i := random(CF10.TEST_COUNT div READ_TEST);
+  //  CF10.read(-1, i);
+  //  CF10.TestingData.toSingles(t1.Data);
+  //  CF10.TestingLabels.toSingles(l1.Data);
+  //  t1.normalize();//t1.FusedMultiplyAdd(1/127, -1);
+  //
+  //  t1.print(psColor24, READ_TEST);
+  //
+  //  writeln('truth');
+  //  l1.argMax(truth.Data);
+  //  l1.print(psGray);
+  //  truth.print;
+  //  writeln(sLineBreak, 'Predicted');
+  //  Neural.Input := t1;
+  //  //Neural.input.reshape([READ_TEST, CF10.IMAGE_SIZE], READ_TEST);
+  //  Neural.predict(Neural.input);
+  //  Neural.output().argMax(predicted.Data);
+  //  Neural.output().print(psGray);
+  //  predicted.print();
+  //
+  //  writeln('Press [Enter] for next random digit, [Ctrl-C] to exit ...');
+  //  readln(c);
+  //  if LowerCase(c) = 'q' then break;
+  //except on E:Exception do
+  //  writeln(E.Message)
+  //end;
 
   CF10.free;
   Neural.free;

@@ -52,8 +52,7 @@
 -OpCOREAVX2
 -dUSE_AVX2
 -dUSE_MULTITHREADING
--dUSE_TELEMETRY
--dUSE_CUDNN"/>
+-dUSE_TELEMETRY"/>
             <OtherDefines Count="11">
               <Define0 Value="USE_OPENCL"/>
               <Define1 Value="USE_AVX2"/>
@@ -153,7 +152,7 @@
       <CustomOptions Value="-CfAVX2
 -OpCOREAVX2
 -dUSE_AVX2
--dUSE_MKL
+-dUSE_MULTITHREADING
 -dUSE_TELEMETRY"/>
       <OtherDefines Count="11">
         <Define0 Value="USE_OPENCL"/>

@@ -433,7 +433,7 @@ begin
       end;
 
   end else begin
-      delta.free;
+      //delta.free;
       if not assigned(shareLayer) then begin
           weight_updates.free;
           bias_updates.free;
