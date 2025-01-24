@@ -56,7 +56,7 @@ begin
   
 // you can also create a tensor by calling '.resize' method
   tensor3.resize([100]);  // three dimensional (100 X 100 X 100) tensor
-  tensor3.map(sine, tensor3);  //
+  tensor3.map(sine, tensor3);  // use the custom function named "sine" above to fill the tensor
   tensor3.plot;
   // your code ....
 end;
