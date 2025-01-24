@@ -9,8 +9,8 @@
         <Filename Value="shakespeare_infer_rnn.pas"/>
         <IsPartOfProject Value="True"/>
         <IsVisibleTab Value="True"/>
-        <TopLine Value="238"/>
-        <CursorPos X="15" Y="263"/>
+        <TopLine Value="176"/>
+        <CursorPos X="13" Y="199"/>
         <UsageCount Value="217"/>
         <Loaded Value="True"/>
       </Unit>
@@ -79,8 +79,8 @@
       <Unit>
         <Filename Value="..\..\..\source\ntensors.pas"/>
         <EditorIndex Value="15"/>
-        <TopLine Value="11496"/>
-        <CursorPos X="60" Y="11531"/>
+        <TopLine Value="10703"/>
+        <CursorPos X="64" Y="10721"/>
         <UsageCount Value="109"/>
         <Loaded Value="True"/>
       </Unit>
@@ -147,8 +147,8 @@
       <Unit>
         <Filename Value="..\..\..\source\steroids.pas"/>
         <EditorIndex Value="36"/>
-        <TopLine Value="407"/>
-        <CursorPos X="16" Y="435"/>
+        <TopLine Value="545"/>
+        <CursorPos Y="562"/>
         <UsageCount Value="106"/>
         <Loaded Value="True"/>
       </Unit>
@@ -502,7 +502,7 @@
         <EditorIndex Value="17"/>
         <TopLine Value="968"/>
         <CursorPos X="5" Y="975"/>
-        <UsageCount Value="46"/>
+        <UsageCount Value="48"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
@@ -512,7 +512,7 @@
         <WindowIndex Value="1"/>
         <TopLine Value="41"/>
         <CursorPos X="11" Y="66"/>
-        <UsageCount Value="32"/>
+        <UsageCount Value="34"/>
         <Loaded Value="True"/>
       </Unit>
     </Units>
@@ -529,118 +529,114 @@
       <Define9 Value="BIG_MATRECIES"/>
       <Define10 Value="USE_CUDNN"/>
     </OtherDefines>
-    <JumpHistory HistoryIndex="27">
+    <JumpHistory HistoryIndex="26">
       <Position>
-        <Filename Value="..\..\..\..\..\lastver\source\rnnlayer.pas"/>
-        <Caret Line="194" Column="36" TopLine="167"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\..\..\lastver\source\connectedlayer.pas"/>
-        <Caret Line="22" Column="11"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\nrnnlayer.pas"/>
-        <Caret Line="278" Column="23" TopLine="263"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\nrnnlayer.pas"/>
-        <Caret Line="277" TopLine="263"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\nactivation.pas"/>
-        <Caret Line="659" TopLine="635"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\nactivation.pas"/>
-        <Caret Line="467" Column="10" TopLine="442"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\nactivation.pas"/>
-        <Caret Line="659" TopLine="635"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\nactivation.pas"/>
-        <Caret Line="658" Column="25" TopLine="635"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\nbaselayer.pas"/>
-        <Caret Line="220" TopLine="194"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\nrnnlayer.pas"/>
-        <Caret Line="306" Column="43" TopLine="263"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\nrnnlayer.pas"/>
-        <Caret Line="277" TopLine="265"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
-        <Caret Line="27" Column="19" TopLine="4"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
-        <Caret Line="130" Column="49" TopLine="92"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
-        <Caret Line="112" Column="28" TopLine="98"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
-        <Caret Line="127" Column="27" TopLine="102"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\nrnnlayer.pas"/>
-        <Caret Line="224" Column="31" TopLine="191"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
-        <Caret Line="27" Column="15" TopLine="3"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\nrnnlayer.pas"/>
-        <Caret Line="284" Column="20" TopLine="265"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
-        <Caret Line="28" Column="15" TopLine="4"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
-        <Caret Line="193" Column="10" TopLine="170"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
-        <Caret Line="192" Column="10" TopLine="170"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
-        <Caret Line="193" Column="10" TopLine="170"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
-        <Caret Line="202" Column="42" TopLine="170"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
-        <Caret Line="206" Column="24" TopLine="170"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
-        <Caret Line="210" Column="22" TopLine="170"/>
+        <Filename Value="..\..\..\source\ntensors.pas"/>
+        <Caret Line="9885" TopLine="9858"/>
       </Position>
       <Position>
         <Filename Value="..\..\..\source\ntensors.pas"/>
-        <Caret Line="280" Column="22" TopLine="255"/>
+        <Caret Line="9886" TopLine="9858"/>
       </Position>
       <Position>
         <Filename Value="..\..\..\source\ntensors.pas"/>
-        <Caret Line="11531" Column="60" TopLine="11494"/>
+        <Caret Line="9887" TopLine="9859"/>
       </Position>
       <Position>
-        <Filename Value="..\..\..\source\nrnnlayer.pas"/>
-        <Caret Line="291" Column="59" TopLine="194"/>
+        <Filename Value="..\..\..\source\ntensors.pas"/>
+        <Caret Line="8191" TopLine="8174"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\ntensors.pas"/>
+        <Caret Line="8192" TopLine="8174"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\ntensors.pas"/>
+        <Caret Line="8193" TopLine="8174"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\ntensors.pas"/>
+        <Caret Line="8194" TopLine="8174"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\ntensors.pas"/>
+        <Caret Line="8195" TopLine="8174"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\ntensors.pas"/>
+        <Caret Line="8196" TopLine="8174"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\ntensors.pas"/>
+        <Caret Line="8311" TopLine="8294"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\ntensors.pas"/>
+        <Caret Line="8316" Column="40" TopLine="8294"/>
+      </Position>
+      <Position>
+        <Filename Value="shakespeare_infer_rnn.pas"/>
+        <Caret Line="193" TopLine="172"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\ntensors.pas"/>
+        <Caret Line="11068" Column="29" TopLine="11054"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\ntensors.pas"/>
+        <Caret Line="11067" Column="24" TopLine="11051"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\ntensors.pas"/>
+        <Caret Line="11068" Column="34" TopLine="11053"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\ntensors.pas"/>
+        <Caret Line="10777" Column="35" TopLine="11179"/>
+      </Position>
+      <Position>
+        <Filename Value="shakespeare_infer_rnn.pas"/>
+        <Caret Line="193" TopLine="172"/>
+      </Position>
+      <Position>
+        <Filename Value="shakespeare_infer_rnn.pas"/>
+        <Caret Line="187" Column="22" TopLine="172"/>
+      </Position>
+      <Position>
+        <Filename Value="shakespeare_infer_rnn.pas"/>
+        <Caret Line="197" Column="12" TopLine="180"/>
+      </Position>
+      <Position>
+        <Filename Value="shakespeare_infer_rnn.pas"/>
+        <Caret Line="183" Column="30" TopLine="184"/>
+      </Position>
+      <Position>
+        <Filename Value="shakespeare_infer_rnn.pas"/>
+        <Caret Line="197" TopLine="183"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\ntensors.pas"/>
+        <Caret Line="10720" TopLine="10703"/>
+      </Position>
+      <Position>
+        <Filename Value="shakespeare_infer_rnn.pas"/>
+        <Caret Line="195" Column="28" TopLine="183"/>
+      </Position>
+      <Position>
+        <Filename Value="shakespeare_infer_rnn.pas"/>
+        <Caret Line="197" TopLine="183"/>
+      </Position>
+      <Position>
+        <Filename Value="shakespeare_infer_rnn.pas"/>
+        <Caret Line="198" TopLine="183"/>
+      </Position>
+      <Position>
+        <Filename Value="shakespeare_infer_rnn.pas"/>
+        <Caret Line="199" TopLine="183"/>
+      </Position>
+      <Position>
+        <Filename Value="shakespeare_infer_rnn.pas"/>
+        <Caret Line="203" Column="21" TopLine="170"/>
       </Position>
     </JumpHistory>
     <RunParams>

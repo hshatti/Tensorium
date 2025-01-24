@@ -178,9 +178,32 @@ begin
     parser.free;
 end;
 
+var
+  tensor1, tensor2, tensor3 : TSingleTensor;
+function sine(const val:single; const index:SizeInt):single;
+begin
+  exit(sin(index*0.1))
+end;
+
 begin
   DeleteFile('heap.trc');
   setHeapTraceOutput('heap.trc');
+
+  tensor1 := TSingleTensor.Create([100]); // one dimension tensor of size [100], will always be initialized with zero
+  tensor1.fill(3.14159); //  filling a tensor with a number
+  tensor1.printStat;
+
+  tensor2 := TSingleTensor.Create([20, 20]);    // two dimensions tensor (100 X 100) filled with zeros
+  tensor2.UniformDistribution(0, 100);  // fill the tensor with random numbers uniformly between 0 and 100 (but not 100)
+  tensor2.printStat;
+  writeln();
+// you can also create a tensor by calling '.resize' method
+  tensor3.resize([100]);  // three dimensional (100 X 100 X 100) tensor
+  tensor3.map(sine, tensor3);  //
+  tensor3.plot();
+  readln();
+
+  exit;
   //write(#$1B'[1J');
 {$ifdef USE_OPENCL}
   i:=0;
