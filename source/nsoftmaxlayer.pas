@@ -174,21 +174,21 @@ begin
       count := 0;
       for i := 0 to softmaxTree[0].groups -1 do begin
           group_size := softmaxTree[0].group_size[i];
-          ocl.softmaxBatch(state.input.devData, count, group_size, batch, inputs, 1, 0, 1, temperature, output.devData, count
+          ocl.softmaxBatch(group_size, state.input.devData, count, batch, inputs, 1, 0, 1, temperature, output.devData, count
             {$IFDEF CL_EVENTS}
             , 1, @state.events[i mod batch], @state.events[i mod batch]);
             {$ELSE}
-            , 0, nil, nil);
+            );
             {$ENDIF}
 
           inc(count , group_size)
       end
   end else
-      ocl.softmaxBatch(state.input.devData, 0, inputs div groups, batch, inputs, groups, inputs div groups, 1, temperature, output.devData, 0
+      ocl.softmaxBatch(inputs div groups, state.input.devData, 0, batch, inputs, groups, inputs div groups, 1, temperature, output.devData, 0
         {$IFDEF CL_EVENTS}
         , 1, pointer(state.events), pointer(state.events));
         {$ELSE}
-        , 0, nil, nil);
+        );
         {$ENDIF}
   //ocl.waitForEvents(batch, pointer(events));
   //ocl.finish();
@@ -200,7 +200,7 @@ begin
       {$IFDEF CL_EVENTS}
       , 1, pointer(state.events), pointer(state.events));
       {$ELSE}
-      , 0, nil, nil);
+      );
       {$ENDIF}
 
     //ocl.finish();
@@ -228,11 +228,11 @@ begin
   //if not state.delta.wasGPU() then state.delta.pushToDevice();
   if not delta.wasGPU() then delta.pushToDevice();
 
-  ocl.addvv(delta.size(), state.delta.devData, delta.devData
+  ocl.addvv(delta.size(), delta.devData, 0, 1, state.delta.devData, 0, 1, state.delta.devData, 0, 1
     {$IFDEF CL_EVENTS}
     , 1, pointer(state.events), pointer(state.events));
     {$ELSE}
-    , 0, nil, nil);
+    );
     {$ENDIF}
 
   //backward(state);

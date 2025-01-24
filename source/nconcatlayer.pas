@@ -22,6 +22,10 @@ type
     procedure setBatch(ABatch: SizeInt); override;
     procedure forward(var state: TNNetState); override;
     procedure backward(var state: TNNetState); override;
+  {$ifdef USE_OPENCL}
+    procedure forwardGPU(var state: TNNetState); override;
+    procedure backwardGPU(var state: TNNetState); override;
+  {$endif}
   end;
 
   TRouteLayer = TConcatLayer;
@@ -118,7 +122,8 @@ procedure TConcatLayer.backward(var state: TNNetState);
 var
     i: SizeInt;
     //j: SizeInt;
-    //offset: SizeInt;
+    offset: SizeInt;
+    pt : PSingleTensor;
     //index: SizeInt;
     //delta: PSingle;
     //input_size: SizeInt;
@@ -138,14 +143,65 @@ begin
     //            axpy_cpu(part_input_size, 1, l.delta+offset+j * l.outputs, 1, delta+j * input_size+part_input_size * l.group_id, 1);
     //        offset := offset + part_input_size
     //    end
-  for i:=0 to high(inTensors) do
-    inTensors[i] := TNNet(state.net).layers[inputLayers[i]].delta;
-  delta.addConcat(inTensors);
+  offset := 0;
+  for i:=0 to high(inTensors) do begin
+    pt := @TNNet(state.net).layers[inputLayers[i]].delta;
+    if not pt.wasGPU() then pt.pushToDevice;
+    pt.Add(delta.Data + offset);
+    inc(offset, pt.size())
+  end;
   {$ifdef USE_TELEMETRY}
   if benchmark then metrics.backward.finish(layerType);
   {$endif}
 
 end;
+
+{$ifdef USE_OPENCL}
+procedure TConcatLayer.forwardGPU(var state: TNNetState);
+var i, offset:SizeInt;
+    pt:PSingleTensor;
+begin
+  {$ifdef USE_TELEMETRY}
+  if benchmark then metrics.forward.start(layerType);
+  {$endif}
+  output.setOCL;
+  offset := 0;
+  for i:=0 to high(inTensors) do begin
+      pt := @TNNet(state.net).layers[inputLayers[i]].output;
+      if not pt.wasGPU() then pt.pushToDevice;
+      ocl.copy(pt.size(), pt.devData, 0, 1,output.devData, offset, 1);
+      inc(offset, pt.Size())
+  end;
+
+  {$ifdef USE_TELEMETRY}
+  ocl.finish();
+  if benchmark then metrics.forward.finish(layerType);
+  {$endif}
+end;
+
+procedure TConcatLayer.backwardGPU(var state: TNNetState);
+var
+    i, offset: SizeInt;
+    pt : PSingleTensor;
+begin
+  {$ifdef USE_TELEMETRY}
+  if benchmark then metrics.backward.start(layerType);
+  {$endif}
+  if not delta.wasGPU() then delta.pushToDevice;
+  offset := 0;
+  for i:=0 to high(inTensors) do begin
+      pt := @TNNet(state.net).layers[inputLayers[i]].delta;
+      if not pt.wasGPU() then pt.pushToDevice;
+      ocl.addvv(pt.size(), pt.devData, 0, 1,delta.devData, offset, 1, pt.devData, 0, 1);
+      inc(offset, pt.Size())
+  end;
+
+  {$ifdef USE_TELEMETRY}
+  ocl.finish();
+  if benchmark then metrics.backward.finish(layerType);
+  {$endif}
+end;
+{$endif}
 
 end.
 

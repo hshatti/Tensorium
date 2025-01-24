@@ -119,20 +119,22 @@ begin
   //CLBlastScopy(output.Size, state.input.devData, 0, 1, output.devData, 0, 1, @ocl.ActiveQueue
   //, nil//@ev
   //);
-  ocl.copy(output.Size(), state.input.devData, 0, 1, output.devData, 0, 1
-  , 0
-  , nil
-  , nil);
+  ocl.copy(output.size(), state.input.devData, 0, 1, output.devData, 0, 1
+  {$IFDEF CL_EVENTS}
+  , 1, pointer(events), pointer(events));
+  {$ELSE}
+  );
+  {$ENDIF}
   //ocl.finish;
   output.setOCL;
   delta.setOCL;
   loss.setOCL;
 
-  ocl.ActivateArray(output.devData, output.Size(), longint(ActivationType)
+  ocl.ActivateArray(output.size(), output.devData, 0, longint(ActivationType)
   {$IFDEF CL_EVENTS}
   , 1, pointer(events), pointer(events));
   {$ELSE}
-  , 0, nil, nil);
+  );
   {$ENDIF}
   //ocl.finish();
 
@@ -144,7 +146,7 @@ begin
     {$IFDEF CL_EVENTS}
     , 1, pointer(events), pointer(events));
     {$ELSE}
-    , 0, nil, nil);
+    );
     {$ENDIF}
     //ocl.finish();
 
@@ -172,11 +174,11 @@ begin
   //if not state.delta.wasGPU() then state.delta.pushToDevice();
   if not delta.wasGPU() then delta.pushToDevice();
 
-  ocl.addvv(delta.size(), state.delta.devData, delta.devData
+  ocl.addvv(delta.size(), delta.devData, 0, 1, state.delta.devData, 0, 1, state.delta.devData, 0, 1
   {$ifdef CL_EVENTS}
   , 1, pointer(events), pointer(events));
   {$else}
-  , 0, nil, nil);
+  );
   {$endif}
   //t.resize(state.delta.shape);
   //state.delta.pullFromDevice(t);

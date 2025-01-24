@@ -70,8 +70,12 @@ begin
     {$ifdef USE_TELEMETRY}
     if benchmark then metrics.forward.start(layerType);
     {$endif}
-    if not assigned(state.truth.Data) then
+    if not assigned(state.truth.Data) then begin
+        {$ifdef USE_TELEMETRY}
+        if benchmark then metrics.forward.finish(layerType);
+        {$endif}
         exit();
+    end ;
     if CostType = ctMASKED then
         begin  // todo [CostLayer ctMASK] SIMDIfy & gpu
             for i := 0 to state.input.Size() -1 do

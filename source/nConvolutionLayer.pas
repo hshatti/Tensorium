@@ -7,8 +7,14 @@ interface
 
 uses
   SysUtils, nTensors, nTypes, nBaseLayer, nActivation
+  {$ifdef USE_CUDNN}
+  , cudnn_cnn, cudnn_ops, cudnn_graph, cudnn_adv
+  {$endif}
   {$ifdef USE_OPENCL}
     {$ifdef CL_BLAST} , clblast {$endif}
+  {$endif}
+  {$ifdef USE_TELEMETRY}
+  , nOpMetrics
   {$endif}
   {$ifdef MSWINDOWS)} , shellApi{$endif}
   ;
@@ -547,6 +553,9 @@ begin
             //move(l.input_layer[0].output[0], l.output[0], l.input_layer[0].outputs * l.input_layer[0].batch * sizeof(single))
             inputLayer.output.copyTo(output);
         end;
+    //state.input.printStat;
+    //output.printStat;
+    //readln;
     {$ifdef USE_TELEMETRY}
     if benchmark then metrics.forward.finish(layerType);
     {$endif}
@@ -710,7 +719,6 @@ begin
   k := c * kSize;
   imColSize := c * kSize * outImgSize;
 
-
   {$ifdef CLBLASTCONV}
   //if not wasGPU() then
   //  pushToDevice;
@@ -732,14 +740,10 @@ begin
   {$ifdef USE_TELEMETRY}
   if benchmark then tensorMetrics.finish(opConv2D);
   {$endif}
-  dst.setOCL;
   {$else}
   //setLength(ev, length(events));
   for b := 0 to batch - 1 do
   begin
-    {$ifdef USE_TELEMETRY}
-    if benchmark then tensorMetrics.start(opIm2col);
-    {$endif}
     bOffset := 0;
     if (kSize <> 1) or (Stride_y * Stride_x <> 1) or (Dilation * Dilation <> 1) then
       begin
@@ -755,28 +759,22 @@ begin
           , nil));
           {$ENDIF}
         ocl.CheckError();
+
         {$ELSE}
         ocl.im2col(c, h, w, kernelSize, kernelSize, Padding, Padding, stride_y, stride_x, Dilation, Dilation, _A, aOffset, _B, bOffset
           {$IFDEF CL_EVENTS}
           , 1, @state.events[b], @state.events[b]);
           {$ELSE}
-          , 0, nil, nil);
+          );
           {$ENDIF}
         {$ENDIF}
-        //ocl.waitForEvents(1, @events[b]);
       end
     else
       begin
         _B := state.input.devData;
         bOffset := b * state.input.volume();
       end;
-    {$ifdef USE_TELEMETRY}
-    if benchmark then tensorMetrics.finish(opIm2col);
-    {$endif}
 
-    {$ifdef USE_TELEMETRY}
-    if benchmark then tensorMetrics.start(opGemm);
-    {$endif}
     _C := output.devData;
 {$IFDEF CL_BLAST}
     ocl.FErr := integer(CLBlastSgemm(CLBlastLayoutRowMajor, CLBlastTransposeNo, CLBlastTransposeNo, filters, outImgSize, k, 1, weights.devData, 0, k, _B, bOffset, outImgSize, 0, _C, b * outImgSize * filters, outImgSize, @ocl.ActiveQueue
@@ -786,46 +784,59 @@ begin
     , nil));
     {$ENDIF}
     ocl.CheckError();
+
 {$ELSE}
     ocl.gemm(false, false, filters, outImgSize, k, 1, weights.devData, 0, k, _B, bOffset, outImgSize, 0, _C, b * outImgSize * filters, outImgSize
     {$IFDEF CL_EVENTS}
     , 1, @state.events[b], @state.events[b]);
     {$ELSE}
-    , 0, nil, nil);
+    );
     {$ENDIF}
 {$ENDIF}
     //ocl.waitForEvents(1, @events[b]);
-    {$ifdef USE_TELEMETRY}
-      if benchmark then tensorMetrics.finish(opGemm);
-    {$endif}
+
   end;
-  //ocl.finish();
   {$endif CLBLASTCONV}
 
   //state.input.Conv2D(weights, output, Padding, Padding, stride_x, stride_y, Dilation, Dilation);
   //for b:=0 to high(events) do
   //  clGetEventInfo(events[b], CL_EVENT_COMMAND_EXECUTION_STATUS, sizeof(cl_int), @ev[b], o);
 
+
   if isBatchNormalized then
-    batchNorm(state)
-  else
-    ocl.forwardBias(biases.Size(), output.devData, output.size() div (batch * biases.Size()), biases.devData,1, Batch
+    batchNormGPU(state)
+  else begin
+    //output.add(biases);
+    ocl.forwardBias(output.Size(), output.devData, biases.size(), biases.devData,1, Batch
     {$IFDEF CL_EVENTS}
     , batch, pointer(state.events), pointer(state.events));
     {$ELSE}
-    , 0, nil, nil);
+    );
     {$ENDIF}
-    //for b:=0 to high(events) do
-    //  clGetEventInfo(events[b], CL_EVENT_COMMAND_EXECUTION_STATUS, sizeof(cl_int), @ev[b], o);
+  end;
 
-  //ocl.finish();
+  //state.input.Conv2D(weights, output, Padding, Padding, stride_x, stride_y, Dilation, Dilation);
+  //batchNorm(state);
+  //
+  //output.pullFromDevice(t);
+  //output.printStat;
+  //t.printStat;
+  //writeln('sumSqrDiff : ', t.sumSqrDiff(output):1:6);
+  //readln();
+
+  {$ifdef USE_TELEMETRY}
+  if benchmark then metrics.act.start(ActivationType);
+  {$endif}
   case ActivationType of
      acSWISH :
-       ocl.activateArraySWISH(output.devData, outputs * batch, ActivationInput.devData, output.devData
+       if train then
+         ocl.activateArraySWISH(output.size(), output.devData, 0, ActivationInput.devData, output.devData)
+       else
+         ocl.ActivateArray(output.size(), output.devData, 0, longint(ActivationType)
        {$IFDEF CL_EVENTS}
        , 1, pointer(state.events), pointer(state.events));
        {$ELSE}
-       , 0, nil, nil);
+       );
        {$ENDIF}
      //acMISH :
      //   activate_array_mish(output, outputs * batch, activationInput, output);
@@ -836,21 +847,17 @@ begin
      //acNORM_CHAN_SOFTMAX, acNORM_CHAN_SOFTMAX_MAXVAL :
      //     activate_array_normalize_channels_softmax(output, outputs * batch, batch, outC, outW * outH, output, activationType = acNORM_CHAN_SOFTMAX_MAXVAL);
      else
-       ocl.ActivateArray(output.devData, output.Size(), longint(ActivationType)
+       ocl.ActivateArray(output.size(), output.devData, 0, longint(ActivationType)
        {$IFDEF CL_EVENTS}
        , 1, pointer(state.events), pointer(state.events));
        {$ELSE}
-       , 0, nil, nil);
+       );
        {$ENDIF}
   end;
-  //activate;
-  //
-  //output.pullFromDevice(t);
-  //writeln(state.index, ' CONV FW: ');
-  //t.printStat();
-  //output.printStat();
-  //writeln(' sumSQRDiff : ', t.sumSqrDiff(output):1:6);
-  //readln;
+  {$ifdef USE_TELEMETRY}
+  ocl.finish();
+  if benchmark then metrics.act.finish(ActivationType);
+  {$endif}
 
   if (assistedExcitation<>0) and state.isTraining then
       assistedForward(state);
@@ -859,14 +866,14 @@ begin
       s.isTraining := state.isTraining;
       s.workspace := state.workspace;
       s.input := @output;
-      inputLayer.forward(s);
-      inputLayer.output.copyTo(output);
+      inputLayer.forwardGPU(s);
+      ocl.copy(output.Size(), inputLayer.output.devData, 0, 1, output.devData, 0, 1);
   end;
   //ocl.finish();
-
   //ocl.waitForEvents(1, pointer(events));
 
   {$ifdef USE_TELEMETRY}
+  ocl.finish();
   if benchmark then metrics.forward.finish(layerType);
   {$endif}
 end;
@@ -891,8 +898,8 @@ begin
   if not state.input.wasGPU() then state.input.pushToDevice;
 
   case activationType of
-    acSWISH :
-      gradient_array_swish(output, outputs * batch, activationInput, delta) ;
+    acSWISH : ;
+      //gradient_array_swish(output, outputs * batch, activationInput, delta) ;
     //acMISH  :
     //  gradient_array_mish(outputs * batch, activationInput, delta) ;
     //acHARD_MISH :
@@ -902,23 +909,23 @@ begin
     //acNORM_CHAN :
     //  gradient_array_normalize_channels(output, outputs * batch, batch, outC, outW * outW, delta) ;
     else
-      ocl.DeriveArray(output.devData, output.Size(), longint(ActivationType), delta.devData
+      ocl.DeriveArray(output.size(), output.devData, 0, longint(ActivationType), delta.devData
       {$IFDEF CL_EVENTS}
       , batch, pointer(state.events), pointer(state.events));
       {$ELSE}
-      , 0, nil, nil);
+      );
       {$ENDIF}
   end;
   //ocl.waitForEvents(1, pointer(events));
   //ocl.finish();
   if isBatchNormalized then
-    batchNormBack(state)
+    batchNormBackGPU(state)
   else
-    ocl.backwardBias(bias_updates.size(), bias_updates.devData, delta.size div (batch*bias_updates.size()), delta.devData, 1, batch
+    ocl.backwardBias(bias_updates.size(), bias_updates.devData, delta.size, delta.devData, 1, batch
     {$IFDEF CL_EVENTS}
     , 1, pointer(state.events), pointer(state.events));
     {$ELSE}
-    , 0, nil, nil);
+    );
     {$ENDIF}
 
   //ocl.waitForEvents(1, pointer(events));
@@ -941,7 +948,7 @@ begin
       {$IFDEF CL_EVENTS}
       , 1, @state.events[b], @state.events[b]);
       {$ELSE}
-      , 0, nil, nil);
+      );
       {$ENDIF}
     {$ENDIF}
     //ocl.waitForEvents(1, @events[b]);
@@ -951,9 +958,7 @@ begin
   //ocl.waitForEvents(batch, pointer(events));
   //ocl.finish();
   if not weight_updates.wasGPU() then weight_updates.pushToDevice;
-  {$ifdef USE_TELEMETRY}
-    if benchmark then tensorMetrics.start(opGemm);
-  {$endif}
+
   for b:= 0 to batch -1 do begin
 {$IFDEF CL_BLAST}
     ocl.FErr := integer(CLBlastSgemm(CLBlastLayoutRowMajor, CLBlastTransposeNo, CLBlastTransposeYes,
@@ -976,22 +981,16 @@ begin
             {$IFDEF CL_EVENTS}
             , 1,  @state.events[b],  @state.events[b]);
             {$ELSE}
-            , 0, nil, nil);
+            );
             {$ENDIF}
 {$ENDIF}
     //ocl.waitForEvents(1, @events[b]);
-    //ocl.finish();
   end;
-  {$ifdef USE_TELEMETRY}
-    if benchmark then tensorMetrics.finish(opGemm);
-  {$endif}
 
   if assigned(state.delta) and assigned(state.delta.devdata) then begin
     if not weights.wasGPU() then weights.pushToDevice;
     //if not state.delta.wasGPU then state.delta.pushToDevice;
-    {$ifdef USE_TELEMETRY}
-    if benchmark then tensorMetrics.start(opGemm);
-    {$endif}
+
     for b := 0 to batch -1 do begin
 {$IFDEF CL_BLAST}
         ocl.FErr := integer(CLBlastSgemm(CLBlastLayoutRowMajor, CLBlastTransposeYes, CLBlastTransposeNo,
@@ -1014,15 +1013,12 @@ begin
           {$IFDEF CL_EVENTS}
           , 1,  @state.events[b],  @state.events[b])
           {$ELSE}
-          , 0, nil, nil);
+          );
           {$ENDIF}
 {$ENDIF}
         //ocl.waitForEvents(1, events[b]);
-      //ocl.finish();
     end;
-    {$ifdef USE_TELEMETRY}
-    if benchmark then tensorMetrics.finish(opGemm);
-    {$endif}
+
     imSize := state.delta.Volume();
     for b := 0 to batch-1 do begin
       {$IFDEF CL_BLAST}
@@ -1040,7 +1036,7 @@ begin
               {$IFDEF CL_EVENTS}
               , 1, @state.events[b], @state.events[b]);
               {$ELSE}
-              , 0, nil, nil);
+              );
               {$ENDIF}
       {$ENDIF}
       //ocl.waitForEvents(1, events[b]);
@@ -1065,6 +1061,7 @@ begin
   //readln;
   //ocl.waitForEvents(batch, pointer(events));
   {$ifdef USE_TELEMETRY}
+  ocl.finish();
   if benchmark then metrics.backward.finish(layerType);
   {$endif}
 end;
@@ -1088,16 +1085,16 @@ begin
   {$IFDEF CL_EVENTS}
   , batch, pointer(events),  pointer(events));
   {$ELSE}
-  , 0, nil, nil);
+  );
   {$ENDIF}
   //ocl.waitForEvents(batch, pointer(events));
   //ocl.finish();
 
-  ocl.scale(bias_updates.Size(), args.momentum, bias_updates.devData, 1
+  ocl.scale(bias_updates.size(), args.momentum, bias_updates.devData, 1
   {$IFDEF CL_EVENTS}
   , 1 ,pointer(events),  pointer(events));
   {$ELSE}
-  , 0, nil, nil);
+  );
   {$ENDIF}
   //ocl.waitForEvents(batch, pointer(events));
   //ocl.finish();
@@ -1106,32 +1103,35 @@ begin
   {$IFDEF CL_EVENTS}
   , 1, @events[1],  @events[1]);
   {$ELSE}
-  , 0, nil, nil);
+  );
   {$ENDIF}
   //ocl.waitForEvents(batch, pointer(events));
   //ocl.finish();
 
-  ocl.axpy(weights.Size(), learning_Rate / args.batch, weight_updates.devData, 1, weights.devData, 1
+  ocl.axpy(weights.size(), learning_Rate / args.batch, weight_updates.devData, 1, weights.devData, 1
   {$IFDEF CL_EVENTS}
   , 1, @events[1],  @events[1]);
   {$ELSE}
-  , 0, nil, nil);
+  );
   {$ENDIF}
   //ocl.waitForEvents(batch, pointer(events));
   //ocl.finish();
 
-  ocl.scale(weight_updates.size(), args.momentum, weight_updates.devData, 1
+  ocl.scale(weights.size(), args.momentum, weight_updates.devData, 1
   {$IFDEF CL_EVENTS}
   , 1, @events[1],  @events[1]);
   {$ELSE}
-  , 0, nil, nil);
+  );
   {$ENDIF}
   //ocl.waitForEvents(batch, pointer(events));
   //ocl.finish();
 
   if assigned(scales.Data) then begin
-      scales.axpy(learning_rate / args.batch, scale_updates);
-      scale_updates.multiply(args.momentum);
+      //scales.axpy(learning_rate / args.batch, scale_updates);
+      //scale_updates.multiply(args.momentum);
+    ocl.axpy(scales.size(), learning_rate / args.batch, scale_updates.devData, 1, scales.devData, 1);
+    ocl.scale(scale_updates.size(), args.momentum, scale_updates.devData, 1);
+
   end;
 
   //update(args);
@@ -1140,6 +1140,7 @@ begin
   inherited;
 
   {$ifdef USE_TELEMETRY}
+  ocl.finish();
   if benchmark then metrics.update.finish(layerType);
   {$endif}
 end;

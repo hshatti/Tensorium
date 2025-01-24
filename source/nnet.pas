@@ -89,7 +89,7 @@ type
     function output(): PSingleTensor;
     function cost(): single;
     function classCount(): SizeInt;
-    function Detections(const aWidth, aHeight: SizeInt; const aThresh: single = 0.5; const aBatch: SizeInt=0): TDetections;
+    function Detections(const aWidth, aHeight: SizeInt; const aThresh: single = 0.5; const aRelative: boolean=false; const aLetterBox : boolean=false ; const aBatch: SizeInt=0): TDetections;
     procedure freeLayers();
     destructor Destroy; override;
 
@@ -117,6 +117,7 @@ begin
   learningRateMin := 0.00001;
   momentum := DEFAULT_MOMENTUM;
   decay := DEFAULT_DECAY;
+  timeSteps := 0;
   //outTensor.reSize(output.Shape, output.Groups);
   setLayers(aLayers);
   if assigned(Layers) then
@@ -266,6 +267,7 @@ var
   currentLayer: TBaseLayer;
 begin
   state.workspace := workspace;
+  state.step:=0;
   for i := 0 to High(Layers) do
   begin
     state.index := i;
@@ -273,12 +275,12 @@ begin
     if state.isTraining and assigned(currentLayer.delta.Data) and currentLayer.train then begin
       //currentLayer.delta.Multiply(0);
     {$ifdef USE_OPENCL}
-      ocl.fill(currentLayer.delta.size(), currentLayer.delta.devData, 0, 1, 0, nil
+      ocl.fill(currentLayer.delta.size(), currentLayer.delta.devData, 0, 1
       {$IFDEF CL_EVENTS}
-      , pointer(state.events));
+      , state.events, nil);
       ocl.waitForEvents(1, pointer(state.events));
       {$ELSE}
-      , nil);
+      );
       {$ENDIF}
     {$else}
       currentLayer.delta.fill(0);
@@ -290,7 +292,7 @@ begin
     currentLayer.events := state.events;
     currentLayer.ev     := state.ev;
     currentLayer.forwardGPU(state);
-    //ocl.finish();
+    ocl.finish();
     {$else}
     currentLayer.forward(state);
     {$endif}
@@ -310,6 +312,7 @@ begin
   original_input := @input;
   original_delta := state.delta;
   state.workspace := workspace;
+  state.step:=0;
   for i := High(Layers) downto 0 do
   begin
     state.index := i;
@@ -333,7 +336,7 @@ begin
     current.events := state.events;
     current.ev     := state.ev;
     current.backwardGPU(state);
-    //ocl.finish();
+    ocl.finish();
     {$else}
     current.backward(state);
     {$endif}
@@ -416,11 +419,11 @@ begin
   Inc(seen, batch);
   forward(state);
   {$ifdef USE_OPENCL}
-  ocl.finish();
+  //ocl.finish();
   {$endif}
   backward(state);
   {$ifdef USE_OPENCL}
-  ocl.finish();
+  //ocl.finish();
   {$endif}
   Result := cost();
 end;
@@ -441,7 +444,7 @@ begin
   forward(state);
   Result := output();
   {$ifdef USE_OPENCL}
-  ocl.finish();
+  //ocl.finish();
   if result.wasGPU() then
     result.pullFromDevice();
   {$endif}
@@ -463,7 +466,7 @@ begin
 
   // todo [trainEpoch], still primitive implementation, revisit trainEpoch later for batch training
 
-  input.reSize(layers[0].inputShape, Batch);
+  input.reSize(layers[0].inputShape, Batch, timeSteps);
   if not assigned(self.truth) then
     setLength(self.Truth, Data.Y.Size());
 
@@ -534,7 +537,8 @@ begin
 end;
 
 function TNNet.Detections(const aWidth, aHeight: SizeInt;
-  const aThresh: single; const aBatch: SizeInt): TDetections;
+  const aThresh: single; const aRelative: boolean; const aLetterBox: boolean;
+  const aBatch: SizeInt): TDetections;
 var detCount, i:SizeInt; l : TBaseLayer;
 begin
   result := nil;
@@ -592,7 +596,7 @@ begin
       ltYOLO:
         begin
           if detCount<length(result) then
-            detCount := detCount + TYoloLayer(layers[i]).getDetections(aWidth, aHeight, self.input.w(), self.input.h(), aThresh, @result[detCount], true, true, ABatch);
+            detCount := detCount + TYoloLayer(layers[i]).getDetections(aWidth, aHeight, self.input.w(), self.input.h(), aThresh, @result[detCount], aRelative, aLetterBox, ABatch);
         end;
       ltGaussianYOLO:
         begin
@@ -625,6 +629,7 @@ var
   i: SizeInt;
 begin
   for i := 0 to High(Layers) do
+    //Layers[i].free;
     FreeAndNil(Layers[i]);
 end;
 

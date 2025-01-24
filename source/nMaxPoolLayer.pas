@@ -19,7 +19,7 @@ type
     avgPool                     : boolean;
     indexes                     : TSizeIntTensor;
     constructor Create(const aBatch, aHeight, aWidth, aChannels,
-      aKernelSize: SizeInt; aStride_x:SizeInt=0; aStride_y: SizeInt=0; const aPadding:sizeInt=-1;
+      aKernelSize: SizeInt; aStride_x:SizeInt=0; aStride_y: SizeInt=0; const aPadding:sizeInt=0;
       aMaxpool_depth:SizeInt = 0; aOutChannels : SizeInt = 0; const aAntialiasing: SizeInt=0; const isAvgPool :boolean = false;
       const ATrain: boolean = false);
     procedure prepareAntialiase(const aStrideX, AStrideY: SizeInt);
@@ -91,10 +91,8 @@ begin
         stride_x := 1;
         stride_y := 1
     end;
-    if aPadding>-1 then
-        Padding := aPadding
-    else
-        Padding := kernelSize div 2;
+
+    Padding := aPadding;
     maxPoolDepth := aMaxpool_depth;
     outChannels := aOutchannels;
     if maxpoolDepth<>0 then
@@ -370,7 +368,6 @@ var
       // _h, _w, _c,
     cur_h, cur_w, index: SizeInt;
     s: TNNetState;
-    local : array[0..255] of single;
 begin
     if maxpoolDepth<>0 then
         begin
@@ -423,8 +420,7 @@ begin
                                 out_index := j+outW * (i+outH * (k+outC * b));
                                 max := -MaxSingle;
                                 max_i := -1;
-                                //spacialMove(state.input.Data + h_offset + i*stride_y, w, @local, kernelSize, kernelSize);
-
+                                //spacialMove(state.input.data + h_offset + i*stride_y, w, @local, kernelSize, kernelSize);
                                 for _n := 0 to kernelSize -1 do
                                     for m := 0 to kernelSize -1 do
                                         begin
@@ -432,7 +428,7 @@ begin
                                             cur_w := w_offset+j * stride_x+m;
                                             index := cur_w+w * (cur_h+h * (k+b * outC));
                                             if (cur_h >= 0) and (cur_h < h) and (cur_w >= 0) and (cur_w < w) then
-                                                val := state.input.Data[index]
+                                                val := state.input.data[index]
                                             else
                                                 val := -MaxSingle;
                                             if val > max then begin
@@ -448,9 +444,10 @@ begin
                                             //else
                                             //    max := max
                                         end;
-                                output.Data[out_index] := max;
-                                if assigned(indexes.data) then
+                                output.data[out_index] := max;
+                                if assigned(indexes.data) then begin
                                     indexes.data[out_index] := max_i
+                                end
                             end
         end;
     if antialiasing<>0 then
@@ -510,8 +507,8 @@ begin
   //c := outC;
   for i := 0 to outC * outH * outW * Batch -1 do
     begin
-      index := indexes.data[i];
-      state.delta.Data[index] := state.delta.Data[index] + delta.Data[i]
+      index := indexes.dyndata[i];
+      state.delta.dynData[index] := state.delta.dynData[index] + delta.dynData[i]
     end
 end;
 
@@ -574,19 +571,32 @@ end;
 
 {$ifdef USE_OPENCL}
 procedure TMaxPoolLayer.forwardGPU(var state: TNNetState);
-var t:TSingleTensor;
+var s:TNNetState;
 begin
   {$ifdef USE_TELEMETRY}
   if benchmark then metrics.forward.start(layerType);
   {$endif}
   if not state.input.wasGPU() then state.input.pushToDevice;
+  if avgPool then begin end
+  else begin
+    ocl.forwardMaxPool(batch, outC, outH, outW, state.input.devData, c, h, w, stride_x, stride_y, padding, kernelSize, indexes.devData, output.devData
+    {$IFDEF CL_EVENTS}
+    , batch, pointer(events), pointer(events));
+    {$ELSE}
+    );
+    {$ENDIF}
+    if antialiasing<>0 then
+        begin
+            s := default(TNNetState);
+            s.isTraining := state.isTraining;
+            s.workspace := state.workspace;
+            s.net := state.net;
+            s.input := @output;
+            inputLayer.forwardGPU(s);
+            ocl.copy(inputLayer.output.size(), inputLayer.output.devData, 0, 1, output.devData, 0, 1)
+        end;
 
-  ocl.forwardMaxPool(batch, outC, outH, outW, state.input.devData, c, h, w, stride_x, stride_y, padding, kernelSize, indexes.devData, output.devData
-  {$IFDEF CL_EVENTS}
-  , batch, pointer(events), pointer(events));
-  {$ELSE}
-  , 0, nil, nil);
-  {$ENDIF}
+  end;
 
   //forwardMaxPool(state);
   //output.pullFromDevice(t);
@@ -601,6 +611,7 @@ begin
   //ocl.waitForEvents(batch, pointer(events));
   //ocl.finish();
   {$ifdef USE_TELEMETRY}
+  ocl.finish();
   if benchmark then metrics.forward.finish(layerType);
   {$endif}
 end;
@@ -613,12 +624,14 @@ begin
   {$endif}
   if not delta.wasGPU() then delta.pushToDevice;
   //if not state.delta.wasGPU() then state.delta.pushToDevice;
-  ocl.backwardMaxPool(batch, outC, outH, outW, state.delta.devData, indexes.devData, delta.devData
-  {$IFDEF CL_EVENTS}
-  , batch, pointer(events), pointer(events));
-  {$ELSE}
-  , 0, nil, nil);
-  {$ENDIF}
+  if avgpool then
+  else
+    ocl.backwardMaxPool(batch, outC, outH, outW, state.delta.devData, indexes.devData, delta.devData
+    {$IFDEF CL_EVENTS}
+    , batch, pointer(events), pointer(events));
+    {$ELSE}
+    );
+    {$ENDIF}
   //backwardMaxPool(state);
   //writeln(slinebreak, state.index,' MAXPOOL delta :');
   //delta.pullFromDevice(t);
@@ -635,6 +648,7 @@ begin
   //ocl.waitForEvents(batch, pointer(events));
   //ocl.finish();
   {$ifdef USE_TELEMETRY}
+  ocl.finish();
   if benchmark then metrics.backward.finish(layerType);
   {$endif}
 end;

@@ -6,19 +6,20 @@ uses
   {$IFDEF UNIX}
   cthreads,
   {$ENDIF}
-  SysUtils, ntensors, ntypes, nDatasets, nBaseLayer, nConnectedlayer,
-  nLogisticLayer, nSoftmaxLayer, nCostLayer, nnet, nChrono, nConvolutionLayer,
-  nModels, Keyboard, nNormalizationLayer, steroids
+  SysUtils, ntensors, ntypes, nDatasets, nBaseLayer, nConnectedlayer
+  , nLogisticLayer, nSoftmaxLayer, nCostLayer, nnet, nChrono, nConvolutionLayer, nUpSampleLayer, nRNNLayer
+  , nModels, Keyboard, nNormalizationLayer, nParser, termesc
   {$if defined(MSWINDOWS)}
   , ShellApi, cudnn_graph, cudnn_adv, cudnn_ops, cudnn_cnn
   {$endif}
   {$if defined(USE_OPENCL)}
+  , OpenCLHelper, OpenCL, nnOpenCL, nOpMetrics//
   {$endif}
   { you can add units after this };
 
 const
   READ_BATCH   : SizeInt = 32;
-  READ_MEASURE : SizeInt = 32;
+  READ_MEASURE : SizeInt = 4;
   READ_TEST    : SizeInt = 3;
 var
   Neural:TNNet;
@@ -72,16 +73,58 @@ var
   l1, t1, t2, t3, t4 : TSingleTensor;
   coor : TArray<SizeInt>;
   trainingHistory : TSingleTensor;
+  {$ifdef USE_OPENCL}
+  dev : TArray<cl_device_id>;
+  res1, res2 : single;
+  t : int64;
+  {$endif}
 begin
   //write(#$1B'[1J');
 {$ifdef USE_OPENCL}
-  TSingleTensor.defaultDevice := cdOpenCL;
-  initOpenCL(1);
-  writeln('Using : ',  ocl.PlatformName(ocl.ActivePlatformId));
-  writeln('  - Device            : ',  ocl.DeviceName(ocl.ActiveDeviceId));
+  i:=0;
+  j:=0;
+  //initOpenCL(i, j);
 
-  ocl.queueInOrder:=true;
+  TSingleTensor.defaultDevice := cdOpenCL;
+  if TOpenCL.PlatformCount>1 then
+  repeat
+    writeln('Choose computing platform:');
+    for i:=0 to TOpenCL.PlatformCount-1 do
+      writeln(' ',i,' : ', TOpenCL.PlatformName(i));
+    try
+      readln(i);
+      if (i<0) or (i > TOpenCL.PlatformCount-1) then
+        writeln('invalid platform id, try again..');
+    except on e:Exception do
+      begin
+        writeln(e.Message);
+        i:=-1
+      end
+    end;
+  until (i>=0) and (i<TOpenCL.PlatformCount)
+  else
+    raise Exception.create('No OpenCL platforms found!');
+  writeln('Using : ',  TOpenCL.PlatformName(i), #13#10'select device :');
+  dev := TOpenCL.getDevices(i);
+
+  repeat
+    for j:=0 to high(dev) do
+      writeln(' ', j, ' [',TOpenCL.getDeviceTypeName(dev[j]),']: ', TOpenCL.getDeviceName(dev[j]));
+    try
+      readln(j);
+    except on e:Exception do
+      begin
+        writeln(e.message);
+        j:=-1
+      end
+    end;
+
+  until (j>=0) and (j<length(dev)) ;
+  initOpenCL(i, j);
+  ocl.useBLAS := 2;
+  //ocl.queueInOrder:=true;
   writeln('  - out of Order mode : ', not ocl.queueInOrder);
+
 {$endif}
   sDigits := 6;
 
@@ -114,7 +157,7 @@ begin
   {$endif}
   CF10 := TCIFAR10Data.Create('');
 
-  Neural:=TNNet.Create(leNetCIFAR10);
+  Neural:=TNNet.Create(deepCIFAR10);
   Neural.setTraining(true);
   Neural.batch       := READ_BATCH;
   Neural.learningRate:= 0.001;
@@ -139,14 +182,16 @@ begin
   Randomize;
 
   s := clock();
-  predicted.resize([Neural.batch]);
-  truth.resize([Neural.batch]);
+  predicted.resize([READ_MEASURE * Neural.batch]);
+  truth.resize([READ_MEASURE * Neural.batch]);
+  termesc.cursorClearScreen();
   InitKeyboard;
+
   while true do begin
 
-    i := random(CF10.DATA_COUNT div Neural.batch)-1;
+    //i := random(CF10.DATA_COUNT div Neural.batch)-1;
 
-    if not CF10.read(i) then break;
+    if not CF10.read(j) then break;
 
     CF10.TrainingData.toSingles(t1.Data);
     CF10.TrainingLabels.toSingles(l1.Data);
@@ -156,32 +201,33 @@ begin
     data.x.Data :=t1.Data;
     data.y.Data :=l1.Data;
 
-
-
-    cost := cost + Neural.trainEpoch(Data);
+    cost := {cost +} Neural.trainEpoch(Data);
+    k := PollKeyEvent;
+    if keyPressed then
+      Break;
 
     output := Neural.output();
     sampled.ShallowCopy(Neural.truth);
 
-    k := PollKeyEvent;
-    if keyPressed then
-      Break;
     //writeln(#$1B'[4;0H', 'Press [ESC] to stop training...');
 
+    output.pullFromDevice;
+    output.argMax(Predicted.data + (j mod READ_MEASURE)*READ_BATCH);
+    sampled.argMax(Truth.data + (j mod READ_MEASURE)*READ_BATCH);
+    write(cost:1:6, #13);
+    continue;
     if j mod READ_MEASURE = READ_MEASURE-1 then begin
       cost := cost / READ_MEASURE ;
       costDelta := costDelta - cost;
       s :=  READ_MEASURE * CLOCKS_PER_SEC div (clock - s);
       inc(l);
 
-      output.pullFromDevice;
-      output.argMax(Predicted.data);
-      sampled.argMax(Truth.data);
 
       trainingHistory.resize([l]);
       trainingHistory.Data[l-1] := cost;
-      write(#$1B'[1H');
-      writeln('Batch [',j:4,'], epoch[',j*Neural.batch div CF10.DATA_COUNT:5,'], Cost [',cost:1:8,']',widechar($2191 +2*ord(costDelta>0)),' speed [', s*Neural.batch :5,'] Sample per second, '
+
+      cursorAbsPos();
+      writeln('Batch [',j:4,'], epoch[',i {j*Neural.batch div CF10.DATA_COUNT}:5,'], Cost [',cost:1:8,']',widechar($2191 +2*ord(costDelta>0)),' speed [', s*Neural.batch :5,'] Sample per second, '
         ,'Accuracy [', 100*truth.similarity(predicted.Data):3:2,'%], learningRate [',Neural.computeCurrentLearningRate:1:3,']', sLineBreak);
       //writeln('Conv[1] ');
       //Neural.layers[0].weights.print(true, 18);
@@ -197,21 +243,22 @@ begin
       //Sampled.print(psGray24);
 
       //write('Predicted:',#$1B'[1J');
-      write('Predicted:',#$1B'[10D',#$1B'[B');
-      coor := output.print(psGray24);
-      write(#$1B'[',coor[1]+1,'A',#$1B'[',40,'C');
 
-      write('Actual:',#$1B'[7D',#$1B'[B');
+      write('Predicted:', cursorMove(cmBackward, 10), cursorMove(cmDown));
+      coor := output.print(psGray24);
+      write(cursorMove(cmUP, coor[1]+1), cursorMove(cmForward, 42));
+
+      write('Actual:', cursorMove(cmBackward,7), cursorMove(cmDown));
       coor := sampled.print(psGray24);
-      write(#$1B'[',coor[1]+1,'A',#$1B'[',40,'C');
+
+      write(#13, cursorMove(cmForward, 42), cursorMove(cmDown, 1));
 
       coor := trainingHistory.plot;
-
-      write(#$1B'[',24,';',1,'H');
-      writeln(sLineBreak, metrics.print({TELEMETRY_OPS or }TELEMETRY_FWD or TELEMETRY_BWD or TELEMETRY_UPD));
-
-
+      {$ifdef USE_TELEMETRY}
+      termesc.cursorAbsPos(10, 24);
+      writeln(sLineBreak, metrics.print(TELEMETRY_OPS {or TELEMETRY_FWD or TELEMETRY_BWD or TELEMETRY_UPD}));
       metrics.reset;
+      {$endif}
       //writeln(sLineBreak, 'Predicted :');
       //Predicted.print();
       //writeln(sLineBreak, 'Truth :');
@@ -229,12 +276,17 @@ begin
       //end;
       //inc(i);
       s := clock();
-      inc(k)
+      //inc(k)
     end;
     inc(j);
+    if j>= CF10.DATA_COUNT div Neural.batch then begin
+      inc(i);
+      j:=0;
+    end;
   end;
   DoneKeyboard;
   // test prediction
+
   writeln(sLineBreak,' press [Enter] to test:');
   readln;
 
@@ -245,12 +297,12 @@ begin
 
   Predicted := TInt64Tensor.create([READ_TEST]);
   truth     := TInt64Tensor.create([READ_TEST]);
+  Neural.setTraining(false);
   Neural.Batch := READ_TEST;
 
-
-  write(#$1B'[1J'#$1B'[1H');
+  cursorClearUp();
   while true do try
-    write(#$1B'[1H');
+    cursorAbsPos();
     i := random(CF10.TEST_COUNT div READ_TEST);
     CF10.read(-1, i);
     CF10.TestingData.toSingles(t1.Data);
@@ -261,11 +313,14 @@ begin
 
     writeln('truth');
     l1.argMax(truth.Data);
+    l1.print(psGray);
     truth.print;
     writeln(sLineBreak, 'Predicted');
     Neural.Input := t1;
     //Neural.input.reshape([READ_TEST, CF10.IMAGE_SIZE], READ_TEST);
-    Neural.predict(Neural.input).argMax(predicted.Data);
+    Neural.predict(Neural.input);
+    Neural.output().argMax(predicted.Data);
+    Neural.output().print(psGray);
     predicted.print();
 
     writeln('Press [Enter] for next random digit, [Ctrl-C] to exit ...');

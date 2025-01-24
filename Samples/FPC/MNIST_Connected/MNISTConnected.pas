@@ -38,6 +38,7 @@ begin
 {$ifdef USE_OPENCL}
   TSingleTensor.defaultDevice:=cdOpenCL;
   initOpenCL(0, 0);
+  ocl.useBLAS:=0;
   writeln('using : ', ocl.PlatformName(ocl.ActivePlatformId));
   writeln('   - device : ',  ocl.DeviceName(ocl.ActiveDeviceId));
   //ocl.queueInOrder:=true;

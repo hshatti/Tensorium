@@ -1,10 +1,12 @@
+#define nfloat float
+
 /*
-inline float mapX(const float x){
+inline nfloat mapX(const nfloat x){
   return x*3-2.1F;
 }
 // Same purpose as mapX
 // [0, 1] -> [-1.25, 1.25]
-inline float mapY(const float y){
+inline nfloat mapY(const nfloat y){
   return y*3 - 1.5F;
 }
 
@@ -14,31 +16,31 @@ inline float mapY(const float y){
 
 __kernel void mandel(__global uchar *buf, const int w, const int h){
 
-  const float lnxp1_max_iteration = log1p((float)max_iteration);
+  const nfloat lnxp1_max_iteration = log1p((nfloat)max_iteration);
 
   int y = get_global_id(0);
   int x = get_global_id(1);
-  float xx = mapX(x/(float)w);
-  float yy = mapY(y/(float)h);
+  nfloat xx = mapX(x/(nfloat)w);
+  nfloat yy = mapY(y/(nfloat)h);
 
   y *= w * sizeof(uint);
   x *= sizeof(uint);
 
-  float x0 = 0.0f; float y0 = 0.0f;
+  nfloat x0 = 0.0f; nfloat y0 = 0.0f;
   int iteration = 0;
-  float oldAbs = 0.0f;
-  float coverageNum = max_iteration;
+  nfloat oldAbs = 0.0f;
+  nfloat coverageNum = max_iteration;
   buf += y;
   while (iteration < max_iteration) {
-      float xtemp = x0 * x0 - y0 * y0;
+      nfloat xtemp = x0 * x0 - y0 * y0;
       y0 = 2 * x0 * y0;
       x0 = xtemp;
       x0 = x0 + xx;
       y0 = y0 + yy;
-      float currentAbs = x0*x0 + y0*y0;
+      nfloat currentAbs = x0*x0 + y0*y0;
       if (currentAbs>4.0f){
-         float diffToLast  = currentAbs - oldAbs;
-         float diffToMax   =       _max - oldAbs;
+         nfloat diffToLast  = currentAbs - oldAbs;
+         nfloat diffToMax   =       _max - oldAbs;
          coverageNum = iteration + diffToMax/diffToLast;
          break;
       }
@@ -92,95 +94,111 @@ typedef enum {
   } ActivationType;
 
 
-float sumv(const long N, __global const float* v, const long stride){
-  float sum=0;
+nfloat sumv(const long N, __global const nfloat* v, const long stride){
+  nfloat sum=0;
   #pragma unroll 8
   for (long i=0;i<N; i++)
     sum += v[i*stride];
   return sum;
 }
 
-float maxv(const long N, __global const float* v, const long stride){
-  float m=v[0];
+nfloat maxv(const long N, __global const nfloat* v, const long stride){
+  nfloat m=v[0];
   #pragma unroll 8
   for (long i=1;i<N; i++)
     m = fmax(m, v[i*stride]);
   return m;
 }
 
-float minv(const long N, __global const float* v, const long stride){
-  float m=v[0];
+nfloat minv(const long N, __global const nfloat* v, const long stride){
+  nfloat m=v[0];
   #pragma unroll 8
   for (long i=1;i<N; i++)
     m = fmin(m, v[i*stride]);
   return m;
 }
 
-#define VW 4
-float sumv_simd(const long N, __global float* v){
-  float4 sum4 = 0;
-  float sum = 0;
-  long K = N / VW;
+nfloat rssv(const long N, const nfloat mean, __global const nfloat* src, const long stride){
+  nfloat sum=0;
   #pragma unroll 8
-  for (long i=0;i<K; i++)
-    sum4 += vload4(i, v);
-  v += K*4;
-  for (long i=0; i<N%VW;i++)
-    sum4[i] += v[i];
-  return sum4.x + sum4.y + sum4.z + sum4.w;
+  for (long i=0;i<N; i++){
+    const nfloat v = src[i*stride] - mean;
+    sum += v*v;
+  }
+  return sum;
 }
 
-float dotv(const long N, __global float* a, const long inca,  __global float* b, const long incb){
+//#define VW 8
+//nfloat sumv_simd(const long N, __global nfloat* v){
+//  float8 sum4 = 0;
+//  nfloat sum = 0;
+//  long n = N / VW;
+//
+//  #pragma unroll 8
+//  for (long i=0;i<n; i++)
+//    sum4 += vload8(i, v);
+//  v += n*VW;
+//
+//  #pragma unroll 8
+//  for (long i=0; i<N%VW;i++)
+//    sum4[i] += v[i];
+//  return sum4[0] + sum4[1] + sum4[2] + sum4[3] + sum4[4] + sum4[5] + sum4[6] + sum4[7] ;
+//}
 
-  float d = 0;
+nfloat dotv(const long N, __global nfloat* a, const long inca,  __global nfloat* b, const long incb){
+
+  nfloat d = 0;
   #pragma unroll 8
   for (long i=0; i<N;i++)
     d += a[i*inca]*b[i*incb];
   return d;
 }
 
-float dotv_simd(const long N, __global float* a,  __global float* b){
-
-  float4 d = 0;
-  long K = N / VW;
-  #pragma unroll 8
-  for (long i=0; i<K;i++)
-    d += vload4(i, a) * vload4(i, b);
-  a += K*4;
-  b += K*4;
-  for (long i=0; i<N%VW;i++)
-    d.x += a[i]*b[i];
-  return d.x + d.y + d.z + d.w;
-}
+//nfloat dotv_simd(const long N, __global nfloat* a,  __global nfloat* b){
+//
+//  float8 d = 0;
+//  long n = N / VW;
+//  #pragma unroll 8
+//  for (long i=0; i<n;i++)
+//    d += vload8(i, a) * vload8(i, b);
+//  a += n*VW;
+//  b += n*VW;
+//
+//  #pragma unroll 8
+//  for (long i=0; i<N%VW;i++)
+//    d.x += a[i]*b[i];
+//
+//  return d[0] + d[1] + d[2] + d[3] + d[4] + d[5] + d[6] + d[7] ;
+//}
 
 #define WIDTH 4
               // naive GEMM with unrolling for now
-__kernel void sgemm1_nn(const long K, const float ALPHA ,
-                      const __global float* A, const long aOffset, const long lda,
-                      const __global float* B, const long bOffset, const long ldb,
-                      const float BETA, __global float* C, const long cOffset, const long ldc) {
+__kernel void sgemm1_nn(const long K, const nfloat ALPHA ,
+                      __global nfloat* A, const long aOffset, const long lda,
+                      __global nfloat* B, const long bOffset, const long ldb,
+                      const nfloat BETA, __global nfloat* C, const long cOffset, const long ldc) {
 
     const long globalRow = get_global_id(0); // Row ID of C (0..M)
     const long globalCol = get_global_id(1); // Col ID of C (0..N)
 
-    A += globalRow*lda +aOffset ;
+    A += globalRow*lda + aOffset ;
     B += globalCol + bOffset;
     C += globalRow*ldc + globalCol + cOffset;
     *C *= BETA;
 
-    float acc =0;
-
-    #pragma unroll 8
-    for (long k=0; k<K; k++)
-      acc += A[k]*B[k*ldb];
-    *C += acc * ALPHA;
-    //*C += dotv(K, A, 1, B, ldb) * ALPHA;
+    //nfloat acc =0;
+    //
+    //#pragma unroll 8
+    //for (long k=0; k<K; k++)
+    //  acc += A[k]*B[k*ldb];
+    //*C += acc * ALPHA;
+    *C += dotv(K, A, 1, B, ldb) * ALPHA;
 }
 
-__kernel void sgemm2_nn(const long K, const float ALPHA ,
-                      const __global float* A, const long aOffset, const long lda,
-                      const __global float* B, const long bOffset, const long ldb,
-                      const float BETA, __global float* C, const long cOffset, const long ldc) {
+__kernel void sgemm2_nn(const long K, const nfloat ALPHA ,
+                      __global nfloat* A, const long aOffset, const long lda,
+                      __global nfloat* B, const long bOffset, const long ldb,
+                      const nfloat BETA, __global nfloat* C, const long cOffset, const long ldc) {
 
     const long globalRow = get_global_id(1); // Row ID of C (0..M)
     const long globalCol = get_global_id(0); // Col ID of C (0..N)
@@ -190,19 +208,19 @@ __kernel void sgemm2_nn(const long K, const float ALPHA ,
     C += globalRow*ldc + globalCol + cOffset;
 
     *C *= BETA;
-    float acc =0;
+    //nfloat acc =0;
 
-    #pragma unroll 8
-    for (long k=0; k<K; k++)
-        acc += A[k]*B[k*ldb];
-    *C += acc * ALPHA;
-    //*C += dotv(K, A, 1, B, ldb) * ALPHA;
+    //#pragma unroll 8
+    //for (long k=0; k<K; k++)
+    //    acc += A[k]*B[k*ldb];
+    //*C += acc * ALPHA;
+    *C += dotv(K, A, 1, B, ldb) * ALPHA;
 }
 
-__kernel void sgemm1_nt(const long K, const float ALPHA ,
-                      const __global float* A, const long aOffset, const long lda,
-                      const __global float* B, const long bOffset, const long ldb,
-                      const float BETA, __global float* C, const long cOffset, const long ldc) {
+__kernel void sgemm1_nt(const long K, const nfloat ALPHA ,
+                      __global nfloat* A, const long aOffset, const long lda,
+                      __global nfloat* B, const long bOffset, const long ldb,
+                      const nfloat BETA, __global nfloat* C, const long cOffset, const long ldc) {
 
     const long globalRow = get_global_id(0);    // M
     const long globalCol = get_global_id(1);    // N
@@ -212,20 +230,21 @@ __kernel void sgemm1_nt(const long K, const float ALPHA ,
     C += globalRow*ldc + globalCol + cOffset;
     *C *= BETA;
 
-    float acc =0;
+    //nfloat acc =0;
 
-    #pragma unroll 8
-    for (long k=0; k<K; k++)
-        acc += A[k] * B[k];
-    *C += acc * ALPHA;
+    //#pragma unroll 8
+    //for (long k=0; k<K; k++)
+    //    acc += A[k] * B[k];
+    //*C += acc * ALPHA;
     //*C += dotv(K, A, 1, B, 1) * ALPHA;
+    *C += dotv(K, A, 1, B, 1) * ALPHA;
             //}
 }
 
-__kernel void sgemm1_tn(const long K, const float ALPHA ,
-                      const __global float* A, const long aOffset, const long lda,
-                      const __global float* B, const long bOffset, const long ldb,
-                      const float BETA, __global float* C, const long cOffset, const long ldc) {
+__kernel void sgemm1_tn(const long K, const nfloat ALPHA ,
+                      __global nfloat* A, const long aOffset, const long lda,
+                      __global nfloat* B, const long bOffset, const long ldb,
+                      const nfloat BETA, __global nfloat* C, const long cOffset, const long ldc) {
 
     const long row = get_global_id(0); // Row ID of C (0..M)
     const long col = get_global_id(1); // Col ID of C (0..N)
@@ -235,24 +254,34 @@ __kernel void sgemm1_tn(const long K, const float ALPHA ,
     C += row*ldc + col +  cOffset;
 
     *C *= BETA;
-    float acc = 0;
+    //nfloat acc = 0;
 
-    #pragma unroll 8
-    for (long k=0; k<K; k++)
-        acc += A[k * lda] * B[k * ldb] ;
-    *C += acc * ALPHA ;
-    //*C += dotv(K, A, lda, B, 1) * ALPHA ;
+    //#pragma unroll 8
+    //for (long k=0; k<K; k++)
+    //    acc += A[k * lda] * B[k * ldb] ;
+    //*C += acc * ALPHA ;
+    *C += dotv(K, A, lda, B, ldb) * ALPHA ;
 }
 
-__kernel void forward_bias(__global float* a,  const long aOffset, /*const long blockSize, */__global float* b, const long bOffset, const long incb)
+__kernel void forward_bias(const int reshape, __global nfloat* a,  const long aOffset, /*const long blockSize, */__global nfloat* b, const long bOffset, const long incb)
 {
-
-  const long N = get_global_size(0);
-  const long blockSize = get_global_size(2);
-  const long i = get_global_id(0);
-  const long k = get_global_id(1);
-  const long j = get_global_id(2);
-
+  long N, blockSize, i, k, j;
+  switch (reshape) {
+    case 0:
+      N = get_global_size(0);
+      blockSize = get_global_size(1);
+      i = get_global_id(0);
+      k = get_global_id(2);
+      j = get_global_id(1);
+      break;
+    case 1:
+      N = get_global_size(1);
+      blockSize = get_global_size(0);
+      i = get_global_id(1);
+      k = get_global_id(2);
+      j = get_global_id(0);
+      break;
+  }
   //if (i==0 && k==0){
     //printf("        N = %ld\n", N);
     //printf("blockSize = %ld\n", blockSize);
@@ -260,97 +289,98 @@ __kernel void forward_bias(__global float* a,  const long aOffset, /*const long 
   //for (i = 0; i<N; i++)
   //  for (k = 0; k<batch; k++){
   a += (k*N + i)*blockSize;
-  float bb = b[i * incb];
+  nfloat bb = b[i * incb];
   //#pragma unroll 8
   //    for (long j=0; j<blockSize; j++)
         a[j] += bb;
   //}
 }
 
-float stair_activate(const float x)
+nfloat stair_activate(const nfloat x)
 {
   long n = floor(x);
   if (n % 2 == 0) return floor(x/ 2);
   return (x - n) + floor(x/2);
 }
 
-float hardtan_activate(const float x)
+nfloat hardtan_activate(const nfloat x)
 {
     if (x < -1) return -1;
     if (x > 1) return 1;
     return (x);
 }
 
-float linear_activate(const float x)
+nfloat linear_activate(const nfloat x)
 {
   return x;
 }
 
-float logistic_activate(const float x)
+nfloat logistic_activate(const nfloat x)
 {
   //result := 1/(1 + exp(EnsureRange(-x, minSingleExp, maxSingleExp)))
   return 1/(1 + exp(-x));
 }
 
-float loggy_activate(const float x)
+nfloat loggy_activate(const nfloat x)
 {
   //result := 2/(1 + exp(EnsureRange(-x, minSingleExp, maxSingleExp))) - 1;
   return 2/(1 + exp(-x)) - 1;
 }
 
-float relu_activate(const float x)
+nfloat relu_activate(const nfloat x)
 {
   //return x*long(x>0);
   if (x<0) return 0;
   return x;
 }
 
-float relu6_activate(const float x)
+nfloat relu6_activate(const nfloat x)
 {
   //min_val_cmp(max_val_cmp(x, 0), 6)
   //result := EnsureRange(x,0,6);
   return  x*(x>0) * (x<=6);
 }
 
-float elu_activate(const float x)
+nfloat elu_activate(const nfloat x)
 {
   return (x >= 0)*x + (x < 0)*(exp(x)-1);
 }
 
-float selu_activate(const float x)
+nfloat selu_activate(const nfloat x)
 {
   return (x >= 0)*1.0507f*x + (x < 0)*1.0507f*1.6732f*(exp(x)-1);
 }
 
-float gelu_activate(const float x)
+nfloat gelu_activate(const nfloat x)
 {
   return 0.5f*x*(1 + tanh(0.797885f*x + 0.035677f*pow(x, 3)));
 }
 
-float relie_activate(const float x)
+nfloat relie_activate(const nfloat x)
 {
   if (x>0) return x;
   else return 0.01f*x;
 }
 
-float ramp_activate(const float x)
+nfloat ramp_activate(const nfloat x)
 {
   return  x*(x>0)+0.1f*x;
 }
 
-float leaky_activate(const float x)
+nfloat leaky_activate(const nfloat x)
 {
   if (x>0) return  x;
   else return  0.1f*x;
 }
 
-float tanh_activate(const float x)
+nfloat tanh_activate(const nfloat x)
 {
   //result := 2 / (1 + exp(ensureRange(-2 * x, minSingleExp, maxSingleExp))) - 1
-  return  (exp(2*x)-1)/(exp(2*x)+1);
+  return 2/ (1+exp(-2*x)) - 1 ;
+//  return  (exp(2*x)-1)/(exp(2*x)+1);
 }
 
-float softplus_activate(const float x, const float threshold)
+nfloat softplus_activate(const nfloat x, const nfloat threshold)
 {
     if (x > threshold)
       return (x);                // too large
@@ -360,28 +390,34 @@ float softplus_activate(const float x, const float threshold)
     return log1p(exp(x));
 }
 
-float plse_activate(const float x)
+nfloat plse_activate(const nfloat x)
 {
     if (x < -4 ) return( 0.01f * (x + 4));
     if (x > 4 ) return( 0.01f * (x - 4) + 1);
     return  0.125f*x + 0.5f;
 }
 
-float lhtan_activate(const float x)
+nfloat lhtan_activate(const nfloat x)
 {
     if(x < 0) return (0.001f*x);
     if(x > 1) return (0.001f*(x-1) + 1);
     return  x;
 }
 
-float silu_activate(const float x)
+nfloat silu_activate(const nfloat x)
 {
     return x * logistic_activate(x) ;
+}
+
+#define  MISH_THRESHOLD 20.0f
+nfloat mish_activate(const nfloat x)
+{
+    return x*tanh_activate(softplus_activate(x, MISH_THRESHOLD));
 }
 //void softmax_activate(const N:SizeInt; const x: PSingle);
 //{
 //  long i;
-//  float mx := TSingleTensor.maxv(N, Pointer(x), 1);//MaxValue(x, N);
+//  nfloat mx := TSingleTensor.maxv(N, Pointer(x), 1);//MaxValue(x, N);
 //  for i:=0 to N-1 do
 //    //x[i] := Exp(EnsureRange(x[i]-mx, minSingleExp, maxSingleExp));
 //    x[i] := Exp(x[i]-mx);
@@ -394,11 +430,11 @@ float silu_activate(const float x)
 //}
 
 
-__kernel void activate_array( __global float* x, const ActivationType a)
+__kernel void activate_array( __global nfloat* x, long const offset, const ActivationType a)
 {
-      long i = get_global_id(0);
+      const long i = get_global_id(0);
       //int i = (get_group_id(0) + get_group_id(1)*get_num_groups(0)) * get_local_size(0) + get_local_id(0);
-
+      x += offset;
       switch (a) {
           case acLOGISTIC:
             //for (i = 0; i< N; i++)
@@ -468,22 +504,28 @@ __kernel void activate_array( __global float* x, const ActivationType a)
           case acSWISH:
                 x[i] = silu_activate(x[i]);
             break;
+          case acMISH:
+                x[i] = mish_activate(x[i]);
+            break;
           //case acSOFTMAX:
             //softmax_activate(N, x);
             //break
           default:
-            printf("[Activation] : not Implemented");
+            printf("[Activation] %d: not Implemented\n", (int)a);
 
       }
    //printf("%ld, ", i);
 
 }
 
-__kernel void array_avtivate_swish(__global float* x, __global float* output, __global float* output2)
+__kernel void array_avtivate_swish(__global nfloat* x, long const offset, __global nfloat* output, __global nfloat* output2)
 {
     long i = get_global_id(0);
-    float x_val       = x[i];
-    float sigmoid     = logistic_activate(x_val);
+    x += offset;
+    output += offset;
+    output2 += offset;
+    nfloat x_val       = x[i];
+    nfloat sigmoid     = logistic_activate(x_val);
     output[i]         = sigmoid;
     output2[i]        = x_val * sigmoid;
 }
@@ -491,7 +533,7 @@ __kernel void array_avtivate_swish(__global float* x, __global float* output, __
 
 
 
-float lhtan_gradient(const float x)
+nfloat lhtan_gradient(const nfloat x)
 {
     if ((x > 0) &&  (x < 1))
       return 1;
@@ -499,89 +541,90 @@ float lhtan_gradient(const float x)
 }
 
 
-float hardtan_gradient(const float x)
+nfloat hardtan_gradient(const nfloat x)
 {
     if ((x > -1) && (x < 1))
       return 1;
     return 0;
 }
 
-float linear_gradient(const float x)
+nfloat linear_gradient(const nfloat x)
 {
     return 1;
 }
 
-float logistic_gradient(const float x)
+nfloat logistic_gradient(const nfloat x)
 {
     return (1-x)*x;
 }
 
-float loggy_gradient(const float x)
+nfloat loggy_gradient(const nfloat x)
 {
-    float y = (x+1.0f)/2.0f;
+    nfloat y = (x+1.0f)/2.0f;
     return 2.0f*(1.0f-y)*y;
 }
 
-float stair_gradient(const float x)
+nfloat stair_gradient(const nfloat x)
 {
     if (floor(x) == x) return( 0);
     return 1;
 }
 
-float relu_gradient(const float x)
+nfloat relu_gradient(const nfloat x)
 {
     return (x>0?1:0);
 }
 
-float relu6_gradient(const float x)
+nfloat relu6_gradient(const nfloat x)
 {
     return ((x>0) && (x<6)?1:0);
 }
 
-float elu_gradient(const float x)
+nfloat elu_gradient(const nfloat x)
 {
     return (x >= 0?1:0) + (x < 0?1:0)*(x + 1);
 }
 
-float selu_gradient(const float x)
+nfloat selu_gradient(const nfloat x)
 {
     return (x >= 0?1:0)*1.0507f + (x < 0?1:0)*(x + 1.0507f*1.6732f);
 }
 
-float relie_gradient(const float x)
+nfloat relie_gradient(const nfloat x)
 {
     if (x>0) return 1;
     else return 0.01f;
 }
 
-float ramp_gradient(const float x)
+nfloat ramp_gradient(const nfloat x)
 {
     return (x>0?1:0) + 0.1f;
 }
 
-float leaky_gradient(const float x)
+nfloat leaky_gradient(const nfloat x)
 {
     if (x>0) return 1;
     else return 0.1f;
 }
 
-float tanh_gradient(const float x)
+nfloat tanh_gradient(const nfloat x)
 {
     return 1-x*x;
 }
 
-float sech(const float x)
+nfloat sech(const nfloat x)
 {
     return 2.0f / (exp(x) + exp(-x));
 }
 
-float gelu_gradient(const float x)
+nfloat gelu_gradient(const nfloat x)
 {
-    float x3 = pow(x,3);
-    return 0.5f*tanh(0.0356774f*x3 + 0.797885f*x) + (0.0535161f*x3 + 0.398942f*x) * pow(sech(0.0356774f*x3 + 0.797885f*x), 2.0f) + 0.5f ;
+    nfloat x3 = x*x*x;
+    nfloat sec = sech(0.0356774f*x3 + 0.797885f*x);
+    return 0.5f*tanh(0.0356774f*x3 + 0.797885f*x) + (0.0535161f*x3 + 0.398942f*x) * sec*sec + 0.5f ;
 }
 
-float plse_gradient(const float x)
+nfloat plse_gradient(const nfloat x)
 {
 
   if ((x < 0) || (x > 1))
@@ -590,10 +633,12 @@ float plse_gradient(const float x)
     return 0.125f;
 }
 
-__kernel void gradient_array(__global const float* x, const ActivationType a, __global float* delta)
+__kernel void gradient_array(__global nfloat* x, long const offset, const ActivationType a, __global nfloat* delta)
 {
     long i = get_global_id(0);
 
+    x += offset;
+    delta += offset;
     switch (a) {
         case acLOGISTIC:
           //for (i = 0; i<N;i++)
@@ -678,18 +723,18 @@ __kernel void gradient_array(__global const float* x, const ActivationType a, __
     //   case acNORM_CHAN_SOFTMAX_MAXVAL:
     //
         default:
-            printf("[Gradient] : not Implemented %d", a);
+            printf("[Gradient] : not Implemented %d\n", a);
           ;
     }
 
 }
-__kernel void backward_bias(__global float* a, const long blockSize, __global float* bias, const long batch, const long N)
+__kernel void backward_bias(__global nfloat* a, const long blockSize, __global nfloat* bias, const long batch)
 {
 
     const long i = get_global_id(0);//if (i==0) printf("long %ull\n", sizeof(long));
-
+    const long N = get_global_size(0);
     //for (long i=0 ; i<N ;i++) {
-      float sum = 0;
+      nfloat sum = 0;
       bias += i * blockSize;
       const long incbias = N*blockSize;
       #pragma unroll 8
@@ -700,26 +745,34 @@ __kernel void backward_bias(__global float* a, const long blockSize, __global fl
       a[i] +=sum;
 }
 
-__kernel void addv( __global float* dst, __global const float* src){
+__kernel void addv( __global nfloat* src1, const long src1Offset, const long inca, __global nfloat* src2, const long src2Offset, const long incb, __global nfloat* dst, const long dstOffset, const long incc){
 
    const long i = get_global_id(0);
-   dst[i] += src[i];
+   src1 += src1Offset;
+   src2 += src2Offset;
+   dst += dstOffset;
+
+   dst[i*incc] = src1[i*inca] + src2[i*incb];
 }
 
-__kernel void subv( __global float* dst, __global const float* src){
+__kernel void subv( __global nfloat* src1, const long src1Offset, const long inca, __global nfloat* src2, const long src2Offset, const long incb, __global nfloat* dst, const long dstOffset, const long incc){
 
    const long i = get_global_id(0);
-   dst[i] -= src[i];
+   src1 += src1Offset;
+   src2 += src2Offset;
+   dst += dstOffset;
+
+   dst[i*incc] = src1[i*inca] - src2[i*incb];
 }
 
-__kernel void axpy(const float a, __global const float* x, const long incx, __global float* y, const long incy){
+__kernel void axpy(const nfloat a, __global const nfloat* x, const long incx, __global nfloat* y, const long incy){
 
    const long i = get_global_id(0);
    y[i*incy] += a*x[i*incx];
 
 }
 
-__kernel void scale(const float a, __global float* x, const long incx){
+__kernel void scale(const nfloat a, __global nfloat* x, const long incx){
 
    const long i = get_global_id(0);
    x[i*incx] *= a;
@@ -728,18 +781,19 @@ __kernel void scale(const float a, __global float* x, const long incx){
 
 #define sEPSILON 0.000001f
 
-__kernel void crossEntropyLogistics(__global const float* pred, __global const float* truth, __global float* delta, __global float* error){
+__kernel void crossEntropyLogistics(__global const nfloat* pred, __global const nfloat* truth, __global nfloat* delta, __global nfloat* error){
 
   const long i = get_global_id(0);
-  float t = truth[i];
-  float p = pred[i];
-  error[i] = -t*log(fmax(p, sEPSILON)) - (1-t) * log(fmax(1 - p, sEPSILON));
+  nfloat t = truth[i];
+  nfloat p = pred[i];
+  //error[i] = -t*log(fmax(p, sEPSILON)) - (1-t) * log(fmax(1 - p, sEPSILON));
+  error[i] = -t*log(p) - (1-t) * log(1 - p);
   delta[i] = t - p;
    //printf("%ld, ", i);
 
 }
 
-__kernel void fill(__global float* x, const float val, const long stride){
+__kernel void fill(__global nfloat* x, const nfloat val, const long stride){
 
    const long i = get_global_id(0);
    x[i*stride] = val;
@@ -747,19 +801,19 @@ __kernel void fill(__global float* x, const float val, const long stride){
 
 // naive copy for now
 __kernel void copy(
-    __global float* a, const long aOffset, const long inca
-  , __global float* b, const long bOffset, const long incb){
+    __global nfloat* src, const long aOffset, const long inca
+  , __global nfloat* dst, const long bOffset, const long incb){
 
    const long i = get_global_id(0);
-   a += aOffset; b += bOffset;
-   b[i*incb] = a[i*inca];
+   src += aOffset; dst += bOffset;
+   dst[i*incb] = src[i*inca];
 }
 
-__kernel void forwardMaxpool(
-     __global float* input
+__kernel void forward_maxpool(
+     __global nfloat* input
      , const long c, const long h, const long w
      , const long stride_x, const long stride_y, const long padding, const long kernelSize
-     , __global long* indexes, __global float* output){
+     , __global long* indexes, __global nfloat* output){
 
   const long w_offset = -padding / 2;
   const long h_offset = -padding / 2;
@@ -772,7 +826,7 @@ __kernel void forwardMaxpool(
   long x = get_global_id(2);
 
   long out_index = x + outW*(y + outH*k) ;//+ outW*outH*outC*b;
-  float max = -FLT_MAX;
+  nfloat max = -FLT_MAX;
   long max_i = -1;
   #pragma unroll 8
   for (long n=0; n<kernelSize; n++)
@@ -781,7 +835,7 @@ __kernel void forwardMaxpool(
           long cur_h = h_offset+y * stride_y+n;
           long cur_w = w_offset+x * stride_x+m;
           long index = cur_w + w*(cur_h + h*k) ;//+ w*h*outC*b;
-          float val = (cur_h >= 0) && (cur_h < h) && (cur_w >= 0) && (cur_w < w)? input[index]: -FLT_MAX;
+          nfloat val = (cur_h >= 0) && (cur_h < h) && (cur_w >= 0) && (cur_w < w)? input[index]: -FLT_MAX;
           if (val > max){
             max_i = index;
             max = val;
@@ -792,7 +846,7 @@ __kernel void forwardMaxpool(
       indexes[out_index] = max_i;
 }
 
-__kernel void backwardMaxPool( __global float* output, __global const long* indexes, __global const float* delta){
+__kernel void backwardMaxPool( __global nfloat* output, __global const long* indexes, __global const nfloat* delta){
         const long i = get_global_id(0);
         const long j = get_global_id(1);
         const long id = i*get_global_size(1) + j;
@@ -802,14 +856,13 @@ __kernel void backwardMaxPool( __global float* output, __global const long* inde
 }
 
 
-void softmax(const long n, __global float* input, const long stride, const float temp, __global float* output){
+void softmax(const long n, __global nfloat* input, const long stride, const nfloat temp, __global nfloat* output){
 
-  float largest = maxv(n, input, stride);
-  float sum = 0;
-
+  nfloat largest = maxv(n, input, stride);
+  nfloat sum = 0;
   #pragma unroll 8
   for (long i=0;i<n;i++) {
-      float e = exp((input[i*stride] - largest)/temp);
+      nfloat e = exp((input[i*stride] - largest)/temp);
       sum += e;
       output[i*stride] = e;
   }
@@ -819,9 +872,9 @@ void softmax(const long n, __global float* input, const long stride, const float
       output[i*stride]/=sum;
 }
 
-__kernel void softmaxBatch(__global float* input, const long iOffset, const long n
+__kernel void softmaxBatch(__global nfloat* input, const long iOffset, const long n
   , const long batch_size, const long group_size, const long stride
-  , const float temp, __global float* output, const long oOffset){
+  , const nfloat temp, __global nfloat* output, const long oOffset){
 
   const long b = get_global_id(0);
   const long g = get_global_id(1);
@@ -834,20 +887,20 @@ __kernel void softmaxBatch(__global float* input, const long iOffset, const long
 
 }
 
-void move(const __global float* src, __global float* dst , const long count){
+void move(const __global nfloat* src, __global nfloat* dst , const long count){
   #pragma unroll 8
   for (long i=0 ; i<count; i++) dst[i] = src[i];
 }
 
-#define sEPSILON 0.000001f
-__kernel void softmaxCrossEntropy(const __global float* pred, const __global float* truth, __global float* delta, __global float* error){
+__kernel void softmaxCrossEntropy(const __global nfloat* pred, const __global nfloat* truth, __global nfloat* delta, __global nfloat* error){
 
   const long i = get_global_id(0);
 
-  float t = truth[i];
-  float p = pred[i];
+  nfloat t = truth[i];
+  nfloat p = pred[i];
   if (t!=0)
-      error[i] = -log(max(p , sEPSILON));
+      //error[i] = -log(fmax(p, sEPSILON));
+      error[i] = -log(p);
   else
       error[i] = 0;
   delta[i] = t - p;
@@ -857,8 +910,8 @@ __kernel void softmaxCrossEntropy(const __global float* pred, const __global flo
 __kernel void im2col(const long aHeight, const long aWidth
   , const long kernelHeight, const long kernelWidth, const long padHeight, const long padWidth
   , const long strideY, const long strideX, const long dilationY, const long dilationX
-  , __global float* im , const long imOffset
-  , __global float* col, const long colOffset, const long batch){
+  , __global nfloat* im , const long imOffset
+  , __global nfloat* col, const long colOffset, const long batch){
 
   long aChannels = get_global_size(0);
   long chan = get_global_id(0);
@@ -882,8 +935,8 @@ __kernel void im2col(const long aHeight, const long aWidth
       for (long b=0 ; b<batch; b++)
       {
         long i = (b*aChannels + chan)*inSize + aWidth*(kernelRow*dilationY - padHeight) + kernelCol*dilationX - padWidth;
-        __global float* im1 = imOffset + im + i;
-        __global float* col1 = colOffset + col + padWidth * outWidth + outSize*kernelSize*(chan + b*aChannels) + outSize*(kernelRow * kernelWidth + kernelCol) ;
+        __global nfloat* im1 = imOffset + im + i;
+        __global nfloat* col1 = colOffset + col + padWidth * outWidth + outSize*kernelSize*(chan + b*aChannels) + outSize*(kernelRow * kernelWidth + kernelCol) ;
         #pragma unroll 8
         for (long outRow=padHeight ; outRow<outHeight - padHeight ; outRow++)
         {
@@ -904,7 +957,7 @@ __kernel void im2col(const long aHeight, const long aWidth
     }
 }
 
-void fills(__global float* dst, const long N, const float val){
+void fills(__global nfloat* dst, const long N, const nfloat val){
   #pragma unroll 8
   for (long i=0 ; i<N; i++)
     dst[i] = val;
@@ -935,8 +988,8 @@ void xim2col(const long input_h, const long input_w, const long channels,
                          const long stride_h, const long stride_w,
                          const long dilation_h, const long dilation_w,
                          const bool kernel_flip,
-                         const __global float* restrict im_buffer, const long im_offset,
-                         __global float* col_buffer, const long col_offset) {
+                         const __global nfloat* restrict im_buffer, const long im_offset,
+                         __global nfloat* col_buffer, const long col_offset) {
 
   // Thread IDs
   const long w_id = get_global_id(0); // image width, max 'output_w'
@@ -951,7 +1004,7 @@ void xim2col(const long input_h, const long input_w, const long channels,
         // Retrieves the input value
         const long h_index = -pad_h + kh_id * dilation_h + stride_h * h_id;
         const long w_index = -pad_w + kw_id * dilation_w + stride_w * w_id;
-        float val;
+        nfloat val;
         if (h_index >= 0 && h_index < input_h &&
             w_index >= 0 && w_index < input_w) {
           const long input_index = w_index + input_w * (h_index + input_h * c_id);
@@ -988,8 +1041,8 @@ void Xim2colKernelFlip(const long input_h, const long input_w, const long channe
                        const long pad_h, const long pad_w,
                        const long stride_h, const long stride_w,
                        const long dilation_h, const long dilation_w,
-                       const __global float* restrict im_buffer, const long im_offset,
-                       __global float* col_buffer, const long col_offset) {
+                       const __global nfloat* restrict im_buffer, const long im_offset,
+                       __global nfloat* col_buffer, const long col_offset) {
   const bool kernel_flip = true;
   xim2col(input_h, input_w, channels, output_h, output_w, kernel_h, kernel_w,
           pad_h, pad_w, stride_h, stride_w, dilation_h, dilation_w,
@@ -1009,8 +1062,8 @@ void Xim2colKernelNormal(const long input_h, const long input_w, const long chan
                          const long pad_h, const long pad_w,
                          const long stride_h, const long stride_w,
                          const long dilation_h, const long dilation_w,
-                         const __global float* restrict im_buffer, const long im_offset,
-                         __global float* col_buffer, const long col_offset) {
+                         const __global nfloat* restrict im_buffer, const long im_offset,
+                         __global nfloat* col_buffer, const long col_offset) {
   const bool kernel_flip = false;
   xim2col(input_h, input_w, channels, output_h, output_w, kernel_h, kernel_w,
           pad_h, pad_w, stride_h, stride_w, dilation_h, dilation_w,
@@ -1028,8 +1081,8 @@ void xcol2im(const long input_h, const long input_w, const long channels,
                          const long dilation_bez_h, const long dilation_bez_w,
                          const long gcd_h, const long gcd_w,
                          const bool kernel_flip,
-                         const __global float* restrict col_buffer, const long col_offset,
-                         __global float* im_buffer, const long im_offset) {
+                         const __global nfloat* restrict col_buffer, const long col_offset,
+                         __global nfloat* im_buffer, const long im_offset) {
 
   const long input_h_scaled = (input_h - 1) / gcd_h + 1;
 
@@ -1053,7 +1106,7 @@ void xcol2im(const long input_h, const long input_w, const long channels,
   const long tw_end = min((output_w - stride_bez_w * gcd_scale_w) * stride_w,
                          (dilation_bez_w * gcd_scale_w + 1) * dilation_w);
   if (w_index < input_w && c_id < channels) {
-    float val = 0;
+    nfloat val = 0;
     #pragma unroll 8
     for (long th = th_begin; th < th_end; th += th_step) {
       #pragma unroll 8
@@ -1074,7 +1127,7 @@ void xcol2im(const long input_h, const long input_w, const long channels,
 
     // Accumulates the resulting value with the existing im-buffer (+= val)
     const long input_index = w_index + input_w * (h_index + input_h * c_id);
-    float im_buffer_value = im_buffer[input_index + im_offset];
+    nfloat im_buffer_value = im_buffer[input_index + im_offset];
     im_buffer[input_index + im_offset] = im_buffer_value + val;
   }
 }
@@ -1096,8 +1149,8 @@ void Xcol2imKernelFlip(const long input_h, const long input_w, const long channe
                        const long stride_bez_h, const long stride_bez_w,
                        const long dilation_bez_h, const long dilation_bez_w,
                        const long gcd_h, const long gcd_w,
-                       const __global float* restrict col_buffer, const long col_offset,
-                       __global float* im_buffer, const long im_offset) {
+                       const __global nfloat* restrict col_buffer, const long col_offset,
+                       __global nfloat* im_buffer, const long im_offset) {
   const bool kernel_flip = true;
   xcol2im(input_h, input_w, channels, output_h, output_w, kernel_h, kernel_w,
           pad_h, pad_w, stride_h, stride_w, dilation_h, dilation_w,
@@ -1121,8 +1174,8 @@ void Xcol2imKernelNormal(const long input_h, const long input_w, const long chan
                          const long stride_bez_h, const long stride_bez_w,
                          const long dilation_bez_h, const long dilation_bez_w,
                          const long gcd_h, const long gcd_w,
-                         const __global float* restrict col_buffer, const long col_offset,
-                         __global float* im_buffer, const long im_offset) {
+                         const __global nfloat* restrict col_buffer, const long col_offset,
+                         __global nfloat* im_buffer, const long im_offset) {
   const bool kernel_flip = false;
   xcol2im(input_h, input_w, channels, output_h, output_w, kernel_h, kernel_w,
           pad_h, pad_w, stride_h, stride_w, dilation_h, dilation_w,
@@ -1132,4 +1185,234 @@ void Xcol2imKernelNormal(const long input_h, const long input_w, const long chan
 }
 
 
+__kernel void upsample(__global nfloat* in, const long stride, const int isForward, const nfloat scale, __global nfloat* out, const int zero){
+
+   const long c = get_global_id(0);
+   const long y = get_global_id(1);
+   const long x = get_global_id(2);
+   const long h = get_global_size(1)/stride; // but why multiplying by stride (look at setWorkgroupSizes) and then dividing by it in the loop??
+   const long w = get_global_size(2)/stride; // but why multiplying by stride (look at setWorkgroupSizes) and then dividing by it in the loop??
+
+   const long in_index   = (c*h + (y / stride))*w + x / stride;
+   const long out_index  = (c*h*stride + y)*stride*w + x;   // <-- why having to adjust by stride instead of remving it !!!
+   if (isForward){
+     out[out_index] = scale*in[in_index];
+     return;
+   }
+   if (zero) in[in_index] = 0;
+   in[in_index] += scale*out[out_index]; // ok seems like, it's because of trying to add adjust all input pixels in the stride a in here
+
+}
+
+__kernel void fmavss(__global nfloat* src, const long offset, const nfloat scalar, const nfloat bias, __global nfloat* dst){
+
+  const long w = get_global_size(1);
+  const long y = get_global_id(0);
+  const long x = get_global_id(1);
+  const long idx = y*w + x;
+  src += offset;
+  dst += offset;
+  dst[idx] = mad(src[idx], scalar, bias);
+
+}
+
+__kernel void means_vars(const long blocksize, const long groups, __global const nfloat* src, __global nfloat* means, __global nfloat* vars){
+
+    nfloat m = 0;
+    nfloat v = 0;
+    const long i = get_global_id(0);
+    const long N = get_global_size(0);
+    const long S = groups*blocksize;
+    #pragma unroll
+    for (long b=0; b<groups; b++){
+        const long idx = (i + b*N)*blocksize;
+        m += sumv(blocksize, src + idx, 1);
+    }
+    m /= S;
+    #pragma unroll
+    for (long b=0; b<groups; b++){
+        const long idx = (i + b*N)*blocksize;
+        v += rssv(blocksize, m, src + idx, 1);
+    }
+    means[i] = m;
+    vars[i]  = v / (S-1);
+
+}
+
+__kernel void normvv(__global nfloat* mean, const long mean_stride, __global nfloat* variance, const long variance_stride, __global nfloat* dst, const long dst_stride)
+{
+  const long i = get_global_id(0);
+  dst[i * dst_stride] = (dst[i*dst_stride] - mean[i*mean_stride])/sqrt(variance[i*variance_stride]);
+}
+
+__kernel void normvs(__global nfloat* src, const nfloat mean, const nfloat variance)
+{
+  const long i = get_global_id(0);
+  src[i] = (src[i] - mean)/sqrt(variance);
+}
+
+__kernel void normblkvv(__global nfloat* means, const long means_stride, __global nfloat* vars, const long vars_stride, __global nfloat* dst)
+{
+  const long i = get_global_id(0); // means vars pos
+  const long j = get_global_id(1); // block pos
+  const long b = get_global_id(2); // batch batch pos
+  const long blocksize = get_global_size(1);
+  const long batchsize = get_global_size(0)*blocksize;
+  const nfloat v = sqrt(vars[i*vars_stride]);
+  const nfloat m = means[i*means_stride];
+  dst += b*batchsize + i*blocksize;
+  dst[j] = (dst[j] - m)/v;
+}
+
+__kernel void means_vars_delta(const long groups, const long blocksize,
+         __global nfloat* delta, __global nfloat* x,
+         __global nfloat* means, __global nfloat* vars,
+         __global nfloat* means_delta, __global nfloat* vars_delta){
+
+  nfloat m = 0;
+  nfloat v = 0;
+  const long i = get_global_id(0);
+  const long ndst = get_global_size(0);
+
+  #pragma unroll
+  for (long j=0 ;j<groups; j++)
+    #pragma unroll
+    for (long k=0; k<blocksize; k++){
+      const long index = (i + j*ndst)*blocksize + k;
+      m += delta[index];
+      v += delta[index] * (x[index] - means[i]);
+    }
+  //means_delta[i] = m * (-1.0 / sqrt(fmax(vars[i], sEPSILON)));
+  //vars_delta[i]  = v * -0.5f * pow(fmax(vars[i], sEPSILON), -1.5f);
+  means_delta[i] = m * (-1.0f / sqrt(vars[i]));
+  vars_delta[i]  = v * -0.5f / (vars[i]*sqrt(vars[i]));
+
+}
+
+__kernel void norm_delta(__global nfloat* x, __global nfloat* means, __global nfloat* vars, __global nfloat* means_delta, __global nfloat* vars_delta, __global nfloat* delta){
+  const long j = get_global_id(2);
+  const long i = get_global_id(0);
+  const long k = get_global_id(1);
+  const long groups    = get_global_size(2);
+  const long N         = get_global_size(0);
+  const long blocksize = get_global_size(1);
+
+  const long batchsize = blocksize * groups;
+  const long index = (i + j*N) * blocksize +k;
+  delta[index] =
+    //delta[index] / (sqrt(fmax(vars[i], sEPSILON))) +
+    delta[index] / (sqrt(vars[i])) +
+    (2.0f * vars_delta[i] * (x[index] - means[i]) + means_delta[i]) / batchsize;
+
+}
+
+__kernel void add_dots(const long groups, const long blocksize, __global nfloat* src1, __global nfloat* src2, __global nfloat* dst){
+
+    const long i = get_global_id(0);
+    const long ndst = get_global_size(0);
+    nfloat sum = 0;
+    #pragma unroll
+    for (long b=0; b<groups; b++){
+      const long idx = (i + b * ndst) * blocksize;
+      sum += dotv(blocksize, src1 + idx, 1, src2 + idx, 1);
+    }
+    dst[i] += sum;
+
+}
+
+__kernel void forward_scale(const int reshape, __global nfloat* a,  const long aOffset, __global nfloat* b, const long bOffset, const long incb)
+{
+  long N, blockSize, i, k, j;
+  switch (reshape) {
+    case 0:
+      N = get_global_size(0);
+      blockSize = get_global_size(1);
+      i = get_global_id(0);
+      k = get_global_id(2);
+      j = get_global_id(1);
+      break;
+    case 1:
+      N = get_global_size(1);
+      blockSize = get_global_size(0);
+      i = get_global_id(1);
+      k = get_global_id(2);
+      j = get_global_id(0);
+      break;
+  }
+  //if (i==0 && k==0){
+    //printf("        N = %ld\n", N);
+    //printf("blockSize = %ld\n", blockSize);
+  //}
+  //for (i = 0; i<N; i++)
+  //  for (k = 0; k<batch; k++){
+  a += (k*N + i)*blockSize;
+  nfloat bb = b[i * incb];
+  //#pragma unroll 8
+  //    for (long j=0; j<blockSize; j++)
+        a[j] *= bb;
+  //}
+}
+
+__kernel void forward_scale_add(const int reshape, __global nfloat* a,  const long aOffset, __global nfloat* s, __global nfloat* b, const long bOffset, const long incb)
+{
+  long N, blockSize, i, k, j;
+  switch (reshape) {
+    case 0:
+      N = get_global_size(0);
+      blockSize = get_global_size(1);
+      i = get_global_id(0);
+      k = get_global_id(2);
+      j = get_global_id(1);
+      break;
+    case 1:
+      N = get_global_size(1);
+      blockSize = get_global_size(0);
+      i = get_global_id(1);
+      k = get_global_id(2);
+      j = get_global_id(0);
+      break;
+  }
+  //if (i==0 && k==0){
+    //printf("        N = %ld\n", N);
+    //printf("blockSize = %ld\n", blockSize);
+  //}
+  //for (i = 0; i<N; i++)
+  //  for (k = 0; k<batch; k++){
+  a += (k*N + i)*blockSize;
+  nfloat ss = s[i * incb];
+  nfloat bb = b[i * incb];
+  //#pragma unroll 8
+  //    for (long j=0; j<blockSize; j++)
+
+        a[j] *= ss;
+        a[j] += bb;
+  //}
+}
+
+#define RAND_MAX 10000
+uint rand(const uint seed){
+  //ulong res = ((seed + get_global_linear_id()) * 0x5DEECE66DL + 0xBL) & ((1L << 48) - 1);
+  //return (res >> 16) % RAND_MAX;
+        uint x = seed + get_global_linear_id();
+        x ^= x << 13;
+	x ^= x >> 17;
+	x ^= x << 5;
+	return x % RAND_MAX;
+}
+
+kernel void forward_dropout(const uint seed, const nfloat probability, const nfloat scale, global const nfloat* src, global nfloat* rnd, global nfloat* dst)
+{
+  long i  = get_global_id(0);
+  rnd[i]  = rand(seed);
+  rnd[i] /= RAND_MAX;
+  dst[i]  = rnd[i] < probability? 0: src[i]*scale;
+
+}
+
+kernel void backward_dropout(const nfloat probability, const nfloat scale, global const nfloat* src, global const nfloat* rnd, global nfloat* dst)
+{
+  long i = get_global_id(0);
+  dst[i] = rnd[i] < probability? 0: src[i]*scale;
+
+}
 

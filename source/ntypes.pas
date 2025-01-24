@@ -48,6 +48,7 @@ type
       index : SizeInt;
       label_smooth_eps : single;
       adversarial : boolean;
+      step : SizeInt;
       {$ifdef USE_OPENCL}
       events: TArray<cl_event>;
       ev    : TArray<cl_int>;
@@ -258,6 +259,7 @@ type
 
   PDetection = ^TDetection;
   TDetection = record
+    id : SizeInt;
     bbox : TBox;
     classes, best_class_idx: SizeInt;
     prob, mask : TArray<Single>;
@@ -613,6 +615,7 @@ var
     r,c,k,ix,iy: SizeInt;
     w_scale, h_scale, val, sx, dx, sy, dy: single;
 begin
+  // seprable convolution filter ?
     result := TImageData.Create(aWidth, aHeight, self.c);
     part := TImageData.Create(aWidth, self.h, self.c);
     w_scale := (self.w-1) / (aWidth-1);
@@ -777,6 +780,56 @@ begin
 end;
 
 { TBox }
+function overlap(const x1, w1, x2, w2: single): single;
+var
+    l1: single;
+    l2: single;
+    left: single;
+    r1: single;
+    r2: single;
+    right: single;
+begin
+    l1 := x1-w1 / 2;
+    l2 := x2-w2 / 2;
+    if (l1 > l2) then left := l1 else left := l2;
+    r1 := x1+w1 / 2;
+    r2 := x2+w2 / 2;
+    if r1 < r2 then right := r1 else right := r2;
+    exit(right-left)
+end;
+
+function box_intersection(const a, b: TBox): single;
+var
+    w,h,area: single;
+begin
+    w := overlap(a.x, a.w, b.x, b.w);
+    h := overlap(a.y, a.h, b.y, b.h);
+    if (w < 0) or (h < 0) then
+        exit(0);
+    area := w * h;
+    exit(area)
+end;
+
+function box_union(const a, b: TBox): single;
+var
+    i: single;
+    u: single;
+begin
+    i := box_intersection(a, b);
+    u := a.w * a.h+b.w * b.h-i;
+    exit(u)
+end;
+
+function box_iou(const a, b: TBox): single;
+var I,U:single;
+begin
+    //exit(box_intersection(a, b) / box_union(a, b))
+    I := box_intersection(a, b);
+    U := box_union(a, b);
+    if (I = 0) or (U = 0) then
+        exit( 0);
+    exit( I / U);
+end;
 
 procedure TBox.regularize();
 begin
@@ -834,13 +887,13 @@ begin
   dh := hRatio*h;
   result.x := x - (dw - w) / 2;
   result.y := y - (dh - h) / 2;
-  w := dw;
-  h := dh
+  result.w := dw;
+  result.h := dh
 end;
 
 function TBox.inflate(const ratio: single): TBox;
 begin
-  inflate(ratio, ratio)
+  result := inflate(ratio, ratio)
 end;
 
 function TBox.add(const dw, dh: single): TBox;
@@ -857,10 +910,11 @@ end;
 function TBox.iou(const b: TBox): single;
 var I,U:single;
 begin
-  I := intersect(b).area();
-  U := area() + b.area() - I;
-  if (I=0) or (U=0) then exit(0);
-  exit(I/U)
+  result := box_iou(self, b);
+  //I := intersect(b).area();
+  //U := area() + b.area() - I;
+  //if (I=0) or (U=0) then exit(0);
+  //exit(I/U)
 end;
 
 procedure TBox.iou(const b: TBox; var i, u: single);
@@ -901,7 +955,7 @@ begin
     _iou := iou(b);
     if c = 0 then
         exit(_iou);
-    d := (x - b.x) * (x - b.x)+(y - b.y) * (y - b.y);
+    d := sqr(x - b.x) + sqr(y - b.y);
     u := power(d / c, 0.6);
     diou_term := u;
     {$ifdef DEBUG}
@@ -1221,13 +1275,11 @@ var diff : single;
 begin
     result :=0;
     if b.sort_class >= 0 then
-        diff := b.prob[b.sort_class] - a.prob[b.sort_class]
+        diff := a.prob[b.sort_class] - b.prob[b.sort_class]
     else
-        diff := b.objectness - a.objectness;
-   if diff >0 then
-       exit(1)
-   else if diff <0 then
-       exit(-1);
+        diff := a.objectness - b.objectness;
+   if diff <0 then exit(1);
+   if diff >0 then exit(-1)
 
 end;
 
@@ -1242,26 +1294,26 @@ begin
   i := 0;
   while i<= k do begin
       if self[i].objectness = 0 then
-          begin
-              swap := self[i];
-              self[i] := self[k];
-              self[k] := swap;
-              dec(k);
-          end
-      else
+        begin
+            swap := self[i];
+            self[i] := self[k];
+            self[k] := swap;
+            dec(k);
+            dec(i)
+        end;
         inc(i)
   end;
-  total := k;
-  for i := 0 to total do
+  total := k + 1;
+  for i := 0 to total-1 do
       self[i].sort_class := -1;
 
-  TTools<TDetection>.QuickSort(pointer(self),0, total, Comparer);
-  for i := 0 to total do
+  TTools<TDetection>.QuickSort(pointer(self),0, total-1, Comparer);
+  for i := 0 to total-1 do
       begin
           if self[i].objectness = 0 then
               continue;
           a := self[i].bbox;
-          for j := i+1 to total do
+          for j := i+1 to total-1 do
               begin
                   if self[j].objectness = 0 then
                       continue;
@@ -1293,28 +1345,25 @@ begin
               self[i] := self[k];
               self[k] := swap;
               dec(k);
-          end
-      else
-        inc(i)
+              dec(i)
+          end;
+      inc(i)
   end;
-  total := k;
+  total := k + 1;
   for k := 0 to classes -1 do
       begin
-          for i := 0 to total do
+          for i := 0 to total-1 do
               self[i].sort_class := k;
-          TTools<TDetection>.QuickSort(pointer(self), 0, total, Comparer);
-          for i := 0 to total do
-              begin
-                  if self[i].prob[k] = 0 then
-                      continue;
-                  a := self[i].bbox;
-                  for j := i+1 to total do
-                      begin
-                          b := self[j].bbox;
-                          if a.iou(b) > thresh then
-                              self[j].prob[k] := 0
-                      end
+          TTools<TDetection>.QuickSort(pointer(self), 0, total-1, Comparer);
+          for i := 0 to total-1 do begin
+              if self[i].prob[k] = 0 then continue;
+              a := self[i].bbox;
+              for j := i+1 to total-1 do begin
+                  b := self[j].bbox;
+                  if a.iou(b) > thresh then
+                      self[j].prob[k] := 0
               end
+          end
       end
 end;
 

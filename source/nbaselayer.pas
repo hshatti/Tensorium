@@ -9,6 +9,9 @@ uses
   {$ifdef USE_OPENCL}
   , OpenCL
   {$endif}
+  {$ifdef USE_TELEMETRY}
+  , nOpMetrics
+  {$endif}
   ;
 
 const
@@ -34,7 +37,7 @@ type
     layerType                : TLayerType;
     inputShape               : TArray<SizeInt>;
     output                   : TSingleTensor;
-    Batch, Groups,
+    Batch, Steps, Groups,
       inputs, outputs        : SizeInt;
     weights                  : TSingleTensor;
     biases                   : TSingleTensor;
@@ -84,8 +87,8 @@ type
     ev                       : TArray<cl_int>;
     {$endif}
     function getWorkspaceSize():SizeInt; virtual;
-    procedure Activate;   inline;
-    procedure Derivative; virtual;
+    procedure Activate(const offset: SizeInt =0);   inline;
+    procedure Derivative(const offset: SizeInt =0); virtual;
 
     function LayerName:string;
     procedure setBatch(ABatch :SizeInt); virtual; abstract;
@@ -98,10 +101,18 @@ type
     function getWorkspaceShape:TArray<SizeInt>; virtual; abstract;
     property train:boolean read FTrain write setTrain;
     property workspaceSize:SizeInt read getWorkspaceSize;
+
+    procedure batchNorm(var state: TNNetState);
+    procedure batchNormBack(var state :TNNetState);
+    procedure batchNormUpdate(const args : TUpdateArgs);
     {$ifdef USE_OPENCL}
     procedure forwardGPU(var state : TNNetState); virtual; abstract;
     procedure backwardGPU(var state : TNNetState); virtual; abstract;
     procedure updateGPU(const args : TUpdateArgs); virtual;
+
+    procedure batchNormGPU(var state: TNNetState);
+    procedure batchNormBackGPU(var state :TNNetState);
+    procedure batchNormUpdateGPU(const args : TUpdateArgs);
     {$endif}
 
   end;
@@ -113,8 +124,8 @@ type
     w, h, c                  : SizeInt;
     outW, outH, outC         : SizeInt;
     learningRateScale        : Single;
-    procedure batchNorm(var state: TNNetState);
-    procedure batchNormBack(var state :TNNetState);
+    {$ifdef USE_OPENCL}
+    {$ENDIF}
     function getImage():TImageData;
     function getDelta():TImageData;
   end;
@@ -180,7 +191,7 @@ begin
   result :=0;
 end;
 
-procedure TBaseLayer.Activate;
+procedure TBaseLayer.Activate(const offset: SizeInt);
 begin
   {$ifdef USE_TELEMETRY} if benchmark then metrics.act.start(ActivationType);{$endif}
   {$ifdef _USE_OPENCL}
@@ -190,11 +201,11 @@ begin
     ocl.ActivateArray(output.devData, batch * outputs, longint(ActivationType));
   end else
   {$endif}
-    activate_array(Pointer(output.Data), batch * outputs, ActivationType);
+    activate_array(Pointer(output.Data + offset), batch * outputs, ActivationType);
   {$ifdef USE_TELEMETRY} if benchmark then metrics.act.finish(ActivationType);{$endif}
 end;
 
-procedure TBaseLayer.Derivative;
+procedure TBaseLayer.Derivative(const offset: SizeInt);
 begin
   {$if defined(_USE_OPENCL)}
   if output.computingDevice = cdOpenCL then begin
@@ -206,7 +217,7 @@ begin
     //ocl.finish;
   end else
   {$endif}
-    gradient_array(pointer(output.Data), batch * outputs, ActivationType, pointer(Delta.Data));
+    gradient_array(pointer(output.Data + offset), batch * outputs, ActivationType, pointer(Delta.Data + offset));
 end;
 
 function TBaseLayer.LayerName: string;
@@ -308,9 +319,8 @@ begin
 end;
 {$endif}
 
-{ TBaseImageLayer }
 
-procedure TBaseImageLayer.batchNorm(var state: TNNetState);
+procedure TBaseLayer.batchNorm(var state: TNNetState);
 begin
 {$ifdef USE_TELEMETRY}
   if benchmark then metrics.forward.start(ltBATCHNORM);
@@ -337,6 +347,7 @@ begin
   end else
       output.Normalize(rolling_mean, rolling_variance);
 
+  //output.FusedMultiplyAdd(scales, biases);
   output.Multiply(scales);
   output.add(biases);
 
@@ -345,19 +356,20 @@ begin
 {$endif}
 end;
 
-procedure TBaseImageLayer.batchNormBack(var state: TNNetState);
+procedure TBaseLayer.batchNormBack(var state: TNNetState);
 begin
 {$ifdef USE_TELEMETRY}
   if benchmark then metrics.backward.start(ltBATCHNORM);
 {$endif}
 
+  //bias_updates.Add(delta); //todo [batchNormBack] should we "bias_updates.Add(delta)"  here?
   // spatial dot (x_norm . delta) then add to scale_updates
   scale_updates.addDots(x_norm, delta);
 
   // add scales to all delta batches
-  delta.add(scales);
-  delta.MeansAndVarsDelta(delta, x, mean, variance, mean_delta, variance_delta);
-  delta.normalizeDelta(x, mean, variance, mean_delta, variance_delta, delta);
+  delta.Multiply(scales);
+  TSingleTensor.MeansAndVarsDelta(delta, x, mean, variance, mean_delta, variance_delta);
+  TSingleTensor.normalizeDelta(x, mean, variance, mean_delta, variance_delta, delta);
   if layerType = ltBATCHNORM then
     delta.copyTo(state.delta^);
 
@@ -365,6 +377,143 @@ begin
   if benchmark then metrics.backward.finish(ltBATCHNORM);
 {$endif}
 end;
+
+procedure TBaseLayer.batchNormUpdate(const args: TUpdateArgs);
+begin
+  {$ifdef USE_TELEMETRY}
+    if benchmark then metrics.update.start(ltBATCHNORM);
+  {$endif}
+  if layerType=ltBATCHNORM then begin
+    biases.axpy(args.learningRate / args.batch, bias_updates);
+    bias_updates.Multiply(args.momentum);
+  end;
+
+  scales.axpy(args.learningRate / args.batch, scale_updates);
+  scale_updates.Multiply(args.momentum);
+  {$ifdef USE_TELEMETRY}
+    if benchmark then metrics.update.finish(ltBATCHNORM);
+  {$endif}
+end;
+
+{$ifdef USE_OPENCL}
+procedure TBaseLayer.batchNormGPU(var state: TNNetState);
+var blockSize : SizeInt;
+begin
+  {$ifdef USE_TELEMETRY}
+    if benchmark then metrics.forward.start(ltBATCHNORM);
+  {$endif}
+    if not biases.wasGPU() then biases.pushToDevice;
+    if not scales.wasGPU() then scales.pushToDevice;
+    if not rolling_mean.wasGPU() then rolling_mean.pushToDevice;
+    if not rolling_variance.wasGPU() then rolling_variance.pushToDevice;
+
+    if LayerType = ltBATCHNORM then
+        //state.input.copyTo(output);
+        ocl.copy(state.input.size(), state.input.devData, 0, 1, output.devData, 0, 1);
+
+    //if l.&type = ltCONNECTED then begin
+    //    outC := outputs;
+    //    outH :=1;
+    //    outW:=1;
+    //end;
+    blockSize := output.size() div (output.groups*mean.size());
+    if state.isTraining then begin
+        //output.MeansAndVars(mean, variance);
+        ocl.meanAndVars(output.size(), mean.Size(), output.Groups, output.devData, mean.devData, variance.devData);
+
+        //rolling_mean.Multiply(0.9);
+        ocl.scale(rolling_mean.size(), 0.9, rolling_mean.devData, 1);
+
+  //      //rolling_mean.axpy(0.1, mean);
+        ocl.axpy(rolling_mean.Size(), 0.1, mean.devData, 1, rolling_mean.devData, 1);
+
+  //      rolling_variance.Multiply(0.9);
+        ocl.scale(rolling_variance.Size(), 0.9, rolling_variance.devData, 1);
+
+  //      rolling_variance.axpy(0.1, variance);
+        ocl.axpy(rolling_variance.size(), 0.1, variance.devData, 1, rolling_variance.devData, 1);
+
+  //      output.CopyTo(x);
+        ocl.copy(output.Size(), output.devData, 0, 1, x.devData, 0, 1);
+
+  //      output.Normalize(mean, variance);
+        ocl.normalize(mean.Size(), output.size(), output.groups, mean.devData, 1, variance.devData, 1, output.devData);
+
+  //      output.copyTo(x_norm) ;
+        ocl.copy(output.size(), output.devData, 0, 1, x_norm.devData ,0, 1);
+    end else begin
+  //      output.Normalize(rolling_mean, rolling_variance);
+        ocl.normalize(rolling_mean.Size(), output.size(), output.Groups, rolling_mean.devData, 1, rolling_variance.devData, 1, output.devData);
+    end;
+
+
+
+  //  output.Multiply(scales);
+  //  output.add(biases);
+    ocl.forwardScaleAdd(biases.size(), output.devData, blockSize, scales.devData, biases.devData, 1, output.groups);
+
+  {$ifdef USE_TELEMETRY}
+    ocl.finish();
+    if benchmark then metrics.forward.finish(ltBATCHNORM);
+  {$endif}
+end;
+
+procedure TBaseLayer.batchNormBackGPU(var state: TNNetState);
+begin
+  {$ifdef USE_TELEMETRY}
+  if benchmark then metrics.backward.start(ltBATCHNORM);
+  {$endif}
+
+  // spatial dot (x_norm . delta) then add to scale_updates
+  //scale_updates.addDots(x_norm, delta);
+  //
+  //// add scales to all delta batches
+  //delta.add(scales);
+  //TSingleTensor.MeansAndVarsDelta(delta, x, mean, variance, mean_delta, variance_delta);
+  //TSingleTensor.normalizeDelta(x, mean, variance, mean_delta, variance_delta, delta);
+  //if layerType = ltBATCHNORM then
+  //  delta.copyTo(state.delta^);
+  //ocl.backwardBias(bias_updates.Size(), bias_updates.devData, delta.size(), delta.devData, 1, delta.groups);  //todo [batchNormBack] should we "bias_updates.Add(delta)"  here?
+  ocl.addDots(delta.Size(), scale_updates.Size(), delta.groups, x_norm.devData, delta.devData, scale_updates.devData);
+  ocl.forwardScale(delta.size(), delta.devData, scales.Size(), scales.devData, 1, delta.groups);
+  ocl.meansAndVarsDelta(delta.size(), mean_delta.size(), delta.groups, delta.devData, x.devData, mean.devData, variance.devData, mean_delta.devData, variance_delta.devData);
+  ocl.normalizeDelta(delta.size(), mean.size(), delta.groups, delta.devData, x.devData, mean.devData, variance.devData, mean_delta.devData, variance_delta.devData);
+  if layerType = ltBATCHNORM then
+    ocl.copy(delta.size(), delta.devData, 0, 1, state.delta^.devData, 0, 1);
+  {$ifdef USE_TELEMETRY}
+  ocl.finish();
+  if benchmark then metrics.backward.finish(ltBATCHNORM);
+  {$endif}
+end;
+
+procedure TBaseLayer.batchNormUpdateGPU(const args: TUpdateArgs);
+begin
+  {$ifdef USE_TELEMETRY}
+  if benchmark then metrics.update.start(ltBATCHNORM);
+  {$endif}
+  //biases.axpy(args.learningRate / args.batch, bias_updates);
+  //bias_updates.Multiply(args.momentum);
+  //
+  //scales.axpy(args.learningRate / args.batch, scale_updates);
+  //scale_updates.Multiply(args.momentum);
+  if layerType=ltBATCHNORM then begin
+    ocl.axpy(biases.size(), args.learningRate / args.batch, bias_updates.devData, 1, biases.devData, 1);
+    ocl.scale(bias_updates.size(), args.momentum, bias_updates.devData, 1);
+
+  end;
+
+  ocl.axpy(scales.size(), args.learningRate / args.batch, scale_updates.devData, 1, scales.devData, 1);
+  ocl.scale(scale_updates.size(), args.momentum, scale_updates.devData, 1);
+
+  {$ifdef USE_TELEMETRY}
+  ocl.finish();
+  if benchmark then metrics.update.finish(ltBATCHNORM);
+  {$endif}
+end;
+
+{$endif}
+
+{ TBaseImageLayer }
 
 function TBaseImageLayer.getImage(): TImageData;
 begin

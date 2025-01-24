@@ -7,9 +7,19 @@ uses
   {$IFDEF UNIX}
   cthreads,
   {$ENDIF}
-  SysUtils, math, ntensors, ntypes, nDatasets, nBaseLayer, nConnectedlayer,
-  nLogisticLayer, nSoftmaxLayer, nCostLayer, nnet, nChrono, nConvolutionLayer, nUpSampleLayer, nAddLayer,
-  nModels, Keyboard, nparser
+  SysUtils, math, ntensors, ntypes, nDatasets, nBaseLayer
+  , nConnectedlayer
+  , nLogisticLayer
+  , nSoftmaxLayer
+  , nCostLayer
+  , nnet
+  , nChrono
+  , nConvolutionLayer
+  , nUpSampleLayer
+  , nAddLayer
+  , nMaxPoolLayer
+  , nConcatLayer
+  , nModels, Keyboard, nparser
   {$ifdef MSWINDOWS}, ShellApi {$endif}
   {$ifdef USE_OPENCL}
   , clblast
@@ -18,9 +28,9 @@ uses
 
 
 const
-    cfgFile = '../../../../../cfg/yolov7.cfg';
-    weightFile = '../../../../../yolov7.weights';
-    images :TStringArray = ['dog.jpg', 'person.jpg', 'eagle.jpg', 'giraffe.jpg', 'horses.jpg', 'kite.jpg', 'startrek1.jpg'];
+    cfgFile = '../../../../../cfg/yolov3.cfg';
+    weightFile = '../../../../../yolov3.weights';
+    images :TStringArray = ['eagle.jpg', 'kite.jpg', 'person.jpg', 'dog.jpg', 'giraffe.jpg', 'horses.jpg', 'startrek1.jpg'];
     imageRoot = '../../../../../data/';
     classNamesFile = 'coco.names';
     scaleDownSteps = 4.0 ;
@@ -133,54 +143,6 @@ begin
     draw_line(a, x1,y1,x1,y2, r, g, b, alpha);
     draw_line(a, x2,y1,x2,y2, r, g, b, alpha);
 
-
-    //if (x1 < 0) then
-    //    x1 := 0;
-    //if (x1 >= a.w) then
-    //    x1 := a.w-1;
-    //if x2 < 0 then
-    //    x2 := 0;
-    //if x2 >= a.w then
-    //    x2 := a.w-1;
-    //if y1 < 0 then
-    //    y1 := 0;
-    //if y1 >= a.h then
-    //    y1 := a.h-1;
-    //if y2 < 0 then
-    //    y2 := 0;
-    //if y2 >= a.h then
-    //    y2 := a.h-1;
-    //for i := x1 to x2 do
-    //    begin
-    //        r1:=a.data[i+y1 * a.w+0 * a.w * a.h];
-    //        g1:=a.data[i+y1 * a.w+1 * a.w * a.h];
-    //        b1:=a.data[i+y1 * a.w+2 * a.w * a.h];
-    //        a.data[i+y1 * a.w+0 * a.w * a.h] := (r - r1)* alpha + r1 ;
-    //        a.data[i+y1 * a.w+1 * a.w * a.h] := (g - g1)* alpha + g1 ;
-    //        a.data[i+y1 * a.w+2 * a.w * a.h] := (b - b1)* alpha + b1 ;
-    //
-    //        r2:=a.data[i+y2 * a.w+0 * a.w * a.h];
-    //        g2:=a.data[i+y2 * a.w+1 * a.w * a.h];
-    //        b2:=a.data[i+y2 * a.w+2 * a.w * a.h];
-    //        a.data[i+y2 * a.w+0 * a.w * a.h] := (r - r2)* alpha + r2 ;
-    //        a.data[i+y2 * a.w+1 * a.w * a.h] := (g - g2)* alpha + g2 ;
-    //        a.data[i+y2 * a.w+2 * a.w * a.h] := (b - b2)* alpha + b2 ;
-    //    end;
-    //for i := y1 to y2 do
-    //    begin
-    //        r1:=a.data[x1+i * a.w+0 * a.w * a.h];
-    //        r2:=a.data[x2+i * a.w+0 * a.w * a.h];
-    //        g1:=a.data[x1+i * a.w+1 * a.w * a.h];
-    //        g2:=a.data[x2+i * a.w+1 * a.w * a.h];
-    //        b1:=a.data[x1+i * a.w+2 * a.w * a.h];
-    //        b2:=a.data[x2+i * a.w+2 * a.w * a.h];
-    //        a.data[x1+i * a.w+0 * a.w * a.h] := (r - r1)* alpha + r1 ;
-    //        a.data[x2+i * a.w+0 * a.w * a.h] := (r - r2)* alpha + r2 ;
-    //        a.data[x1+i * a.w+1 * a.w * a.h] := (g - g1)* alpha + g1 ;
-    //        a.data[x2+i * a.w+1 * a.w * a.h] := (g - g2)* alpha + g2 ;
-    //        a.data[x1+i * a.w+2 * a.w * a.h] := (b - b1)* alpha + b1 ;
-    //        a.data[x2+i * a.w+2 * a.w * a.h] := (b - b2)* alpha + b2 ;
-    //    end
 end;
 
 procedure draw_box_width(const a: TImageData; const x1, y1, x2, y2, w: SizeInt;
@@ -361,9 +323,9 @@ begin
             if bot > im.h-1 then
                 bot := im.h-1;
             if im.c = 1 then
-                draw_box_width_bw(im, left, top, right, bot, width, 0.8)
+                draw_box_width_bw(im, left, top, right, bot, 2{width}, 0.8)
             else
-                draw_box_width(im, left, top, right, bot, width, red, green, blue, labelAlpha);
+                draw_box_width(im, left, top, right, bot, 2{width}, red, green, blue, labelAlpha);
             //if assigned(alphabet) then
             //    begin
             //        labelstr:='';
@@ -392,7 +354,7 @@ begin
 end;
 
 
-procedure doForward(var state :TNNetState);
+procedure OnForward(var state :TNNetState);
 var
   img: TSingleTensor;
   l:TBaseLayer;
@@ -414,7 +376,7 @@ begin
 
 end;
 
-const thresh = 0.5;
+const thresh = 0.45;
     NMS =0.45;
     M = 10;
     N = 20;
@@ -425,12 +387,14 @@ var
   //kernel : cl_kernel;
   off, gws, lws : TArray<SizeInt>;
   //AA, BB, CC: cl_mem;
-  NN ,R: Integer;
+  NN ,R, j: Integer;
 
   conv : TConvolutionalLayer;
   state:TNNetState;
 
 begin
+
+
   //write(#$1B'[1J');
   //TSingleTensor.computingDevice := cdOpenCL;
   //ocl.ActivePlatformId:=1;
@@ -478,9 +442,10 @@ begin
   end;
 
 
-
-
-
+  {$ifdef USE_OPENCL}
+  initOpenCL(0, 0);
+  ocl.useBLAS := 2;
+  {$endif}
 
   t := clock;
   darknet := TDarknetParser.Create(cfg, 1, 1);
@@ -490,37 +455,54 @@ begin
   darknet.loadWeights(weightFile);
   writeln('Weights : ', weightFile,' [',(clock()-t)/CLOCKS_PER_SEC:1:3,'] Seconds.');
   readln();
-
   classNames := fromFile(imageRoot+classNamesFile);
 
+  sDigits := 3;
 
-
-  //darknet.Neural.OnForward := doForward();
+  //darknet.Neural.OnForward := OnForward();
   darknet.Neural.fuseBatchNorm;
   i:=0;
-  benchmark := true;
+  {$ifdef USE_TELEMETRY}
+  benchmark:= true;
+  {$endif}
   repeat
     //write(#$1B'[1J');
 
     img.loadFromFile(imageRoot+images[i]);
-    sized := img.letterBox(darknet.Neural.input.w(), darknet.Neural.input.h());
+    //sized := img.letterBox(darknet.Neural.input.w(), darknet.Neural.input.h());
+    sized := img.resize(darknet.Neural.input.w(), darknet.Neural.input.h());
+    //sized.toTensor().printStat();
+    //readln;
 
+    {$ifdef USE_TELEMETRY}
     metrics.reset;
+    {$endif}
     t := clock;
     darknet.Neural.predict(sized.toTensor);
     writeln('Inference : [',(clock()-t)/CLOCKS_PER_SEC:1:3,'] Seconds.');
     t := clock;
-    detections := darknet.Neural.Detections(img.w, img.h, thresh);
+    //for j:=0 to darknet.Neural.layerCount()-1 do
+    //  if darknet.Neural.layers[j].layerType=ltYOLO then
+    //      darknet.Neural.layers[j].output.printStat;
+    detections := darknet.Neural.Detections(img.w, img.h, thresh, true, false);
     writeln('Detection : [', length(detections),'] took [', (clock()-t)/CLOCKS_PER_SEC:1:3,'] Seconds.');
     t := clock;
     detections.doNMSSort(darknet.Neural.classCount(), NMS);
     writeln('Sorting : [', length(detections), '] took [',(clock()-t)/CLOCKS_PER_SEC:1:3,'] Seconds.');
-
+    //for j:=0 to high(detections) do begin
+    //    writeln(format('id: %d, bestclass : %d, (x, y, w, h) : (%.3f, %.3f, %.3f, %.3f)\n', [detections[j].id, detections[j].best_class_idx
+    //    , detections[j].bbox.x, detections[j].bbox.y, detections[j].bbox.w, detections[j].bbox.h]));
+    //end;
+    //readln;
+    //writeln('thresh ', thresh:1:3);
+    //readln;
     t := clock;
-    draw_detections_v3(img, detections, length(detections), thresh, classNames, nil, length(classNames), 0.6, false);
+    draw_detections_v3(img, detections, length(detections), thresh, classNames, nil, length(classNames), 0.5, false);
     writeln('Drawing : [',(clock()-t)/CLOCKS_PER_SEC:1:3,'] Seconds.');
 
+    {$ifdef USE_TELEMETRY}
     writeln('Metrics :', sLineBreak, metrics.print);
+    {$endif}
 
     //img.toTensor.print(0.3);
     if not DeleteFile(GetCurrentDir+PathDelim+'tmp.jpg') then
