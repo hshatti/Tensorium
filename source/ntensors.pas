@@ -5656,11 +5656,11 @@ begin
   FShape := nil;
   FDimSizes := nil;
   FStrides := nil;
+  Data := nil;
   if length(DynData)>0 then
   begin
     groups := 0;
     steps := 0;
-    //Data := nil;
     //setLength(DynData, 0);
     DynData := nil;
     exit;
@@ -8308,10 +8308,13 @@ class function TTensor<T>.Variance(const N: SizeInt; const mean: T;
   const src: PT; const stride: SizeInt): T;
 var
   i: SizeInt;
+  v : T;
 begin
   Result := Default(T);
-  for i := 0 to N - 1 do
-    Result := Plus(Result, sqr(Minus(src[i * stride], mean)));
+  for i := 0 to N - 1 do begin
+    v := Minus(src[i * stride], mean);
+    Result := Plus(Result, times(v, v));
+  end;
   Result := Division(Result, CastI(N - 1));
 end;
 
@@ -10715,13 +10718,13 @@ end;
 
 function TTensor<T>.map(const func: TMapFunc<T>): TTensor<T>;
 begin
-  Result.resize(FShape, Groups);
+  Result.resize(FShape);  // note [map] we must initialize the result
   Map(func, self, Result);
 end;
 
 function TTensor<T>.map(const func: TMapFuncLambda<T>): TTensor<T>;
 begin
-  Result.resize(FShape, Groups);
+  Result.resize(FShape);
   Map(func, self, Result);
 end;
 

@@ -416,7 +416,7 @@ begin
     //    outH :=1;
     //    outW:=1;
     //end;
-    blockSize := output.size() div (output.groups*mean.size());
+    blockSize := output.size() div (output.groups*biases.size());
     if state.isTraining then begin
         //output.MeansAndVars(mean, variance);
         ocl.meanAndVars(output.size(), mean.Size(), output.Groups, output.devData, mean.devData, variance.devData);
@@ -448,8 +448,8 @@ begin
 
 
 
-  //  output.Multiply(scales);
-  //  output.add(biases);
+    //output.Multiply(scales);
+    //output.add(biases);
     ocl.forwardScaleAdd(biases.size(), output.devData, blockSize, scales.devData, biases.devData, 1, output.groups);
 
   {$ifdef USE_TELEMETRY}

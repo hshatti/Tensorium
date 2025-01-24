@@ -454,6 +454,7 @@ begin
   t := clock;
   darknet.loadWeights(weightFile);
   writeln('Weights : ', weightFile,' [',(clock()-t)/CLOCKS_PER_SEC:1:3,'] Seconds.');
+  writeln('press [enter] to start...');
   readln();
   classNames := fromFile(imageRoot+classNamesFile);
 
@@ -511,6 +512,7 @@ begin
     ShellExecute(0,'open',PChar( GetCurrentDir+PathDelim+'tmp.jpg'),'','', 5);
     inc(i);
     if i>high(images) then i:=0;
+    writeln('press [Enter] for next image...');
     readLn(c)
   until lowerCase(c) ='Q';
 

@@ -96,6 +96,7 @@
       <Filename Value="MSCOCOYolo"/>
     </Target>
     <SearchPaths>
+      <IncludeFiles Value="$(ProjOutDir)"/>
       <Libraries Value="..\..\..\..\NN\source"/>
       <OtherUnitFiles Value="..\..\..\..\NN\source;..\..\..\source\3rdparty\oneAPI\mkl\source;..\..\..\source\3rdparty\clblast\source;..\..\..\source\3rdparty\openblas\source"/>
       <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
@@ -129,7 +130,7 @@
 -dUSE_AVX2
 -dUSE_MULTITHREADING
 -dUSE_TELEMETRY
--dUSE_MKL"/>
+-dBIG_MATRECIES"/>
       <OtherDefines Count="10">
         <Define0 Value="USE_AVX2"/>
         <Define1 Value="USE_MULTITHREADING"/>
