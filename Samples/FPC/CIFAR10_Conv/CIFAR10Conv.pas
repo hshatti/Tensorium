@@ -8,7 +8,7 @@ uses
   {$ENDIF}
   SysUtils, ntensors, ntypes, nDatasets, nBaseLayer, nConnectedlayer
   , nLogisticLayer, nSoftmaxLayer, nCostLayer, nnet, nChrono, nConvolutionLayer, nUpSampleLayer, nRNNLayer
-  , nModels, Keyboard, nNormalizationLayer, nParser, termesc
+  , nModels, Keyboard, nNormalizationLayer, nParser, termesc, steroids
   {$if defined(MSWINDOWS)}
   , ShellApi, cudnn_graph, cudnn_adv, cudnn_ops, cudnn_cnn
   {$endif}
@@ -158,6 +158,8 @@ begin
   CF10 := TCIFAR10Data.Create('');
 
   Neural:=TNNet.Create(deepCIFAR10);
+  //Neural:=TNNet.Create(leNetCIFAR10);
+
   Neural.setTraining(true);
   Neural.batch       := READ_BATCH;
   Neural.learningRate:= 0.001;
@@ -299,37 +301,39 @@ begin
   Neural.Batch := READ_TEST;
 
   cursorClearUp();
-  //while true do try
-  //  cursorAbsPos();
-  //  i := random(CF10.TEST_COUNT div READ_TEST);
-  //  CF10.read(-1, i);
-  //  CF10.TestingData.toSingles(t1.Data);
-  //  CF10.TestingLabels.toSingles(l1.Data);
-  //  t1.normalize();//t1.FusedMultiplyAdd(1/127, -1);
-  //
-  //  t1.print(psColor24, READ_TEST);
-  //
-  //  writeln('truth');
-  //  l1.argMax(truth.Data);
-  //  l1.print(psGray);
-  //  truth.print;
-  //  writeln(sLineBreak, 'Predicted');
-  //  Neural.Input := t1;
-  //  //Neural.input.reshape([READ_TEST, CF10.IMAGE_SIZE], READ_TEST);
-  //  Neural.predict(Neural.input);
-  //  Neural.output().argMax(predicted.Data);
-  //  Neural.output().print(psGray);
-  //  predicted.print();
-  //
-  //  writeln('Press [Enter] for next random digit, [Ctrl-C] to exit ...');
-  //  readln(c);
-  //  if LowerCase(c) = 'q' then break;
-  //except on E:Exception do
-  //  writeln(E.Message)
-  //end;
+  while true do try
+    cursorAbsPos();
+    i := random(CF10.TEST_COUNT div READ_TEST);
+    CF10.read(-1, i);
+    CF10.TestingData.toSingles(t1.Data);
+    CF10.TestingLabels.toSingles(l1.Data);
+    t1.normalize();//t1.FusedMultiplyAdd(1/127, -1);
+
+    t1.print(psColor24, READ_TEST);
+
+    writeln('truth');
+    l1.argMax(truth.Data);
+    l1.print(psGray);
+    truth.print;
+    writeln(sLineBreak, 'Predicted');
+    Neural.Input := t1;
+    //Neural.input.reshape([READ_TEST, CF10.IMAGE_SIZE], READ_TEST);
+    Neural.predict(Neural.input);
+    Neural.output().argMax(predicted.Data);
+    Neural.output().print(psGray);
+    predicted.print();
+
+    writeln('Press [Enter] for next random digit, [Ctrl-C] to exit ...');
+    readln(c);
+    if LowerCase(c) = 'q' then break;
+  except on E:Exception do
+    writeln(E.Message)
+  end;
 
   CF10.free;
   Neural.free;
+
+  //freeandnil(mp); freeandnil(mp2); freeandnil(mp3)
 
 end.
 

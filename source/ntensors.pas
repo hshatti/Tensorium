@@ -621,7 +621,10 @@ type
     function absThreshold(const AThreshold: T; const ifAbove: PT = nil;
       const ifElse: PT = nil; const stride: SizeInt = 1): SizeInt; overload;
 
-    procedure addSums(const src: TTensor<T>);
+    procedure forwardScale(const src:TTensor<T>; const offset :SizeInt =0; aSize:SizeInt =0);
+    procedure forwardBias(const src: TTensor<T>; const offset :SizeInt =0; aSize:SizeInt =0);
+    //procedure
+    procedure addSums(const src: TTensor<T>; const srcOffset :SizeInt =0; srcSize:SizeInt =0);
     procedure addDots(const src1, src2: TTensor<T>; const offset: SizeInt =0);
     procedure blockAdd(const src: TTensor<T>; const blockSize: SizeInt); overload;
     procedure blockSubtract(const src: TTensor<T>; const blockSize: SizeInt); overload;
@@ -5926,16 +5929,19 @@ end;
 procedure TTensor<T>.reShape(const newShape: TSizes; const batch: SizeInt;
   const aSteps: SizeInt);
 var
-  i, Dim: SizeInt;
+  i, Dim, newDim: SizeInt;
 begin
   Assert((Length(newShape) > 0) and (batch >=0) and (aSteps>=0));
   if aSteps>0 then
     assert((length(newShape)>2) and (aSteps = newShape[0]) and (batch = newShape[1]))
   else
     if batch>0 then assert((length(newShape)>1) and (batch = newShape[0]));
-
-
+  newDim := length(newShape);
+  for i := 0 to newDim -1 do
+    assert(0<>newShape[i], format('[reShape] dimansion cannot be zero [%d]', [i]));
   Dim := Length(FShape);
+  //setLength(FShape, newDim);
+  //move(newShape[0], FShape[0], sizeOf(SizeInt)*newDim);
   FShape := copy(newShape);
   setLength(FStrides, Length(FShape));
 
@@ -6722,15 +6728,10 @@ begin
     {$endif}
     exit;
   end;
-  blockSize := NBlocks div (Groups * N);
-  Assert(Groups * N * BlockSize = NBlocks, '[Multiply] : Tensor sizes doesn''t align');
-  blockSize := blockSize div steps;
-  D1 := Data + offset;
-  for i := 0 to groups - 1 do
-    mulblkvv(N, D1 + i * N * blockSize, blockSize, src.Data, 1);
   {$ifdef USE_TELEMETRY}
   if benchmark then tensorMetrics.finish(opMulvv);
   {$endif}
+  assert(false, '[add] unmatching vector sizes!');
 
 end;
 
@@ -6788,6 +6789,7 @@ begin
   {$ifdef USE_TELEMETRY}
   if benchmark then tensorMetrics.start(opBatchFmavss);
   {$endif}
+  assert(assigned(addvv) and assigned(mulvv), '[fuseMultiplyAdd] operation not supported for this type.');
   NBlocks := size();
   N := scale.Size();
   assert((N = bias.Size()) and (scale.groups = bias.groups));
@@ -6811,7 +6813,8 @@ begin
     for i := 0 to groups - 1 do
     begin
       mulvv(N, D1, 1, D2, 1, D1, 1);
-      mulvv(N, D1, 1, D3, 1, D1, 1);
+      //mulvv(N, D1, 1, D3, 1, D1, 1);
+      addvv(N, D1, 1, D3, 1, D1, 1);
       Inc(D1, NBlocks);
       Inc(D2, blockSize);
       Inc(D3, blockSize);
@@ -6916,28 +6919,108 @@ begin
   Result := absThreshv(Size(), Data, stride, AThreshold, ifAbove, ifElse);
 end;
 
-procedure TTensor<T>.addSums(const src: TTensor<T>);
+procedure TTensor<T>.forwardScale(const src: TTensor<T>; const offset: SizeInt;
+  aSize: SizeInt);
 var
-  b, i, N, nDst, blocksize: SizeInt;
-  D: PT;
+  i, N, blockSize, NBlocks: SizeInt;
+  D1, D2: PT;
 begin
-  N := src.Size;
-  nDst := Size;
-  blockSize := N div (nDst * src.Groups);
-  assert(N = src.groups * nDst * blockSize, '[addSum] : Tensor sizes doesn''t align');
-  if not assigned(sumv) then sumv := TTensor<T>.Sum;
-  // todo Optimize addSums
-  for b := 0 to src.Groups - 1 do
-    for i := 0 to nDst do
-      Data[i] := plus(Data[i], sumv(blockSize, src.Data + (i + b * nDst) * blockSize, 1));
+  {$ifdef USE_TELEMETRY}
+  if benchmark then tensorMetrics.start(opForwardScale);
+  {$endif}
+  if aSize=0 then aSize := Size();
+  assert(offset + aSize <= Size());
+  NBlocks := aSize;
+  N := src.Size();
+  blockSize := NBlocks div (Groups * N);
+  Assert(Groups * N * BlockSize = NBlocks, '[Multiply] : Tensor sizes doesn''t align');
+  blockSize := blockSize div steps;
+  D1 := Data + offset;
+  for i := 0 to groups - 1 do
+    mulblkvv(N, D1 + i * N * blockSize, blockSize, src.Data, 1);
+  {$ifdef USE_TELEMETRY}
+  if benchmark then tensorMetrics.finish(opForwardScale);
+  {$endif}
 end;
 
-procedure TTensor<T>.addDots(const src1, src2: TTensor<T>; const offset: SizeInt
-  );
+procedure TTensor<T>.forwardBias(const src: TTensor<T>; const offset: SizeInt;
+  aSize: SizeInt);
+var N, blockSize : SizeInt;
+begin
+  {$ifdef USE_TELEMETRY}
+  if benchmark then tensorMetrics.start(opForwardBias);
+  {$endif}
+  if aSize = 0 then aSize := Size();
+  N := src.Size();
+  blockSize := aSize div (groups * N);
+  Assert(groups * N * BlockSize = aSize, '[Add] : Tensor sizes doesn''t align');
+
+  assert(aSize + offset <= Size());
+  addblkvv(N, Data + offset , blockSize, src.Data, 1, groups);
+  {$ifdef USE_TELEMETRY}
+  if benchmark then tensorMetrics.finish(opForwardBias);
+  {$endif}
+end;
+
+procedure TTensor<T>.addSums(const src: TTensor<T>; const srcOffset: SizeInt;
+  srcSize: SizeInt);
+var
+  b, i, j, nDst, blocksize: SizeInt;
+  _sum :T;
+  D1, D2: PT;
+begin
+  {$ifdef USE_TELEMETRY}
+  if benchmark then tensorMetrics.start(opBackwardBias);
+  {$endif}
+  if srcSize =0 then srcSize:= src.Size;
+
+  nDst := Size;
+
+  blockSize := srcSize div (src.Groups * nDst);
+  assert(srcSize = src.groups * nDst * blockSize, '[addSum] : Tensor sizes doesn''t align');
+  // todo Optimize addSums
+  blockSize := blockSize div src.steps;
+  assert(srcSize + srcOffset <= src.Size(), '[addSum] out of tensor bounds');
+  D1 := Data ;
+  D2 := src.Data + srcOffset;
+
+  if blockSize = 1 then begin
+    assert(assigned(addvv), '[addSums] operation not supported for this type.');
+    for j := 0 to src.groups - 1 do
+      addvv(nDst, D2, 1, D1, 1, D1, 1);
+    {$ifdef USE_TELEMETRY}
+    if benchmark then tensorMetrics.finish(opBackwardBias);
+    {$endif}
+    exit
+  end;
+
+  if not assigned(sumv) then sumv := TTensor<T>.sum;
+  //if blockSize=1 then
+  //  for i := 0 to N - 1 do
+  //    data[i] := sumv(groups, src.data+ i , N)
+  //else
+  for i := 0 to nDst - 1 do
+    begin
+      _sum := Default(T);
+      for j := 0 to src.groups - 1 do
+        _sum := Plus(_sum, sumv(blockSize, D2 + (j * nDst + i) * blockSize, 1));
+      D1[i] := Plus(D1[i], _sum);
+    end;
+  {$ifdef USE_TELEMETRY}
+  if benchmark then tensorMetrics.finish(opBackwardBias);
+  {$endif}
+end;
+
+procedure TTensor<T>.addDots(const src1, src2: TTensor<T>; const offset: SizeInt);
 var
   b, i, idx, N, nDst, blocksize: SizeInt;
   sum: T;
+  D1, D2:PT;
 begin
+  {$ifdef USE_TELEMETRY}
+  if benchmark then tensorMetrics.start(opAddDots);
+  {$endif}
+
   N := src1.Size;
   assert((N = src2.size()) and (src1.groups = src2.groups),
     'Source tensors must have the same size and groups');
@@ -6945,6 +7028,9 @@ begin
   blockSize := N div (nDst * src1.Groups);
   assert(N = src1.groups * nDst * blockSize, '[addDot] : Tensor sizes doesn''t align');
   blockSize := blockSize div src1.steps;
+  D1 := src1.Data + offset;
+  D2 := src2.Data + offset;
+
   if not assigned(dotvv) then dotvv := TTensor<T>.dot;
   // todo Optimize addDots
   for i := 0 to nDst - 1 do
@@ -6953,10 +7039,13 @@ begin
     for b := 0 to src1.Groups - 1 do
     begin
       idx := (i + b * nDst) * blockSize;
-      sum := plus(sum, dotvv(blockSize, src1.Data + offset + idx, 1, src2.Data + offset + idx, 1));
+      sum := plus(sum, dotvv(blockSize, D1 + idx, 1, D2 + idx, 1));
     end;
     Data[i] := plus(Data[i], Sum);
   end;
+  {$ifdef USE_TELEMETRY}
+  if benchmark then tensorMetrics.finish(opAddDots);
+  {$endif}
 end;
 
 procedure TTensor<T>.blockAdd(const src: TTensor<T>; const blockSize: SizeInt);
@@ -7823,14 +7912,21 @@ end;
 
 //type mm8 = array[0..7] of single; pm8=^mm8;
 
-procedure sNormalizeDelta_avx(const N:SizeInt; const meanDelta, varDelta, aMean, aStdDev : single; delta:PSingle; const x:PSingle); assembler;
+procedure sNormalizeDelta_avx(const N:SizeInt; delta:PSingle; const x:PSingle; const meanDelta, varDelta, aMean, aStdDev : single); assembler;
 asm
-
+  vzeroupper
   mov          rax      ,    N
-  vbroadcastss ymm0     ,    meanDelta
-  vbroadcastss ymm1     ,    varDelta
-  vbroadcastss ymm2     ,    aMean
-  rcpss        xmm3     ,    dword aStdDev
+
+  movss        xmm0     ,    meanDelta
+  vbroadcastss ymm0     ,    xmm0
+
+  movss        xmm1     ,    varDelta
+  vbroadcastss ymm1     ,    xmm1
+
+  movss        xmm2     ,    aMean
+  vbroadcastss ymm2     ,    xmm2
+
+  rcpss        xmm3     ,    dword [aStdDev]
   vbroadcastss ymm3     ,    xmm3
 
   shr          rax      ,    3  // div 8
@@ -7842,7 +7938,7 @@ asm
   vmulps       ymm4     ,    ymm4,  ymm3           // delta / aStdDev
   vmovups      ymm5     ,    yword  [x]
   vsubps       ymm5     ,    ymm5,  ymm2           //  x - amean
-  vmulps       ymm5     ,    ymm5,  ymm1           // (x - amean) * 2 * varDelta
+  vmulps       ymm5     ,    ymm5,  ymm1           // (x - amean) * varDelta
   vaddps       ymm5     ,    ymm5,  ymm0           // + meanDelta => ymm5
   vaddps       ymm4     ,    ymm4,  ymm5           // + ymm5
   vmovups      yword  [delta]    ,  ymm4
@@ -7861,7 +7957,7 @@ asm
   vmulss       xmm4     ,    xmm4,  xmm3           // delta / aStdDev
   movss        xmm5     ,    dword  [x]
   vsubss       xmm5     ,    xmm5,  xmm2           //  x - amean
-  vmulss       xmm5     ,    xmm5,  xmm1           // (x - amean) * 2 * varDelta
+  vmulss       xmm5     ,    xmm5,  xmm1           // (x - amean) * varDelta
   vaddss       xmm5     ,    xmm5,  xmm0           // + meanDelta => xmm5
   vaddss       xmm4     ,    xmm4,  xmm5           // + xmm5
   movss        dword [delta]     ,  xmm4
@@ -7875,8 +7971,8 @@ asm
 end;
 {$endif}
 
-procedure sNormalizeDelta_pas(const N:SizeInt; const meanDelta, varDelta, aMean, aStdDev : single; delta:PSingle; const x:PSingle);
-var i:SizeInt;
+procedure sNormalizeDelta_pas(const N:SizeInt; delta:PSingle; const x:PSingle; const meanDelta, varDelta, aMean, aStdDev : single);
+var i:SizeInt; r:single;
 begin
   for i:=0 to N-1 do
         Delta[i] := Delta[i] / aStdDev +
@@ -7953,12 +8049,12 @@ begin
       index := (i + j * N) * blockSize;
       dd := delta.Data + offset + index;
       xx := x.Data + offset + index;
-      {$ifdef _CPUX64}  //todo : sNormalizeDelta_avx is not stable yet, revisit
+      {$ifdef CPUX64}  //todo : sNormalizeDelta_avx is not stable yet, revisit
       if AVX2Support then begin
-        sNormalizeDelta_avx(blockSize, mean_delta.data[i]/batchSize, 2*variance_delta.data[i]/batchSize, mean.data[i], sqrt(max(variance.Data[i], sEPSILON)), dd, xx);
+        sNormalizeDelta_avx(blockSize, dd, xx, mean_delta.data[i]/batchSize, 2*variance_delta.data[i]/batchSize, mean.data[i], sqrt(max(variance.Data[i], sEPSILON)));
       end else
       {$endif}
-        sNormalizeDelta_pas(blockSize, mean_delta.data[i]/batchSize, 2*variance_delta.data[i]/batchSize, mean.data[i], sqrt(max(variance.Data[i], sEPSILON)), dd, xx);
+        sNormalizeDelta_pas(blockSize, dd, xx, mean_delta.data[i]/batchSize, 2*variance_delta.data[i]/batchSize, mean.data[i], sqrt(max(variance.Data[i], sEPSILON)));
       //for k := 0 to blockSize - 1 do begin
       //  dd[k] :=
       //    dd[k] / sqrt(max(variance.Data[i] , sEPSILON)) +
@@ -8242,7 +8338,7 @@ var
   i, j, step: SizeInt;
   D: PT;
 begin
-  assert(assigned(addvv));
+  assert(assigned(addvv), '[Sums] operation not supported for this type.');
   step := N div groups;
   D := dst;
   if assigned(func) then
@@ -10368,7 +10464,7 @@ var
   Height, Width, kernel_h, kernel_w, pad_h, pad_w, stride_h, stride_w
   , dilation_h, dilation_w, colOffset, imOffset, batch,
   output_h, output_w, channel_size, kernel_size, out_channel_size,
-  index, chan:SizeInt;
+  index, chan :SizeInt;
   col, im, data_im, data_col: PSingle;
   p : PMPParams absolute ptr;
 begin
@@ -10391,7 +10487,6 @@ begin
   out_channel_size  := PSizeInt(p.P)^;
   col               := p.Q ;
   im                := p.R ;
-
   channel_size      := height*width ;
   kernel_size       := kernel_h * kernel_w;
 
@@ -10410,7 +10505,7 @@ begin
       input_row := (kernel_row - pad_h) * dilation_h;
       for output_rows := 0 to output_h - 1 do
       begin
-        if not SizeUInt(input_row) < SizeUInt(Height) then
+        if SizeUInt(input_row) >= SizeUInt(Height) then
           inc(data_col, output_w)
         else
         begin
@@ -10445,7 +10540,6 @@ begin
   out_channel_size := output_h * output_w;
   channel_size     := Height * Width;
   kernel_size      := kernel_h * kernel_w;
-
   p.A  := @Height           ;
   p.B  := @Width            ;
   p.C  := @kernel_h         ;
@@ -10464,7 +10558,6 @@ begin
   p.P  := @out_channel_size ;
   p.Q  := col               ;
   p.R  := im                ;
-
 
   {$ifdef USE_MULTITHREADING}
   if MultiThread then
@@ -10507,7 +10600,7 @@ begin
         input_row := kernel_row * dilation_h;
         for output_rows := 0 to output_h - 1 do
         begin
-          if not SizeUInt(input_row) < SizeUInt(Height) then
+          if not (SizeUInt(input_row) < SizeUInt(Height)) then
             Inc(data_col, output_w)
           else
           begin
@@ -10611,11 +10704,12 @@ begin
   begin
   {$ifdef USE_MULTITHREADING}
     mt := groups=1;
-    if groups>1 then
-      mp.&for(i2c, 0, groups, @mt)
+    //mt := false;
+    if mt then
+      for b:=0 to groups-1 do
+        i2c(b, @mt)
     else
-    for b:=0 to groups-1 do
-      i2c(b, @mt);
+      mp.&for(i2c, 0, groups, @mt)
   {$else}
     mt := False;
     for b := 0 to groups - 1 do
@@ -10698,13 +10792,14 @@ begin
   end else
   {$endif}
   begin
+
   {$ifdef USE_MULTITHREADING}
     mt := groups=1;
-    if groups>1 then
-      mp.&for(c2i, 0, groups, @mt)
+    if mt then
+      for b:=0 to groups-1 do
+        c2i(b, @mt)
     else
-    for b:=0 to groups-1 do
-      c2i(b, @mt);
+      mp.&for(c2i, 0, groups, @mt) ;
   {$else}
     mt := False;
     for b := 0 to groups - 1 do

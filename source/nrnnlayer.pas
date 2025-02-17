@@ -278,7 +278,7 @@ begin
     l.state.data := l.state.data + (hiddenStep * l.steps);
     for i := l.steps-1 downto 0 do begin
         //copy_cpu(hiddenStep, input_layer.output.data, 1, l.state.data, 1);
-        input_layer.output.CopyTo(l.state, (i+1)*hiddenStep,1, i*hiddenStep, 1, hiddenStep);
+        input_layer.output.CopyTo(l.state, (i+1)*hiddenStep, 1, i*hiddenStep, 1, hiddenStep);
         //axpy_cpu(hiddenStep, 1, self_layer.output.data, 1, l.state.data, 1);
         l.state.add(self_layer.output.data + (i+1)*hiddenStep, i*hiddenStep, hiddenStep);
         s.step := i;

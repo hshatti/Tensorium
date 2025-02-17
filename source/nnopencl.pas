@@ -92,7 +92,7 @@ type
     procedure addDots(const N, nDst, groups:SizeInt; const src1, src2:cl_mem; dst:cl_mem;
       const events: TCLEvents = nil; event: PCLEvent = nil);
     procedure forwardScale(const dstSize: SizeInt; const dst: cl_mem; const scaleSize: SizeInt; const scale: cl_mem; const incb: SizeInt ; const batch: SizeInt; const events: TCLEvents = nil; event: PCLEvent = nil);
-    procedure forwardScaleAdd(const N: SizeInt; const a: cl_mem; const blockSize: SizeInt; const s,b: cl_mem; const incb: SizeInt ; const batch: SizeInt; const events: TCLEvents = nil; event: PCLEvent = nil);
+    procedure forwardScaleAdd(const N: SizeInt; const dst: cl_mem; const blockSize: SizeInt; const scales, biases: cl_mem; const incb: SizeInt ; const batch: SizeInt; const events: TCLEvents = nil; event: PCLEvent = nil);
     procedure forwardDropout(const N: SizeInt; const src: cl_mem;
       const probability, scale: single; rnd: cl_mem; dst: cl_mem; const events: TCLEvents = nil; event: PCLEvent = nil);
     procedure backwardDropout(const N: SizeInt; const src: cl_mem;
@@ -1155,8 +1155,8 @@ begin
 
 end;
 
-procedure TNNOpenCL.forwardScaleAdd(const N: SizeInt; const a: cl_mem;
-  const blockSize: SizeInt; const s, b: cl_mem; const incb: SizeInt;
+procedure TNNOpenCL.forwardScaleAdd(const N: SizeInt; const dst: cl_mem;
+  const blockSize: SizeInt; const scales, biases: cl_mem; const incb: SizeInt;
   const batch: SizeInt; const events: TCLEvents; event: PCLEvent);
 const kernelId=35;
 var
@@ -1183,10 +1183,10 @@ begin
   aOffset :=0;
   bOffset :=0;
   FErr := clSetKernelArg(Kernels[kernelId], 0, SizeOf(reshape)  , @reshape);   CheckError();
-  FErr := clSetKernelArg(Kernels[kernelId], 1, SizeOf(a)        , @a);         CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 1, SizeOf(dst)      , @dst);         CheckError();
   FErr := clSetKernelArg(Kernels[kernelId], 2, SizeOf(aOffset)  , @aOffset);   CheckError();
-  FErr := clSetKernelArg(Kernels[kernelId], 3, SizeOf(s)        , @s);         CheckError();
-  FErr := clSetKernelArg(Kernels[kernelId], 4, SizeOf(b)        , @b);         CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 3, SizeOf(scales)   , @scales);         CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 4, SizeOf(biases)   , @biases);         CheckError();
   FErr := clSetKernelArg(Kernels[kernelId], 5, SizeOf(bOffset)  , @bOffset);   CheckError();
   FErr := clSetKernelArg(Kernels[kernelId], 6, SizeOf(incb)     , @incb);      CheckError();
   FErr := clEnqueueNDRangeKernel(ActiveQueue, Kernels[kernelId]

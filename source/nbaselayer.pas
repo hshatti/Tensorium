@@ -93,7 +93,7 @@ type
     function LayerName:string;
     procedure setBatch(ABatch :SizeInt); virtual; abstract;
     procedure freeBatchNorm;
-    destructor Destroy();override;
+    //destructor Destroy();override;
     procedure forward(var state : TNNetState); virtual; abstract;
     procedure backward(var state : TNNetState); virtual; abstract;
     procedure update(const args : TUpdateArgs); virtual;
@@ -297,10 +297,10 @@ begin
   x_norm.free
 end;
 
-destructor TBaseLayer.Destroy;
-begin
-  inherited Destroy;
-end;
+//destructor TBaseLayer.Destroy;
+//begin
+//  inherited Destroy;
+//end;
 
 procedure TBaseLayer.update(const args: TUpdateArgs);
 begin
@@ -348,8 +348,8 @@ begin
       output.Normalize(rolling_mean, rolling_variance);
 
   //output.FusedMultiplyAdd(scales, biases);
-  output.Multiply(scales);
-  output.add(biases);
+  output.forwardScale(scales);
+  output.forwardBias(biases);
 
 {$ifdef USE_TELEMETRY}
   if benchmark then metrics.forward.finish(ltBATCHNORM);
@@ -357,19 +357,21 @@ begin
 end;
 
 procedure TBaseLayer.batchNormBack(var state: TNNetState);
+var offset, stepSize : SizeInt;
 begin
 {$ifdef USE_TELEMETRY}
   if benchmark then metrics.backward.start(ltBATCHNORM);
 {$endif}
-
+  stepSize := batch * outputs;
+  offset := stepSize * state.step;
   //bias_updates.Add(delta); //todo [batchNormBack] should we "bias_updates.Add(delta)"  here?
   // spatial dot (x_norm . delta) then add to scale_updates
-  scale_updates.addDots(x_norm, delta);
+  scale_updates.addDots(x_norm, delta, offset);
 
   // add scales to all delta batches
-  delta.Multiply(scales);
-  TSingleTensor.MeansAndVarsDelta(delta, x, mean, variance, mean_delta, variance_delta);
-  TSingleTensor.normalizeDelta(x, mean, variance, mean_delta, variance_delta, delta);
+  delta.forwardScale(scales, offset, stepSize);
+  TSingleTensor.MeansAndVarsDelta(delta, x, mean, variance, mean_delta, variance_delta, offset);
+  TSingleTensor.normalizeDelta(x, mean, variance, mean_delta, variance_delta, delta, offset);
   if layerType = ltBATCHNORM then
     delta.copyTo(state.delta^);
 

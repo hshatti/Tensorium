@@ -52,8 +52,6 @@
 -OpCOREAVX2
 -dUSE_AVX2
 -dUSE_MULTITHREADING
--dUSE_OPENCL
--dUSE_TELEMETRY
 -dBIG_MATRECIES"/>
             <OtherDefines Count="10">
               <Define0 Value="USE_AVX2"/>
