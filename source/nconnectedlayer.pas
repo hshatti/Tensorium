@@ -28,6 +28,7 @@ type
     procedure backward(var state: TNNetState); override;
     procedure DeNormalize;
     procedure update(const args: TUpdateArgs); override;
+    function getWorkspaceShape: TArray<SizeInt>; override;
     {$ifdef USE_OPENCL}
     procedure forwardGPU(var state: TNNetState);  override;
     procedure backwardGPU(var state: TNNetState); override;
@@ -161,14 +162,14 @@ begin
           output.Normalize(rolling_mean, rolling_variance, offset, outputStep);
 
       //scale_bias(l.output, l.scales, l.batch, l.outputs, 1);
-      output.Multiply(scales, offset, outputStep);
-      output.add(biases, offset, outputStep);
+      output.forwardScale(scales, offset, outputStep);
+      output.forwardBias(biases, offset, outputStep);
       //output.FusedMultiplyAdd(scales, biases);
   end else
 
   //for i := 0 to batch -1 do
   //    TSingleTensor.axpysvv(outputs, 1, biases.data, 1, output.data+i * outputs, 1);
-    output.add(biases, offset, outputStep);
+    output.forwardBias(biases, offset, outputStep);
 
   //activate_array(l.output, l.outputs * l.batch, l.activation);
   activate(offset);
@@ -193,8 +194,8 @@ begin
   Derivative(offset);
   //for i := 0 to batch -1 do
   //    TSingleTensor.axpysvv(outputs, 1, delta.data+i * outputs, 1, bias_updates.data, 1);
-  bias_updates.add(delta, offset);
-
+  //bias_updates.add(delta, offset, outputs);
+  bias_updates.addSums(delta, offset, stepSize);
   //if l.batch_normalize then
   if isBatchNormalized and (batch > 1) then begin
       // spatial dot (x_norm . delta) then add to scale_updates
@@ -203,7 +204,7 @@ begin
 
       // add scales to all delta batches
       //scale_bias(delta, scales, batch, outputs, 1);
-      delta.Multiply(scales, offset,  stepSize);
+      delta.forwardScale(scales, offset,  stepSize);
 
       //mean_delta_cpu(delta, variance, batch, outputs, 1, mean_delta);
       //variance_delta_cpu(x, delta, mean, variance, batch, outputs, 1, variance_delta);
@@ -294,6 +295,11 @@ begin
   {$endif}
 end;
 
+function TConnectedLayer.getWorkspaceShape: TArray<SizeInt>;
+begin
+  result := nil
+end;
+
 {$ifdef USE_OPENCL}
 //const clearscr=#$1B'[2J'#$1B'[2;1H';
 procedure TConnectedLayer.forwardGPU(var state: TNNetState);
@@ -380,7 +386,13 @@ begin
           //output.Normalize(rolling_mean, rolling_variance);
           ocl.normalize(rolling_mean.Size(), output.size(), output.Groups, rolling_mean.devData, 1, rolling_variance.devData, 1, output.devData);
 
-      output.Multiply(scales);
+      ocl.forwardScale(output.Size(), output.devData, scales.Size(), scales.devData, 1, output.Groups
+      {$IFDEF CL_EVENTS}
+      , 1, pointer(state.events), pointer(state.events));
+      {$ELSE}
+      );
+      {$ENDIF}
+
       {$ifdef USE_TELEMETRY}
       ocl.finish();
       if benchmark then metrics.forward.finish(ltBATCHNORM);

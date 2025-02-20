@@ -411,7 +411,7 @@ begin
     {$else}
     {$ifdef MSWINDOWS}setEvent(Pool[i].Fire){$else}Pool[i].Fire.SetEvent{$endif};
     {$endif}
-    //Pool[i].Free;
+    //freeandNil(Pool[i]);
   end;
   dec(globalId);
   inherited Destroy;
@@ -524,7 +524,7 @@ end;
 
 constructor TOThread.Create(CreateSuspended: Boolean; const StackSize: NativeUInt);
 begin
-  inherited Create(CreateSuspended{$ifdef foc}, StackSize{$endif});
+  inherited Create(CreateSuspended{$ifdef _FPC}, StackSize{$endif});
   FreeOnTerminate:=true;;
  {$ifdef FPC}
   Fire:=RTLEventCreate;
@@ -542,6 +542,7 @@ end;
 constructor TOThread.Create(const Proc: TGroupProc; const Params: Pointer);
 begin
   inherited Create(true);
+  FreeOnTerminate:=true;;
   FProc:=Proc;
   FParams:=Params
 end;
@@ -776,7 +777,7 @@ initialization
 
 
 finalization
-  freeAndNil(MP3);
-  freeAndNil(MP2);
-  freeAndNil(MP);
+  if assigned(mp3) then freeAndNil(MP3);
+  if assigned(mp2) then freeAndNil(MP2);
+  if assigned(mp) then freeAndNil(MP);
 end.

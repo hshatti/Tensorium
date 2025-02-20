@@ -515,7 +515,7 @@ begin
     if isBatchNormalized then
       batchNorm(state)
     else
-      output.Add(biases);
+      output.forwardBias(biases);
 
     //output.pullFromDevice;
     //if output.wasGPU then output.pullFromDevice;
@@ -567,6 +567,7 @@ var
     //nweights,
       i,j, m, n, k, colSize: SizeInt;
     _A, _B, _C, im: Pointer; tmp:TSingleTensor;
+
 begin
   {$ifdef USE_TELEMETRY}
   if benchmark then metrics.backward.start(layerType);
@@ -576,6 +577,7 @@ begin
   k := outH * outW;
 
   colSize := getWorkspaceSize div batch;
+
   case activationType of
     acSWISH :
       gradient_array_swish(output, outputs * batch, activationInput, delta) ;
@@ -593,7 +595,8 @@ begin
   if isBatchNormalized then
       batchNormBack(state)
   else
-      bias_updates.Add(delta);
+      bias_updates.addSums(delta);
+
   //nweights := weights.size();
   //for i := 0 to batch -1 do
   //    for j := 0 to groups -1 do
@@ -635,7 +638,6 @@ begin
   {$ifdef USE_TELEMETRY}
     if benchmark then tensorMetrics.finish(opGemm);
   {$endif}
-
   if assigned(state.delta) and assigned(state.delta.data) then begin
   {$ifdef USE_TELEMETRY}
     if benchmark then tensorMetrics.start(opGemm);
@@ -652,6 +654,7 @@ begin
   {$endif}
     state.delta.col2Im(kernelSize, kernelSize, padding*Dilation, padding*Dilation, stride_x, stride_y, dilation, dilation, state.workspace);
   end;
+
   {$ifdef USE_TELEMETRY}
   if benchmark then metrics.backward.finish(layerType);
   {$endif}

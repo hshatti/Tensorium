@@ -628,7 +628,8 @@ procedure TNNet.freeLayers();
 var
   i: SizeInt;
 begin
-  for i := 0 to High(Layers) do
+  // todo : make Layers of TList<TBaseLayer> instead of an array?
+  for i := High(Layers) downto 0 do
     //Layers[i].free;
     FreeAndNil(Layers[i]);
 end;

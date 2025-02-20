@@ -152,6 +152,7 @@
     <Other>
       <CustomOptions Value="-CfAVX2
 -OpCOREAVX2
+-dUSE_OPENCL
 -dUSE_AVX2
 -dUSE_TELEMETRY"/>
       <OtherDefines Count="11">

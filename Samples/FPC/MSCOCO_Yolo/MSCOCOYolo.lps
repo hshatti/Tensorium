@@ -3,14 +3,14 @@
   <ProjectSession>
     <PathDelim Value="\"/>
     <Version Value="12"/>
-    <BuildModes Active="Debug"/>
+    <BuildModes Active="Release"/>
     <Units>
       <Unit>
         <Filename Value="MSCOCOYolo.pas"/>
         <IsPartOfProject Value="True"/>
         <IsVisibleTab Value="True"/>
         <TopLine Value="239"/>
-        <CursorPos X="52" Y="262"/>
+        <CursorPos X="45" Y="250"/>
         <UsageCount Value="201"/>
         <Loaded Value="True"/>
       </Unit>
