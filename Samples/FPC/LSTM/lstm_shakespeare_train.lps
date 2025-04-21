@@ -1,0 +1,790 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CONFIG>
+  <ProjectSession>
+    <PathDelim Value="\"/>
+    <Version Value="12"/>
+    <BuildModes Active="Debug"/>
+    <Units>
+      <Unit>
+        <Filename Value="lstm_shakespeare_train.pas"/>
+        <IsPartOfProject Value="True"/>
+        <TopLine Value="219"/>
+        <CursorPos Y="222"/>
+        <UsageCount Value="217"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\3dparty\cudnn\include\cudnn_graph.pas"/>
+        <IsPartOfProject Value="True"/>
+        <EditorIndex Value="-1"/>
+        <TopLine Value="632"/>
+        <CursorPos X="17" Y="786"/>
+        <UsageCount Value="205"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\3dparty\cudnn\include\cudnn_ops.pas"/>
+        <IsPartOfProject Value="True"/>
+        <EditorIndex Value="-1"/>
+        <TopLine Value="194"/>
+        <CursorPos X="52" Y="218"/>
+        <UsageCount Value="228"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\3dparty\cudnn\include\cudnn_cnn.pas"/>
+        <IsPartOfProject Value="True"/>
+        <EditorIndex Value="-1"/>
+        <TopLine Value="9"/>
+        <CursorPos X="122" Y="15"/>
+        <UsageCount Value="217"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\termesc.pas"/>
+        <IsPartOfProject Value="True"/>
+        <EditorIndex Value="-1"/>
+        <TopLine Value="74"/>
+        <CursorPos X="10" Y="92"/>
+        <UsageCount Value="205"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\nnOpenCL.pas"/>
+        <IsPartOfProject Value="True"/>
+        <EditorIndex Value="6"/>
+        <TopLine Value="658"/>
+        <CursorPos Y="670"/>
+        <UsageCount Value="201"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\nopmetrics.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="nOpMetrics"/>
+        <EditorIndex Value="18"/>
+        <CursorPos X="3" Y="39"/>
+        <UsageCount Value="242"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\nrnnlayer.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="nRNNLayer"/>
+        <EditorIndex Value="4"/>
+        <TopLine Value="264"/>
+        <CursorPos X="25" Y="174"/>
+        <ExtraEditorCount Value="1"/>
+        <ExtraEditor1>
+          <EditorIndex Value="-1"/>
+          <WindowIndex Value="1"/>
+          <TopLine Value="208"/>
+          <CursorPos Y="230"/>
+        </ExtraEditor1>
+        <UsageCount Value="306"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\nlstmlayer.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="nLSTMLayer"/>
+        <EditorIndex Value="1"/>
+        <TopLine Value="232"/>
+        <CursorPos X="26" Y="260"/>
+        <UsageCount Value="202"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\ntensors.pas"/>
+        <EditorIndex Value="8"/>
+        <TopLine Value="8378"/>
+        <CursorPos Y="8403"/>
+        <UsageCount Value="109"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\nConvolutionLayer.pas"/>
+        <EditorIndex Value="7"/>
+        <TopLine Value="1079"/>
+        <CursorPos X="49" Y="1123"/>
+        <UsageCount Value="109"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\nbaselayer.pas"/>
+        <UnitName Value="nBaseLayer"/>
+        <EditorIndex Value="3"/>
+        <TopLine Value="66"/>
+        <CursorPos X="14" Y="104"/>
+        <UsageCount Value="108"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\nnet.pas"/>
+        <EditorIndex Value="2"/>
+        <TopLine Value="313"/>
+        <CursorPos Y="338"/>
+        <UsageCount Value="108"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\nactivation.pas"/>
+        <UnitName Value="nActivation"/>
+        <EditorIndex Value="31"/>
+        <TopLine Value="624"/>
+        <CursorPos X="5" Y="627"/>
+        <UsageCount Value="106"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\openclhelper.pas"/>
+        <UnitName Value="OpenCLHelper"/>
+        <EditorIndex Value="12"/>
+        <TopLine Value="617"/>
+        <CursorPos X="9" Y="641"/>
+        <UsageCount Value="106"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\opencl.pas"/>
+        <UnitName Value="OpenCL"/>
+        <EditorIndex Value="26"/>
+        <TopLine Value="1265"/>
+        <CursorPos Y="1288"/>
+        <UsageCount Value="106"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\ntypes.pas"/>
+        <UnitName Value="NTypes"/>
+        <EditorIndex Value="16"/>
+        <TopLine Value="3"/>
+        <CursorPos X="3" Y="28"/>
+        <UsageCount Value="100"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\steroids.pas"/>
+        <EditorIndex Value="32"/>
+        <TopLine Value="57"/>
+        <CursorPos X="25" Y="82"/>
+        <UsageCount Value="106"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\nsoftmaxlayer.pas"/>
+        <UnitName Value="nSoftmaxLayer"/>
+        <EditorIndex Value="10"/>
+        <TopLine Value="221"/>
+        <CursorPos X="59" Y="232"/>
+        <UsageCount Value="106"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
+        <UnitName Value="nConnectedlayer"/>
+        <IsVisibleTab Value="True"/>
+        <EditorIndex Value="5"/>
+        <TopLine Value="275"/>
+        <CursorPos Y="241"/>
+        <ExtraEditorCount Value="1"/>
+        <ExtraEditor1>
+          <EditorIndex Value="-1"/>
+          <WindowIndex Value="1"/>
+          <TopLine Value="157"/>
+          <CursorPos Y="177"/>
+        </ExtraEditor1>
+        <UsageCount Value="102"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\nyololayer.pas"/>
+        <UnitName Value="nYoloLayer"/>
+        <EditorIndex Value="30"/>
+        <TopLine Value="294"/>
+        <CursorPos X="61" Y="923"/>
+        <UsageCount Value="102"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\cl_sgemm.c"/>
+        <EditorIndex Value="10"/>
+        <WindowIndex Value="1"/>
+        <TopLine Value="338"/>
+        <CursorPos X="24" Y="372"/>
+        <ExtraEditorCount Value="1"/>
+        <ExtraEditor1>
+          <EditorIndex Value="-1"/>
+          <WindowIndex Value="-1"/>
+          <TopLine Value="727"/>
+          <CursorPos X="17" Y="773"/>
+        </ExtraEditor1>
+        <UsageCount Value="101"/>
+        <Loaded Value="True"/>
+        <DefaultSyntaxHighlighter Value="C++"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\naddlayer.pas"/>
+        <UnitName Value="nAddLayer"/>
+        <EditorIndex Value="29"/>
+        <TopLine Value="60"/>
+        <CursorPos X="41" Y="749"/>
+        <UsageCount Value="105"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\nbatchnormlayer.pas"/>
+        <UnitName Value="nBatchNormLayer"/>
+        <EditorIndex Value="9"/>
+        <TopLine Value="132"/>
+        <CursorPos X="28" Y="181"/>
+        <UsageCount Value="107"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\nlogisticlayer.pas"/>
+        <UnitName Value="nLogisticLayer"/>
+        <EditorIndex Value="27"/>
+        <CursorPos X="42" Y="203"/>
+        <UsageCount Value="105"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\nmodels.pas"/>
+        <UnitName Value="nModels"/>
+        <EditorIndex Value="13"/>
+        <TopLine Value="62"/>
+        <CursorPos X="17" Y="94"/>
+        <UsageCount Value="105"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\nMaxPoolLayer.pas"/>
+        <EditorIndex Value="17"/>
+        <TopLine Value="499"/>
+        <CursorPos X="46" Y="497"/>
+        <UsageCount Value="101"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\nchrono.pas"/>
+        <UnitName Value="nChrono"/>
+        <EditorIndex Value="25"/>
+        <TopLine Value="14"/>
+        <CursorPos X="17" Y="78"/>
+        <UsageCount Value="101"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\nconcatlayer.pas"/>
+        <UnitName Value="nConcatLayer"/>
+        <EditorIndex Value="28"/>
+        <TopLine Value="35"/>
+        <CursorPos X="28" Y="149"/>
+        <UsageCount Value="107"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\3rdparty\clblast\source\clblast.pas"/>
+        <EditorIndex Value="24"/>
+        <TopLine Value="212"/>
+        <CursorPos Y="257"/>
+        <UsageCount Value="102"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\3rdparty\cudnn\source\cudnn_cnn.pas"/>
+        <EditorIndex Value="19"/>
+        <TopLine Value="20"/>
+        <CursorPos X="72" Y="32"/>
+        <UsageCount Value="126"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\3rdparty\oneAPI\mkl\source\mkl_cblas.pas"/>
+        <EditorIndex Value="-1"/>
+        <TopLine Value="19"/>
+        <CursorPos X="6" Y="35"/>
+        <UsageCount Value="99"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\..\..\..\src\blas.c"/>
+        <EditorIndex Value="18"/>
+        <WindowIndex Value="1"/>
+        <TopLine Value="158"/>
+        <CursorPos X="33" Y="171"/>
+        <UsageCount Value="100"/>
+        <Loaded Value="True"/>
+        <DefaultSyntaxHighlighter Value="C++"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\ndropoutlayer.pas"/>
+        <UnitName Value="nDropOutLayer"/>
+        <EditorIndex Value="23"/>
+        <TopLine Value="103"/>
+        <CursorPos X="23" Y="138"/>
+        <UsageCount Value="194"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\..\..\lastver\source\parser.pas"/>
+        <EditorIndex Value="11"/>
+        <WindowIndex Value="1"/>
+        <TopLine Value="370"/>
+        <CursorPos X="20" Y="395"/>
+        <UsageCount Value="191"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\nparser.pas"/>
+        <UnitName Value="nParser"/>
+        <EditorIndex Value="14"/>
+        <TopLine Value="1015"/>
+        <CursorPos X="23" Y="1033"/>
+        <UsageCount Value="107"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\..\..\lastver\source\connectedlayer.pas"/>
+        <UnitName Value="ConnectedLayer"/>
+        <EditorIndex Value="6"/>
+        <WindowIndex Value="1"/>
+        <TopLine Value="188"/>
+        <CursorPos X="25" Y="203"/>
+        <UsageCount Value="153"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\3rdparty\cudnn\source\cudnn_ops.pas"/>
+        <EditorIndex Value="20"/>
+        <TopLine Value="317"/>
+        <CursorPos X="64" Y="320"/>
+        <UsageCount Value="175"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\3rdparty\cudnn\source\cudnn_graph.pas"/>
+        <EditorIndex Value="21"/>
+        <TopLine Value="171"/>
+        <CursorPos X="2" Y="193"/>
+        <UsageCount Value="175"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\3rdparty\cudnn\source\cudnn_adv.pas"/>
+        <EditorIndex Value="22"/>
+        <TopLine Value="21"/>
+        <CursorPos X="26" Y="166"/>
+        <UsageCount Value="175"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\..\..\lastver\source\rnnlayer.pas"/>
+        <UnitName Value="RNNLayer"/>
+        <EditorIndex Value="2"/>
+        <WindowIndex Value="1"/>
+        <TopLine Value="176"/>
+        <CursorPos X="44" Y="194"/>
+        <UsageCount Value="153"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\..\..\lastver\source\blas.pas"/>
+        <EditorIndex Value="9"/>
+        <WindowIndex Value="1"/>
+        <TopLine Value="1273"/>
+        <CursorPos X="67" Y="1308"/>
+        <UsageCount Value="104"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\..\..\lastver\source\lightnet.pas"/>
+        <EditorIndex Value="16"/>
+        <WindowIndex Value="1"/>
+        <TopLine Value="826"/>
+        <CursorPos X="7" Y="843"/>
+        <UsageCount Value="116"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\..\..\lastver\source\locallayer.pas"/>
+        <UnitName Value="LocalLayer"/>
+        <EditorIndex Value="20"/>
+        <WindowIndex Value="1"/>
+        <TopLine Value="80"/>
+        <CursorPos X="37" Y="84"/>
+        <UsageCount Value="148"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\..\..\lastver\source\softmaxlayer.pas"/>
+        <UnitName Value="SoftmaxLayer"/>
+        <EditorIndex Value="-1"/>
+        <WindowIndex Value="1"/>
+        <TopLine Value="480"/>
+        <CursorPos X="34" Y="505"/>
+        <UsageCount Value="68"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\..\..\lastver\source\logisticlayer.pas"/>
+        <UnitName Value="LogisticLayer"/>
+        <EditorIndex Value="19"/>
+        <WindowIndex Value="1"/>
+        <CursorPos X="39" Y="22"/>
+        <UsageCount Value="148"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\..\nnetwork.pas"/>
+        <WindowIndex Value="1"/>
+        <TopLine Value="1903"/>
+        <CursorPos X="12" Y="1910"/>
+        <UsageCount Value="103"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\..\..\..\src\rnn.c"/>
+        <EditorIndex Value="3"/>
+        <WindowIndex Value="1"/>
+        <TopLine Value="71"/>
+        <CursorPos X="30" Y="98"/>
+        <UsageCount Value="103"/>
+        <Loaded Value="True"/>
+        <DefaultSyntaxHighlighter Value="C++"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\ncostlayer.pas"/>
+        <UnitName Value="nCostLayer"/>
+        <EditorIndex Value="11"/>
+        <TopLine Value="117"/>
+        <CursorPos X="22" Y="125"/>
+        <UsageCount Value="103"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\nconfig.pas"/>
+        <UnitName Value="nConfig"/>
+        <EditorIndex Value="15"/>
+        <TopLine Value="269"/>
+        <CursorPos X="10" Y="276"/>
+        <UsageCount Value="103"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\..\..\..\src\utils.c"/>
+        <EditorIndex Value="5"/>
+        <WindowIndex Value="1"/>
+        <TopLine Value="887"/>
+        <CursorPos X="34" Y="921"/>
+        <UsageCount Value="103"/>
+        <Loaded Value="True"/>
+        <DefaultSyntaxHighlighter Value="C++"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\..\..\..\..\..\..\lazarus\fpc\3.2.2\source\rtl\inc\systemh.inc"/>
+        <EditorIndex Value="-1"/>
+        <TopLine Value="421"/>
+        <CursorPos X="3" Y="439"/>
+        <UsageCount Value="97"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\..\..\..\src\utils.h"/>
+        <EditorIndex Value="4"/>
+        <WindowIndex Value="1"/>
+        <TopLine Value="45"/>
+        <CursorPos X="17" Y="79"/>
+        <UsageCount Value="103"/>
+        <Loaded Value="True"/>
+        <DefaultSyntaxHighlighter Value="C++"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\..\..\..\..\..\..\lazarus\fpc\3.2.2\source\rtl\x86_64\x86_64.inc"/>
+        <EditorIndex Value="-1"/>
+        <TopLine Value="418"/>
+        <CursorPos X="16" Y="88"/>
+        <UsageCount Value="331"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\..\..\lastver\source\activations.pas"/>
+        <UnitName Value="Activations"/>
+        <EditorIndex Value="8"/>
+        <WindowIndex Value="1"/>
+        <TopLine Value="41"/>
+        <CursorPos X="11" Y="66"/>
+        <UsageCount Value="436"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\..\lightnet.pas"/>
+        <EditorIndex Value="1"/>
+        <WindowIndex Value="1"/>
+        <TopLine Value="857"/>
+        <CursorPos X="18" Y="888"/>
+        <UsageCount Value="100"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\..\..\lastver\source\convlstmlayer.pas"/>
+        <UnitName Value="ConvLSTMLayer"/>
+        <EditorIndex Value="14"/>
+        <WindowIndex Value="1"/>
+        <TopLine Value="99"/>
+        <CursorPos X="8" Y="65"/>
+        <UsageCount Value="114"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\..\..\lastver\source\nnetwork.pas"/>
+        <EditorIndex Value="13"/>
+        <WindowIndex Value="1"/>
+        <TopLine Value="1941"/>
+        <CursorPos X="50" Y="1956"/>
+        <UsageCount Value="117"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\..\..\lastver\source\convolutionallayer.pas"/>
+        <UnitName Value="ConvolutionalLayer"/>
+        <EditorIndex Value="17"/>
+        <WindowIndex Value="1"/>
+        <TopLine Value="1331"/>
+        <CursorPos X="21" Y="598"/>
+        <UsageCount Value="110"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\..\..\..\src\crnn_layer.c"/>
+        <EditorIndex Value="12"/>
+        <WindowIndex Value="1"/>
+        <TopLine Value="187"/>
+        <CursorPos Y="169"/>
+        <UsageCount Value="110"/>
+        <Loaded Value="True"/>
+        <DefaultSyntaxHighlighter Value="C++"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\..\..\lastver\source\lstmlayer.pas"/>
+        <UnitName Value="LSTMLayer"/>
+        <IsVisibleTab Value="True"/>
+        <EditorIndex Value="15"/>
+        <WindowIndex Value="1"/>
+        <TopLine Value="371"/>
+        <CursorPos X="17" Y="336"/>
+        <UsageCount Value="101"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\..\..\..\..\..\..\lazarus\fpc\3.2.2\source\rtl\win\syswin.inc"/>
+        <EditorIndex Value="-1"/>
+        <TopLine Value="116"/>
+        <CursorPos X="5" Y="356"/>
+        <UsageCount Value="1"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\..\..\..\..\..\..\lazarus\fpc\3.2.2\source\rtl\objpas\sysutils\sysansih.inc"/>
+        <EditorIndex Value="-1"/>
+        <CursorPos X="10" Y="22"/>
+        <UsageCount Value="98"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\..\..\..\..\..\..\lazarus\fpc\3.2.2\source\rtl\objpas\sysutils\sysansi.inc"/>
+        <EditorIndex Value="-1"/>
+        <TopLine Value="55"/>
+        <CursorPos X="60" Y="79"/>
+        <UsageCount Value="98"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\..\..\..\..\..\..\lazarus\fpc\3.2.2\source\rtl\objpas\objpas.pp"/>
+        <EditorIndex Value="-1"/>
+        <TopLine Value="143"/>
+        <CursorPos X="13" Y="159"/>
+        <UsageCount Value="98"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\..\..\..\src\convolutional_layer.c"/>
+        <EditorIndex Value="7"/>
+        <WindowIndex Value="1"/>
+        <CursorPos X="26" Y="1588"/>
+        <UsageCount Value="27"/>
+        <Loaded Value="True"/>
+        <DefaultSyntaxHighlighter Value="C++"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\..\..\..\..\..\..\lazarus\fpc\3.2.2\source\rtl\objpas\math.pp"/>
+        <UnitName Value="Math"/>
+        <EditorIndex Value="-1"/>
+        <TopLine Value="48"/>
+        <CursorPos X="7" Y="74"/>
+        <UsageCount Value="12"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\..\..\..\..\..\..\lazarus\fpc\3.2.2\source\rtl\inc\threadh.inc"/>
+        <EditorIndex Value="-1"/>
+        <TopLine Value="127"/>
+        <CursorPos X="11" Y="152"/>
+        <UsageCount Value="8"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\..\..\..\..\..\..\lazarus\fpc\3.2.2\source\rtl\inc\thread.inc"/>
+        <EditorIndex Value="-1"/>
+        <TopLine Value="173"/>
+        <CursorPos X="3" Y="176"/>
+        <UsageCount Value="8"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\3rdparty\oneAPI\mkl\source\mkl_vml.pas"/>
+        <EditorIndex Value="-1"/>
+        <TopLine Value="157"/>
+        <CursorPos X="15" Y="183"/>
+        <UsageCount Value="7"/>
+        <DefaultSyntaxHighlighter Value="Delphi"/>
+      </Unit>
+    </Units>
+    <OtherDefines Count="12">
+      <Define0 Value="USE_OPENCL"/>
+      <Define1 Value="USE_AVX2"/>
+      <Define2 Value="USE_OPENBLAS"/>
+      <Define3 Value="USE_MKL"/>
+      <Define4 Value="USE_MULTITHREADING"/>
+      <Define5 Value="CLBLASTCONV"/>
+      <Define6 Value="USE_TELEMETRY"/>
+      <Define7 Value="CL_EVENTS"/>
+      <Define8 Value="CL_BLAST"/>
+      <Define9 Value="BIG_MATRECIES"/>
+      <Define10 Value="USE_CUDNN"/>
+      <Define11 Value="DEBUG"/>
+    </OtherDefines>
+    <General>
+      <ActiveWindowIndexAtStart Value="1"/>
+    </General>
+    <JumpHistory HistoryIndex="29">
+      <Position>
+        <Filename Value="lstm_shakespeare_train.pas"/>
+        <Caret Line="220" TopLine="178"/>
+      </Position>
+      <Position>
+        <Filename Value="lstm_shakespeare_train.pas"/>
+        <Caret Line="221" TopLine="178"/>
+      </Position>
+      <Position>
+        <Filename Value="lstm_shakespeare_train.pas"/>
+        <Caret Line="222" TopLine="178"/>
+      </Position>
+      <Position>
+        <Filename Value="lstm_shakespeare_train.pas"/>
+        <Caret Line="220" TopLine="178"/>
+      </Position>
+      <Position>
+        <Filename Value="lstm_shakespeare_train.pas"/>
+        <Caret Line="221" TopLine="178"/>
+      </Position>
+      <Position>
+        <Filename Value="lstm_shakespeare_train.pas"/>
+        <Caret Line="222" TopLine="178"/>
+      </Position>
+      <Position>
+        <Filename Value="lstm_shakespeare_train.pas"/>
+        <Caret Line="220" TopLine="178"/>
+      </Position>
+      <Position>
+        <Filename Value="lstm_shakespeare_train.pas"/>
+        <Caret Line="221" TopLine="178"/>
+      </Position>
+      <Position>
+        <Filename Value="lstm_shakespeare_train.pas"/>
+        <Caret Line="222" TopLine="178"/>
+      </Position>
+      <Position>
+        <Filename Value="lstm_shakespeare_train.pas"/>
+        <Caret Line="220" TopLine="178"/>
+      </Position>
+      <Position>
+        <Filename Value="lstm_shakespeare_train.pas"/>
+        <Caret Line="221" TopLine="178"/>
+      </Position>
+      <Position>
+        <Filename Value="lstm_shakespeare_train.pas"/>
+        <Caret Line="222" TopLine="178"/>
+      </Position>
+      <Position>
+        <Filename Value="lstm_shakespeare_train.pas"/>
+        <Caret Line="220" TopLine="178"/>
+      </Position>
+      <Position>
+        <Filename Value="lstm_shakespeare_train.pas"/>
+        <Caret Line="221" TopLine="178"/>
+      </Position>
+      <Position>
+        <Filename Value="lstm_shakespeare_train.pas"/>
+        <Caret Line="222" TopLine="178"/>
+      </Position>
+      <Position>
+        <Filename Value="lstm_shakespeare_train.pas"/>
+        <Caret Line="220" TopLine="178"/>
+      </Position>
+      <Position>
+        <Filename Value="lstm_shakespeare_train.pas"/>
+        <Caret Line="221" TopLine="178"/>
+      </Position>
+      <Position>
+        <Filename Value="lstm_shakespeare_train.pas"/>
+        <Caret Line="222" TopLine="178"/>
+      </Position>
+      <Position>
+        <Filename Value="lstm_shakespeare_train.pas"/>
+        <Caret Line="220" TopLine="178"/>
+      </Position>
+      <Position>
+        <Filename Value="lstm_shakespeare_train.pas"/>
+        <Caret Line="221" TopLine="178"/>
+      </Position>
+      <Position>
+        <Filename Value="lstm_shakespeare_train.pas"/>
+        <Caret Line="222" TopLine="178"/>
+      </Position>
+      <Position>
+        <Filename Value="lstm_shakespeare_train.pas"/>
+        <Caret Line="220" TopLine="178"/>
+      </Position>
+      <Position>
+        <Filename Value="lstm_shakespeare_train.pas"/>
+        <Caret Line="221" TopLine="178"/>
+      </Position>
+      <Position>
+        <Filename Value="lstm_shakespeare_train.pas"/>
+        <Caret Line="222" TopLine="178"/>
+      </Position>
+      <Position>
+        <Filename Value="lstm_shakespeare_train.pas"/>
+        <Caret Line="220" TopLine="178"/>
+      </Position>
+      <Position>
+        <Filename Value="lstm_shakespeare_train.pas"/>
+        <Caret Line="221" TopLine="178"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
+        <Caret Line="218" Column="35" TopLine="193"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
+        <Caret Line="533" Column="24" TopLine="490"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
+        <Caret Line="211" Column="17" TopLine="192"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\ntensors.pas"/>
+        <Caret Line="8403" TopLine="8378"/>
+      </Position>
+    </JumpHistory>
+    <RunParams>
+      <FormatVersion Value="2"/>
+      <Modes ActiveMode=""/>
+    </RunParams>
+  </ProjectSession>
+  <Debugging>
+    <Watches>
+      <Item>
+        <Expression Value="state.truth.dynData"/>
+      </Item>
+    </Watches>
+  </Debugging>
+</CONFIG>
