@@ -37,13 +37,15 @@
             <Debugging>
               <GenerateDebugInfo Value="False"/>
               <RunWithoutDebug Value="True"/>
+              <DebugInfoType Value="dsDwarf3"/>
+              <UseExternalDbgSyms Value="True"/>
             </Debugging>
             <LinkSmart Value="True"/>
           </Linking>
           <Other>
             <CustomOptions Value="-dUSE_TELEMETRY
 -dUSE_AVX2
--dUSE_MULTITHREADING"/>
+-dUSE_OPENCL"/>
             <OtherDefines Count="8">
               <Define0 Value="USE_TELEMETRY"/>
               <Define1 Value="USE_AVX2"/>
@@ -107,7 +109,8 @@
     <Other>
       <CustomOptions Value="-dUSE_TELEMETRY
 -dUSE_AVX2
--dUSE_MULTITHREADING"/>
+-dUSE_MULTITHREADING
+-dUSE_OPENCL"/>
       <OtherDefines Count="8">
         <Define0 Value="USE_TELEMETRY"/>
         <Define1 Value="USE_AVX2"/>

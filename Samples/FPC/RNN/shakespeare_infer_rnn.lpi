@@ -43,6 +43,7 @@
               <GenerateDebugInfo Value="False"/>
               <RunWithoutDebug Value="True"/>
               <DebugInfoType Value="dsDwarf3"/>
+              <StripSymbols Value="True"/>
               <UseExternalDbgSyms Value="True"/>
             </Debugging>
             <LinkSmart Value="True"/>
@@ -50,11 +51,12 @@
           <Other>
             <CustomOptions Value="-CfAVX2
 -OpCOREAVX2
+-dUSE_OPENCL
 -dUSE_AVX2
 -dUSE_MKL
--dUSE_TELEMETRY
--dUSE_CUDNN"/>
-            <OtherDefines Count="11">
+-dUSE_MULTITHREADING
+-dUSE_TELEMETRY"/>
+            <OtherDefines Count="12">
               <Define0 Value="USE_OPENCL"/>
               <Define1 Value="USE_AVX2"/>
               <Define2 Value="USE_OPENBLAS"/>
@@ -66,6 +68,7 @@
               <Define8 Value="CL_BLAST"/>
               <Define9 Value="BIG_MATRECIES"/>
               <Define10 Value="USE_CUDNN"/>
+              <Define11 Value="DEBUG"/>
             </OtherDefines>
           </Other>
         </CompilerOptions>
@@ -100,9 +103,8 @@
         <IsPartOfProject Value="True"/>
       </Unit>
       <Unit>
-        <Filename Value="..\..\..\source\nnopencl.pas"/>
+        <Filename Value="..\..\..\source\nnOpenCL.pas"/>
         <IsPartOfProject Value="True"/>
-        <UnitName Value="nnOpenCL"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\nopmetrics.pas"/>
@@ -113,6 +115,11 @@
         <Filename Value="..\..\..\source\nrnnlayer.pas"/>
         <IsPartOfProject Value="True"/>
         <UnitName Value="nRNNLayer"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\nlstmlayer.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="nLSTMLayer"/>
       </Unit>
     </Units>
   </ProjectOptions>
@@ -152,10 +159,14 @@
     <Other>
       <CustomOptions Value="-CfAVX2
 -OpCOREAVX2
+-OoFASTMATH
 -dUSE_OPENCL
 -dUSE_AVX2
--dUSE_TELEMETRY"/>
-      <OtherDefines Count="11">
+-dUSE_MKL
+-dUSE_MULTITHREADING
+-dUSE_TELEMETRY
+-dDEBUG"/>
+      <OtherDefines Count="12">
         <Define0 Value="USE_OPENCL"/>
         <Define1 Value="USE_AVX2"/>
         <Define2 Value="USE_OPENBLAS"/>
@@ -167,6 +178,7 @@
         <Define8 Value="CL_BLAST"/>
         <Define9 Value="BIG_MATRECIES"/>
         <Define10 Value="USE_CUDNN"/>
+        <Define11 Value="DEBUG"/>
       </OtherDefines>
     </Other>
   </CompilerOptions>

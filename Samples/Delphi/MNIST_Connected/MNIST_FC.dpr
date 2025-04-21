@@ -13,7 +13,7 @@ uses
   { you can add units after this };
 
 const
-  READ_BATCH   : SizeInt = 16;
+  READ_BATCH   : SizeInt = 32;
   READ_MEASURE : SizeInt = 64;
   READ_TEST    : SizeInt = 4;
 var
@@ -31,10 +31,14 @@ var
 
 
 begin
+  {$ifdef USE_OPENCL}
+  initOpenCL(0, 0);
+  {$endif}
+
   MNIST := TMNISTData.Create('');
   Neural:=TNNet.Create(
-    leNetMNIST
-//    simpleDenseMNIST
+//    leNetMNIST
+    simpleDenseMNIST
   );
   Neural.batch:= READ_BATCH;
   Neural.setTraining(true);
@@ -76,9 +80,11 @@ begin
 
     cost := cost + Neural.trainEpoch(Data);
 
-    output := Neural.output();
-    sampled.Data := Pointer(Neural.truth);
-
+    output := Neural.output()^;
+    sampled.Data := Pointer(Neural.truth.data);
+    {$ifdef USE_OPENCL}
+    output.pullFromDevice;
+    {$endif}
     output.argMax(PInt64(Predicted.data + (j mod READ_MEASURE) * READ_BATCH));
     sampled.argMax(PInt64(Truth.data + (j mod READ_MEASURE) * READ_BATCH));
 
@@ -133,12 +139,14 @@ begin
 
 
   while true do try
+    write(#$1B'[1J'#$1B'[H');
     i := random(MNIST.TEST_COUNT div READ_TEST);
     MNIST.read(0, i);
     MNIST.TestingData.toSingles(Pointer(t1.Data));
     MNIST.TestingLabels.toSingles(Pointer(l1.Data));
     t1.Normalize();
     t1.print(psGray, READ_TEST);
+
 
     writeln('truth');
     l1.argMax(PInt64(truth.Data));

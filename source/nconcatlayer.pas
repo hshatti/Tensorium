@@ -146,7 +146,7 @@ begin
   offset := 0;
   for i:=0 to high(inTensors) do begin
     pt := @TNNet(state.net).layers[inputLayers[i]].delta;
-    if not pt.wasGPU() then pt.pushToDevice;
+    //if not pt.wasGPU() then pt.pushToDevice;
     pt.Add(delta.Data + offset);
     inc(offset, pt.size())
   end;

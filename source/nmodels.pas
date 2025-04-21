@@ -36,13 +36,13 @@ implementation
 function simpleDenseMNIST:TArray<TBaseLayer>;
 begin
   result := [
-        TConnectedLayer.Create(1, 1, 28*28, 64, acRELU{, true})
-      , TConnectedLayer.Create(1, 1, 64   , 64, acRELU{, true})
-      , TConnectedLayer.Create(1, 1, 64   , 32, acRELU{, true})
-      , TConnectedLayer.Create(1, 1, 32   , 32, acRELU{, true})
-      , TConnectedLayer.Create(1, 1, 32   , 10, acLINEAR)
-      //, TSoftmaxLayer.Create(1,10)
-      , TLogisticLayer.Create(1,10)
+        TConnectedLayer.Create(1, 1, 28*28, 64, acRELU, true)
+      , TConnectedLayer.Create(1, 1, 64   , 64, acRELU, true)
+      , TConnectedLayer.Create(1, 1, 64   , 32, acRELU, true)
+      , TConnectedLayer.Create(1, 1, 32   , 32, acRELU, true)
+      , TConnectedLayer.Create(1, 1, 32   , 10, acLINEAR{, true})
+      , TSoftmaxLayer.Create(1,10)
+      //, TLogisticLayer.Create(1,10)
       //, TCostLayer.Create(1,10,ctSSE,1)
     ]
 end;

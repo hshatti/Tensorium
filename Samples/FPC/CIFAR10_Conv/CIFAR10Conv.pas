@@ -7,7 +7,7 @@ uses
   cthreads,
   {$ENDIF}
   SysUtils, ntensors, ntypes, nDatasets, nBaseLayer, nConnectedlayer
-  , nLogisticLayer, nSoftmaxLayer, nCostLayer, nnet, nChrono, nConvolutionLayer, nUpSampleLayer, nRNNLayer
+  , nLogisticLayer, nSoftmaxLayer, nCostLayer, nnet, nChrono, nConvolutionLayer, nUpSampleLayer
   , nModels, Keyboard, nNormalizationLayer, nParser, termesc, steroids
   {$if defined(MSWINDOWS)}
   , ShellApi, cudnn_graph, cudnn_adv, cudnn_ops, cudnn_cnn
@@ -70,7 +70,6 @@ end;
 
 var
   img : TImageData;
-  l1, t1, t2, t3, t4 : TSingleTensor;
   coor : TArray<SizeInt>;
   trainingHistory : TSingleTensor;
   {$ifdef USE_OPENCL}
@@ -169,12 +168,12 @@ begin
 
   CF10.load(Neural.batch);
 
-  t1.resize([Neural.batch, CF10.CHANNELS, CF10.IMAGE_RES, CF10.IMAGE_RES], Neural.batch);
-  l1.reSize([Neural.batch, CF10.CLASS_COUNT], Neural.batch);
-  Data.X.reShape([Neural.batch, CF10.IMAGE_SIZE], Neural.batch);
-  Data.Y.reShape([Neural.batch, CF10.CLASS_COUNT], Neural.batch);
-  sampled.reShape(Data.Y.Shape, Data.Y.groups);
-  setLength(Neural.truth, Data.Y.Size());
+  data.X.resize([Neural.batch, CF10.CHANNELS, CF10.IMAGE_RES, CF10.IMAGE_RES], Neural.batch);
+  data.Y.reSize([Neural.batch, CF10.CLASS_COUNT], Neural.batch);
+  //Data.X.reShape([Neural.batch, CF10.IMAGE_SIZE]);
+  //Data.Y.reShape([Neural.batch, CF10.CLASS_COUNT]);
+  sampled.reShape([Neural.batch, CF10.CLASS_COUNT], Neural.batch);
+  //Neural.truth.resize(Data.Y.Shape);
 
   i         := 0;
   j         := 0;
@@ -195,13 +194,10 @@ begin
 
     if not CF10.read(j) then break;
 
-    CF10.TrainingData.toSingles(t1.Data);
-    CF10.TrainingLabels.toSingles(l1.Data);
+    CF10.TrainingData.toSingles(data.X.Data);
+    CF10.TrainingLabels.toSingles(Data.Y.Data);
 
-    t1.maxNormalize(1);//FusedMultiplyAdd(1/128, -1);
-
-    data.x.Data :=t1.Data;
-    data.y.Data :=l1.Data;
+    data.X.maxNormalize(1);//FusedMultiplyAdd(1/128, -1);
 
     cost := cost + Neural.trainEpoch(Data);
     k := PollKeyEvent;
@@ -292,8 +288,8 @@ begin
 
   CF10.load(0, READ_TEST);
 
-  t1.reSize([READ_TEST, CF10.CHANNELS, CF10.IMAGE_RES, CF10.IMAGE_RES], READ_TEST);
-  l1.reSize([READ_TEST, CF10.CLASS_COUNT], READ_TEST);
+  Data.X.reSize([READ_TEST, CF10.CHANNELS, CF10.IMAGE_RES, CF10.IMAGE_RES], READ_TEST);
+  Data.Y.reSize([READ_TEST, CF10.CLASS_COUNT], READ_TEST);
 
   Predicted := TInt64Tensor.create([READ_TEST]);
   truth     := TInt64Tensor.create([READ_TEST]);
@@ -305,18 +301,18 @@ begin
     cursorAbsPos();
     i := random(CF10.TEST_COUNT div READ_TEST);
     CF10.read(-1, i);
-    CF10.TestingData.toSingles(t1.Data);
-    CF10.TestingLabels.toSingles(l1.Data);
-    t1.normalize();//t1.FusedMultiplyAdd(1/127, -1);
+    CF10.TestingData.toSingles(Data.X.Data);
+    CF10.TestingLabels.toSingles(Data.Y.Data);
+    Data.X.maxNormalize(1);//t1.FusedMultiplyAdd(1/127, -1);
 
-    t1.print(psColor24, READ_TEST);
+    Data.X.print(psColor24, READ_TEST);
 
     writeln('truth');
-    l1.argMax(truth.Data);
-    l1.print(psGray);
+    Data.Y.argMax(truth.Data);
+    Data.Y.print(psGray);
     truth.print;
     writeln(sLineBreak, 'Predicted');
-    Neural.Input := t1;
+    Neural.Input := Data.X;
     //Neural.input.reshape([READ_TEST, CF10.IMAGE_SIZE], READ_TEST);
     Neural.predict(Neural.input);
     Neural.output().argMax(predicted.Data);

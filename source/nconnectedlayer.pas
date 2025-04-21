@@ -12,7 +12,7 @@ uses
   {$ifdef CL_BLAST} , clblast {$endif}
 {$endif}
   {$ifdef USE_TELEMETRY}
-  , nOpMetrics
+  , nOpMetrics, OpenCL
   {$endif}
   ;
 
@@ -45,51 +45,54 @@ constructor TConnectedLayer.Create(const ABatch, ASteps, AInputs,
   AIsBatchNormalized: boolean);
 var randomRange:Single;
 begin
-  batch                 := ABatch;
+  batch                 := ABatch; // note split to steps in case of RNN
   Steps                 := ASteps;
   layerType             := ltCONNECTED;
   ActivationType        := AActivationType;
   inputs                := AInputs;
-  inputShape            := [batch, inputs];
+  inputShape            := [steps * batch, inputs];
   outputs               := aOutputs;
   isBatchNormalized     := AIsBatchNormalized;
 
-  output                := TSingleTensor.Create([steps, batch , outputs], Batch, steps);
+  output                := TSingleTensor.Create([steps * batch , outputs], steps * Batch);
   weights               := TSingleTensor.Create([outputs , inputs]);
   randomRange           := sqrt(2/inputs);
   weights.UniformDistribution(-randomRange, randomRange);
   biases                := TSingleTensor.Create([outputs]);
 
   if isBatchNormalized then begin
-    scales              := TSingleTensor.Create([outputs]);
-    scale_updates       := TSingleTensor.Create([outputs]);
-    scales.fill(1.0);
-    mean                := TSingleTensor.Create([outputs]);
-    mean_delta          := TSingleTensor.Create([outputs]);
-    variance            := TSingleTensor.Create([outputs]);
-    variance_delta      := TSingleTensor.Create([outputs]);
+    //if train then begin
+    //    scale_updates       := TSingleTensor.Create([outputs]);
+    //    scales.fill(1.0);
+    //    mean                := TSingleTensor.Create([outputs]);
+    //    mean_delta          := TSingleTensor.Create([outputs]);
+    //    variance            := TSingleTensor.Create([outputs]);
+    //    variance_delta      := TSingleTensor.Create([outputs]);
+    //    x                   := TSingleTensor.Create([steps * batch, outputs], steps * Batch);
+    //    x_norm              := TSingleTensor.Create([steps * batch, outputs], steps * Batch)
+    //end;
     rolling_mean        := TSingleTensor.Create([outputs]);
     rolling_variance    := TSingleTensor.Create([outputs]);
-    x                   := TSingleTensor.Create([steps, batch, outputs], Batch, steps);
-    x_norm              := TSingleTensor.Create([steps, batch, outputs], Batch, steps)
+    scales              := TSingleTensor.Create([outputs]);
   end;
-
+  //writeln('FC ', steps,' X ', batch, ' X ', inputs);
+  //readln
 end;
 
 procedure TConnectedLayer.setBatch(ABatch: SizeInt);
 begin
   if ABatch=Batch then exit();
   Batch := ABatch;
-  inputShape[0] := ABatch;
+  inputShape[0] := steps * ABatch;
 
-  output.reSize([steps, batch , outputs], Batch, steps) ;
+  output.reSize([steps * batch , outputs], steps * Batch) ;
 
   if FTrain then
-      delta.reSize([steps, batch , outputs], Batch, steps) ;
+      delta.reSize([steps * batch , outputs], steps * Batch) ;
 
-  if isBatchNormalized then begin
-    x.reSize([steps, batch, outputs], Batch, steps);
-    x_norm.reSize([steps, batch, outputs], Batch, steps);
+  if isBatchNormalized and train then begin
+    x.reSize([steps * batch, outputs], steps * batch);
+    x_norm.reSize([steps * batch, outputs], steps * Batch);
   end;
 end;
 
@@ -99,13 +102,31 @@ begin
   FTrain := ATrain;
 
   if FTrain then begin
-    delta                 := TSingleTensor.Create([steps, batch , outputs], Batch, steps);
+    delta                 := TSingleTensor.Create([steps * batch , outputs], steps * Batch);
     weight_updates        := TSingleTensor.Create([inputs , outputs]);
     bias_updates          := TSingleTensor.Create([outputs]);
+    if isBatchNormalized then begin
+        x                     := TSingleTensor.Create([steps * batch , outputs], steps * Batch);
+        x_norm                := TSingleTensor.Create([steps * batch , outputs], steps * Batch);
+        mean                  := TSingleTensor.Create([outputs]);
+        variance              := TSingleTensor.Create([outputs]);
+        mean_delta            := TSingleTensor.Create([outputs]);
+        variance_delta        := TSingleTensor.Create([outputs]);
+        scale_updates         := TSingleTensor.Create([outputs]);
+    end;
   end else begin
-    delta.free;
-    weight_updates.free;
-    bias_updates.free
+    delta          .free;
+    weight_updates .free;
+    bias_updates   .free;
+    if isBatchNormalized then begin
+        x                .free;
+        x_norm           .free;
+        mean             .free;
+        variance         .free;
+        mean_delta       .free;
+        variance_delta   .free;
+        scale_updates    .free;
+    end;
   end;
 end;
 
@@ -113,19 +134,28 @@ procedure TConnectedLayer.forward(var state: TNNetState);
 var outputStep, inputStep, offset:SizeInt;
 begin
   {$ifdef USE_TELEMETRY}
-  if benchmark then metrics.forward.start(layerType);
+  if benchmark
+     //and (metrics.forward.isSubPropagation()=0)
+     then
+         metrics.forward.start(layerType);
   {$endif}
 
   //output.fill(0);
 
-  {$ifdef USE_TELEMETRY}
-  if benchmark then tensorMetrics.start(opGemm);
-  {$endif}
   inputStep  := batch * inputs;
   outputStep := batch * outputs;
   offset   := state.step*outputStep;
+  assert(state.input^.size() >= (state.inputStep+1)*inputStep, '[TConnectedLayer.Forward] inputStep out of range!');
+  assert(output.size() >= (state.step+1)*outputStep, '[TConnectedLayer.Forward] step out of range!');
+  assert(weights.Size() = inputs*outputs, '[TConnectedLayer.Forward] incorrect weights shape!');
+
+  {$ifdef USE_TELEMETRY}
+  if benchmark then tensorMetrics.start(opGemm);
+  {$endif}
+
+
   TSingleTensor.gemm(CblasRowMajor, CblasNoTrans, CblasTrans, batch, outputs, inputs, 1
-    , state.input^.Data + state.step*inputStep, inputs
+    , state.input^.Data + state.inputStep*inputStep, inputs
     , weights.Data, inputs
     , 0, output.data + offset, outputs);
   {$ifdef USE_TELEMETRY}
@@ -155,7 +185,7 @@ begin
           output.Normalize(mean, variance, offset, outputStep);
 
           //copy_cpu(l.outputs * l.batch, l.output, 1, l.x_norm, 1)
-          output.copyTo(x_norm, outputStep, 1, offset, 1, outputStep)
+          output.copyTo(x_norm, offset, 1, offset, 1, outputStep) ;
       end else
           //normalize each column
           //normalize_cpu(output, rolling_mean, rolling_variance, batch, outputs, 1);
@@ -173,45 +203,61 @@ begin
 
   //activate_array(l.output, l.outputs * l.batch, l.activation);
   activate(offset);
-
+  //write(#13, 'FW [',state.index,'] ', state.step);
   //write(#$1b'[2J'#$1b'[H');
   //output.print(psGray);
   //readln;
+
+
+
   {$ifdef USE_TELEMETRY}
-  if benchmark then metrics.forward.finish(layerType);
+  if benchmark
+  //and (metrics.forward.isSubPropagation()<=1)
+     then
+     metrics.forward.finish(layerType);
   {$endif}
 end;
 
 procedure TConnectedLayer.backward(var state: TNNetState);
-var offset, stepSize:SizeInt;
+var outOffset, outStepSize, inStepSize:SizeInt;
 begin
   {$ifdef USE_TELEMETRY}
-  if benchmark then metrics.backward.start(layerType);
+  if benchmark
+     //and (metrics.backward.isSubPropagation()=0)
+     then
+     metrics.backward.start(layerType);
   {$endif}
-  stepSize := batch * outputs;
-  offset   := state.step * stepSize;
+  outStepSize := batch * outputs;
+  inStepSize := batch * inputs;
+  outOffset   := state.step * outStepSize;
+  //write(#13, 'BW [',state.index,'] ', state.step);
+  assert((state.inputStep>=0) and (state.step>=0), '[TConnectedLayer.backward] state step values must be positive!');
+  assert(delta.size() >= (state.step + 1) * outStepSize, '[TConnectedLayer.backward] step out of range!');
+  assert(state.input.size() >= (state.inputStep + 1)*inStepSize, '[TConnectedLayer.backward] inputStep out of range!');
+
   //gradient_array(l.output, l.outputs * l.batch, l.activation, l.delta);
-  Derivative(offset);
+  Derivative(outOffset);
   //for i := 0 to batch -1 do
   //    TSingleTensor.axpysvv(outputs, 1, delta.data+i * outputs, 1, bias_updates.data, 1);
-  //bias_updates.add(delta, offset, outputs);
-  bias_updates.addSums(delta, offset, stepSize);
+  //bias_updates.add(delta, outOffset, outputs);
+
+  bias_updates.addSums(delta, outOffset, outStepSize);
   //if l.batch_normalize then
-  if isBatchNormalized and (batch > 1) then begin
+  if isBatchNormalized {and (batch > 1)} then begin
       // spatial dot (x_norm . delta) then add to scale_updates
       //backward_scale_cpu(x_norm, delta, batch, outputs, 1, scale_updates);
-      scale_updates.addDots(x_norm, delta, offset);
+      scale_updates.addDots(x_norm, delta, outOffset, outStepSize);
 
       // add scales to all delta batches
       //scale_bias(delta, scales, batch, outputs, 1);
-      delta.forwardScale(scales, offset,  stepSize);
+      delta.forwardScale(scales, outOffset,  outStepSize);
 
       //mean_delta_cpu(delta, variance, batch, outputs, 1, mean_delta);
       //variance_delta_cpu(x, delta, mean, variance, batch, outputs, 1, variance_delta);
-      delta.MeansAndVarsDelta(delta, x, mean, variance, mean_delta, variance_delta, offset);
+      delta.MeansAndVarsDelta(delta, x, mean, variance, mean_delta, variance_delta, outOffset, outStepSize);
 
       //normalize_delta_cpu(x, mean, variance, mean_delta, variance_delta, batch, outputs, 1, delta)
-      delta.normalizeDelta(x, mean, variance, mean_delta, variance_delta, delta, offset);
+      delta.normalizeDelta(x, mean, variance, mean_delta, variance_delta, delta, outOffset, outStepSize);
   end;
 
   {$ifdef USE_TELEMETRY}
@@ -222,23 +268,31 @@ begin
   //if assigned(state.delta) then
       //sgemm(0, 0, l.batch, l.inputs, l.outputs, 1, l.delta, l.outputs, l.weights, l.inputs, 1, state.delta, l.inputs)
 
+
+
   TSingleTensor.gemm(CblasRowMajor, CblasTrans, CblasNoTrans, outputs, inputs, batch, 1
-  , delta.Data + offset, outputs
-  , state.input^.Data + state.step*inputs, inputs
+  , delta.Data + outOffset, outputs
+  , state.input^.Data + state.inputStep*inStepSize, inputs
   , 1, weight_updates.Data, inputs);
 
-  if assigned(state.delta) and assigned(state.delta.Data) then
+  if assigned(state.delta) and assigned(state.delta.Data) then begin
+      assert((state.deltaStep>=0) and (state.delta.size() >= (state.deltaStep + 1)*inStepSize), '[TConnectedLayer.backward] inputStep out of range!');
+
       TSingleTensor.gemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, batch, inputs, outputs, 1
-      , delta.Data + offset, outputs
+      , delta.Data + outOffset, outputs
       , weights.Data, inputs
-      , 1, state.delta^.Data + state.step*inputs, inputs);
+      , 1, state.delta^.Data + state.deltaStep*inStepSize, inputs);
+  end;
   {$ifdef USE_TELEMETRY}
   if benchmark then tensorMetrics.finish(opGemm);
   {$endif}
       //delta.matMul(weights, state.delta)
 
   {$ifdef USE_TELEMETRY}
-  if benchmark then metrics.backward.finish(layerType);
+  if benchmark
+     //and (metrics.forward.isSubPropagation()=1)
+     then
+     metrics.backward.finish(layerType);
   {$endif}
 end;
 
@@ -271,7 +325,7 @@ begin
 
   //scal_cpu(l.outputs, args.momentum, l.bias_updates, 1);
   bias_updates.Multiply(args.momentum);
-  if isBatchNormalized and (batch > 1) then begin
+  if isBatchNormalized then begin
       //axpy_cpu(l.outputs, args.learning_rate / args.batch, l.scale_updates, 1, l.scales, 1);
       scales.axpy(args.learningRate / args.batch, scale_updates);
 
@@ -303,15 +357,22 @@ end;
 {$ifdef USE_OPENCL}
 //const clearscr=#$1B'[2J'#$1B'[2;1H';
 procedure TConnectedLayer.forwardGPU(var state: TNNetState);
-var ip,t,w:TSingleTensor;
+var outputStep, inputStep, offset:SizeInt;
 begin
   {$ifdef USE_TELEMETRY}
-  if benchmark then metrics.forward.start(layerType);
+  if benchmark
+     //and not metrics.forward.isSubPropagation()
+     then
+     metrics.forward.start(layerType);
   {$endif}
 
-  //output.fill(0);
+  inputStep  := batch * inputs;
+  outputStep := batch * outputs;
+  offset   := state.step*outputStep;
+  assert(state.input^.size() >= (state.inputStep+1)*inputStep, '[TConnectedLayer.ForwardGPU] inputStep out of range!');
+  assert(output.size() >= (state.step+1)*outputStep, '[TConnectedLayer.ForwardGPU] step out of range!');
+  assert(weights.Size() = inputs*outputs, '[TConnectedLayer.ForwardGPU] incorrect weights shape!');
 
-  //writeln(clearscr);
   if not state.input.wasGPU() then  begin
       state.input.pushToDevice;
   end;
@@ -322,6 +383,7 @@ begin
       biases.pushToDevice;
   end;
   output.setOCL;
+
   {$IFDEF CL_BLAST}
   ocl.FErr := integer(CLBlastSgemm(CLBlastLayoutRowMajor, CLBlastTransposeNo, CLBlastTransposeYes
           , batch, outputs, inputs, 1
@@ -338,9 +400,9 @@ begin
   {$ELSE}
   ocl.gemm(false, true
           , batch, outputs, inputs, 1
-          , state.input.devData, 0, inputs
+          , state.input.devData, state.inputStep*inputStep, inputs
           , weights.devData    , 0, inputs
-          , 0, output.devData  , 0, outputs
+          , 0, output.devData  , offset, outputs
           {$IFDEF CL_EVENTS}
           , 1, pointer(state.events), pointer(state.events));
           {$ELSE}
@@ -348,15 +410,8 @@ begin
           {$ENDIF}
   {$ENDIF}
 
-  //TSingleTensor.gemm(CblasRowMajor, CblasNoTrans, CblasTrans
-  //          , batch, outputs, inputs, 1
-  //          , state.input.Data, inputs
-  //          , weights.Data    , inputs
-  //          , 0, output.Data  , outputs
-  //          );
 
-
-  if isBatchNormalized and (batch > 1) then begin
+  if isBatchNormalized then begin
       {$ifdef USE_TELEMETRY}
       //ocl.waitForEvents(batch, pointer(events));
       if benchmark then metrics.forward.start(ltBATCHNORM);
@@ -364,82 +419,65 @@ begin
       if not scales.wasGPU() then scales.pushToDevice;
       if not rolling_mean.wasGPU() then rolling_mean.pushToDevice;
       if not rolling_variance.wasGPU() then rolling_variance.pushToDevice;
+
       if state.isTraining then begin
-          //output.MeansAndVars(mean, variance);
-          //rolling_mean.Multiply(0.95);
-          //rolling_mean.axpy(0.05, mean);
-          //rolling_variance.Multiply(0.95);
-          //rolling_variance.axpy(0.05, variance);
-          //output.CopyTo(x);
-          //output.Normalize(mean, variance);
-          //output.copyTo(x_norm)
-
-          ocl.meanAndVars(mean.Size(), output.size(), output.Groups, output.devData, mean.devData, variance.devData);
+          ocl.meanAndVars(outputStep, mean.Size(), output.Groups, output.devData, offset, mean.devData, variance.devData);
           ocl.scale(rolling_mean.size(), 0.95, rolling_mean.devData, 1);
-          ocl.axpy(rolling_mean.Size(), 0.05, mean.devData, 1, rolling_mean.devData, 1);
+          ocl.axpy(rolling_mean.Size(), 0.05, mean.devData, 0, 1, rolling_mean.devData, 0, 1);
           ocl.scale(rolling_variance.Size(), 0.95, rolling_variance.devData, 1);
-          ocl.axpy(rolling_variance.size(), 0.05, variance.devData, 1, rolling_variance.devData, 1);
-          ocl.copy(output.Size(), output.devData, 0, 1, x.devData, 0, 1);
-          ocl.normalize(mean.Size(), output.size(), output.groups, mean.devData, 1, variance.devData, 1, output.devData);
-          ocl.copy(output.size(), output.devData, 0, 1, x_norm.devData ,0, 1);
-      end else
-          //output.Normalize(rolling_mean, rolling_variance);
-          ocl.normalize(rolling_mean.Size(), output.size(), output.Groups, rolling_mean.devData, 1, rolling_variance.devData, 1, output.devData);
+          ocl.axpy(rolling_variance.size(), 0.05, variance.devData, 0, 1, rolling_variance.devData, 0, 1);
+          ocl.copy(outputStep, output.devData, offset, 1, x.devData, offset, 1);
+          ocl.normalize(mean.Size(), outputStep, output.groups, mean.devData, 1, variance.devData, 1, output.devData, offset);
+          ocl.copy(outputStep, output.devData, offset, 1, x_norm.devData, offset, 1);
+      end else begin
 
-      ocl.forwardScale(output.Size(), output.devData, scales.Size(), scales.devData, 1, output.Groups
-      {$IFDEF CL_EVENTS}
-      , 1, pointer(state.events), pointer(state.events));
-      {$ELSE}
-      );
-      {$ENDIF}
+          ocl.normalize(rolling_mean.Size(), outputStep, output.Groups, rolling_mean.devData, 1, rolling_variance.devData, 1, output.devData, offset);
+      end;
+      ocl.forwardScaleAdd(outputStep, output.devData, offset, scales.size(), scales.devData, biases.devData, 1, output.Groups);
 
       {$ifdef USE_TELEMETRY}
       ocl.finish();
       if benchmark then metrics.forward.finish(ltBATCHNORM);
       {$endif}
+  end else begin
+    ocl.forwardBias(outputStep, output.devData, offset, biases.size(), biases.devData, 1, output.groups);
   end;
 
-  ocl.forwardBias(output.Size(), output.devData, biases.size(), biases.devData, 1, output.groups
-  {$IFDEF CL_EVENTS}
-  , 1, pointer(state.events), pointer(state.events));
-  {$ELSE}
-  );
-  {$ENDIF}
   {$ifdef USE_TELEMETRY}
   if benchmark then metrics.act.start(ActivationType);
   {$endif}
-
-  ocl.ActivateArray(output.size(), output.devData, 0, longint(ActivationType)
-  {$IFDEF CL_EVENTS}
-  , 1, pointer(state.events), pointer(state.events));
-  {$ELSE}
-  );
-  {$ENDIF}
+  ocl.ActivateArray(outputStep, output.devData, offset, longint(ActivationType));
   {$ifdef USE_TELEMETRY}
   ocl.finish();
   if benchmark then metrics.act.finish(ActivationType);
   {$endif}
-  //Activate;
-  //output.pullFromDevice(t);
-  //writeln(state.index, ' FC FW: ');
-  //t.printStat();
-  //output.printStat();
-  //writeln(' sumSQRDiff : ', t.sumSqrDiff(output):1:6);
-  //readln;
-  //ocl.finish();
-  //ocl.waitForEvents(batch, pointer(events));
+
   {$ifdef USE_TELEMETRY}
-  if benchmark then metrics.forward.finish(layerType);
+  if benchmark
+     //and not metrics.forward.isSubPropagation()
+     then metrics.forward.finish(layerType);
   {$endif}
 end;
 
 procedure TConnectedLayer.backwardGPU(var state: TNNetState);
-var t:TSingleTensor;
-
+var// t:TSingleTensor;
+  outStepSize, inStepSize, outOffset: SizeInt;
+  t1, t2 :TSingleTensor;
+  n1 :TSizeIntTensor;
 begin
   {$ifdef USE_TELEMETRY}
-  if benchmark then metrics.backward.start(layerType);
+  if benchmark
+     //and not metrics.forward.isSubPropagation()
+     then
+     metrics.backward.start(layerType);
   {$endif}
+  outStepSize := batch * outputs;
+  inStepSize  := batch * inputs;
+  outOffset   := state.step * outStepSize;
+
+  assert((state.inputStep>=0) and (state.step>=0), '[TConnectedLayer.backwardGPU] state step values must be positive!');
+  assert(delta.size() >= (state.step + 1) * outStepSize, '[TConnectedLayer.backwardGPU] step out of range!');
+  assert(state.input.size() >= (state.inputStep + 1)*inStepSize, '[TConnectedLayer.backwardGPU] inputStep out of range!');
 
   if not delta.wasGPU() then delta.pushToDevice;
   if not state.input.wasGPU() then state.input.pushToDevice;
@@ -448,16 +486,23 @@ begin
   if not weight_updates.wasGPU() then weight_updates.pushToDevice;
 
 
-  ocl.DeriveArray(output.size(), output.devData, 0, longint(ActivationType), delta.devData
+  {$ifdef USE_TELEMETRY}
+  if benchmark then metrics.grad.start(ActivationType);
+  {$endif}
+  ocl.DeriveArray(outStepSize, output.devData, outOffset, longint(ActivationType), delta.devData
   {$IFDEF CL_EVENTS}
   , 1, pointer(state.events), pointer(state.events));
   {$ELSE}
   );
   {$ENDIF}
+  {$ifdef USE_TELEMETRY}
+  ocl.finish();
+  if benchmark then metrics.grad.finish(ActivationType);
+  {$endif}
   //ocl.waitForEvents(batch, pointer(events));
   //ocl.finish();
 
-  ocl.backwardBias(bias_updates.size(), bias_updates.devData, delta.Size(), delta.devData, 1, batch
+  ocl.backwardBias(bias_updates.size(), bias_updates.devData, outStepSize, delta.devData, outOffset, 1, batch
   {$IFDEF CL_EVENTS}
   , 1, pointer(state.events), pointer(state.events));
   {$ELSE}
@@ -465,7 +510,7 @@ begin
   {$ENDIF}
   //ocl.waitForEvents(batch, pointer(events));
 
-  if isBatchNormalized and (batch > 1) then begin
+  if isBatchNormalized {and (batch > 1)} then begin
       {$ifdef USE_TELEMETRY}
       metrics.backward.start(ltBATCHNORM);
       {$endif}
@@ -474,10 +519,10 @@ begin
       //TSingleTensor.MeansAndVarsDelta(delta, x, mean, variance, mean_delta, variance_delta);
       //TSingleTensor.normalizeDelta(x, mean, variance, mean_delta, variance_delta, delta);
 
-      ocl.addDots(delta.Size(), scale_updates.Size(), delta.groups, x_norm.devData, delta.devData, scale_updates.devData);
-      ocl.forwardScale(delta.size(), delta.devData, scales.Size(), scales.devData, 1, delta.groups);
-      ocl.meansAndVarsDelta(delta.size(), mean.size(), delta.groups, delta.devData, x.devData, mean.devData, variance.devData, mean_delta.devData, variance_delta.devData);
-      ocl.normalizeDelta(delta.size(), mean.size(), delta.groups, delta.devData, x.devData, mean.devData, variance.devData, mean_delta.devData, variance_delta.devData);
+      ocl.addDots(outStepSize, scale_updates.Size(), delta.groups, x_norm.devData, delta.devData, outOffset, scale_updates.devData);
+      ocl.forwardScale(outStepSize, delta.devData, outOffset, scales.Size(), scales.devData, 1, delta.groups);
+      ocl.meansAndVarsDelta(outStepSize, mean.size(), delta.groups, delta.devData, x.devData, outOffset, mean.devData, variance.devData, mean_delta.devData, variance_delta.devData);
+      ocl.normalizeDelta(outStepSize, mean.size(), delta.groups, delta.devData, x.devData, outOffset, mean.devData, variance.devData, mean_delta.devData, variance_delta.devData);
       {$ifdef USE_TELEMETRY}
       ocl.finish();
       metrics.backward.finish(ltBATCHNORM);
@@ -500,8 +545,8 @@ begin
   {$ELSE}
   ocl.gemm(true, false
     , outputs, inputs, batch, 1
-    , delta.devData, 0, outputs
-    , state.input.devData, 0, inputs
+    , delta.devData, outOffset, outputs
+    , state.input.devData, state.inputStep*inStepSize, inputs
     , 1, weight_updates.devData, 0, inputs
     {$IFDEF CL_EVENTS}
     , 1, pointer(state.events), pointer(state.events));
@@ -509,7 +554,15 @@ begin
     );
     {$ENDIF}
   {$ENDIF}
+  //weight_updates.pullFromDevice(t1);
+  //n1 := t1.findNaNs;
+  //if n1.size>0 then begin
+  //   state.input.pullFromDevice(t2, inputs*batch, state.inputStep*inputs*batch);
+  //   beep;
+  //end;
   if assigned(state.delta) and assigned(state.delta^.devData) then begin
+      assert(state.delta.size() >= (state.deltaStep + 1)*inStepSize, '[TConnectedLayer.backwardGPU] inputStep out of range!');
+
       if not weights.wasGPU then weights.pushToDevice;
       //if not state.delta.wasGPU() then state.delta.pushToDevice;
    {$IFDEF CL_BLAST}
@@ -527,9 +580,9 @@ begin
    {$ELSE}
       ocl.gemm( false, false
           , batch, inputs, outputs, 1
-          , delta.devData, 0, outputs
+          , delta.devData, outOffset, outputs
           , weights.devData, 0, inputs
-          , 1, state.delta.devData, 0, inputs
+          , 1, state.delta.devData, state.deltaStep*inStepSize, inputs
           {$IFDEF CL_EVENTS}
           , 1, pointer(state.events), pointer(state.events));
           {$ELSE}
@@ -542,7 +595,10 @@ begin
   end ;
 
   {$ifdef USE_TELEMETRY}
-  if benchmark then metrics.backward.finish(layerType);
+  if benchmark
+     //and not metrics.forward.isSubPropagation()
+     then
+     metrics.backward.finish(layerType);
   {$endif}
 
 end;
@@ -559,7 +615,7 @@ begin
   if not weights.wasGPU() then weights.pushToDevice;
   if not weight_updates.wasGPU() then weight_updates.pushToDevice;
 
-  ocl.axpy(biases.size(), args.learningRate / args.batch, bias_updates.devData, 1, biases.devData, 1
+  ocl.axpy(biases.size(), args.learningRate / args.batch, bias_updates.devData, 0, 1, biases.devData, 0, 1
   {$IFDEF CL_EVENTS}
   , 1, pointer(events), pointer(events) );
   {$ELSE}
@@ -577,7 +633,7 @@ begin
   //ocl.waitForEvents(batch, pointer(events));
   //ocl.finish();
 
-  ocl.axpy(weight_updates.size(), -args.decay * args.batch, weights.devData, 1, weight_updates.devData, 1
+  ocl.axpy(weight_updates.size(), -args.decay * args.batch, weights.devData, 0, 1, weight_updates.devData, 0, 1
   {$IFDEF CL_EVENTS}
   , 1, pointer(events), pointer(events) );
   {$ELSE}
@@ -586,7 +642,7 @@ begin
   //ocl.waitForEvents(batch, pointer(events));
   //ocl.finish();
 
-  ocl.axpy(weights.size(), args.learningRate / args.batch, weight_updates.devData, 1, weights.devData, 1
+  ocl.axpy(weights.size(), args.learningRate / args.batch, weight_updates.devData, 0, 1, weights.devData, 0, 1
   {$IFDEF CL_EVENTS}
   , 1, pointer(events), pointer(events) );
   {$ELSE}
@@ -604,10 +660,10 @@ begin
   //ocl.waitForEvents(batch, pointer(events));
   //ocl.finish();
 
-  if isBatchNormalized and (batch > 1) then begin
+  if isBatchNormalized {and (batch > 1)} then begin
       //scales.axpy(args.learningRate / args.batch, scale_updates);
       //scale_updates.Multiply(args.momentum);
-      ocl.axpy(scales.size(), args.learningRate / args.batch, scale_updates.devData, 1, scales.devData, 1);
+      ocl.axpy(scales.size(), args.learningRate / args.batch, scale_updates.devData, 0, 1, scales.devData, 0, 1);
       ocl.scale(scale_updates.size(), args.momentum, scale_updates.devData, 1);
   end;
 

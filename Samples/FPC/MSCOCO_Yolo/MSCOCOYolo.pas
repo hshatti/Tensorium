@@ -28,8 +28,8 @@ uses
 
 
 const
-    cfgFile = '../../../../../cfg/yolov3.cfg';
-    weightFile = '../../../../../yolov3.weights';
+    cfgFile = '../../../../../cfg/yolov7.cfg';
+    weightFile = '../../../../../yolov7.weights';
     images :TStringArray = ['eagle.jpg', 'kite.jpg', 'person.jpg', 'dog.jpg', 'giraffe.jpg', 'horses.jpg', 'startrek1.jpg'];
     imageRoot = '../../../../../data/';
     classNamesFile = 'coco.names';

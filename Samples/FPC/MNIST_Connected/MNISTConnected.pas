@@ -95,8 +95,10 @@ begin
     data.x.Data :=t1.Data;
     data.y.Data :=l1.Data;
 
-    cost := cost + Neural.trainEpoch(Data, true);
-    actual.Data := Pointer(Neural.truth);
+    cost := cost + Neural.trainEpoch(Data);
+    if cost.IsNan then
+      Sleep(10);
+    actual.Data := Neural.truth.data;
 
 
     //writeln(#$1B'[4;0H', 'Press [ESC] to stop training...');
@@ -105,8 +107,8 @@ begin
       cost := cost / READ_MEASURE ;
       {$ifdef USE_OPENCL}
       ocl.finish();
-      {$endif}
       output.pullFromDevice();
+      {$endif}
       output.argMax(Predicted.data);
       actual.argMax(Truth.data);
       history.resize([l+1]);

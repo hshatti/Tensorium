@@ -48,7 +48,7 @@ type
       index : SizeInt;
       label_smooth_eps : single;
       adversarial : boolean;
-      step : SizeInt;
+      step, inputStep, deltaStep : SizeInt;
       {$ifdef USE_OPENCL}
       events: TArray<cl_event>;
       ev    : TArray<cl_int>;
@@ -313,8 +313,8 @@ type
     shallow : boolean;
     num_boxes : PInteger;
     boxes : PPBox;
-    procedure getRandomBatch(const n: SizeInt; const A, B: PSingle);
-    procedure getBatch(const n, offset: SizeInt; const A, B: PSingle);
+    procedure getRandomBatch(const N: SizeInt; const inData, truthData: TSingleTensor);
+    procedure getBatch(const N, offset: SizeInt; const inData, truthData: TSingleTensor);
   end;
   PDataType = ^TDatatype;
   TDataType = (
@@ -529,8 +529,9 @@ begin
 end;
 {$endif}
 
-{$if defined(FPC)}
+
 procedure TImageData.loadFromFile(const fileNames: TArray<string>; const resizeWidth, resizeHeight: SizeInt);
+{$if defined(FPC)}
 var img : TFPMemoryImage;
     P:TFPColor;
     i, x, y, imSize, _h, _w : SizeInt;
@@ -1369,50 +1370,61 @@ end;
 
 { TData }
 
-procedure TData.getRandomBatch(const n: SizeInt; const A, B: PSingle);
+// tensors X (input) and Y (truth) must be of two dimensions
+procedure TData.getRandomBatch(const N: SizeInt; const inData, truthData: TSingleTensor);
 var
-    j, i: SizeInt;
-    index: SizeInt;
+    j, inSize, truthSize, batchCount, index: SizeInt;
     S, D:PSingle;
 begin
-    for j := 0 to n -1 do
-        begin
-            index := random(self.X.h());
-            //move(X.data[X.w() * index], A[j * X.w()], X.w() * sizeof(single));
-            S := pointer(X.data + X.w() * index);
-            D := A + j* X.w();
-            for i:=0 to X.w()-1 do
-                D[i]  := S[i];
-            //move(y.data[y.w() * index], B[j * y.w()], Y.w() * sizeof(single));
-            S := pointer(Y.data + Y.w() * index);
-            D := B + j* Y.w();
-            for i:=0 to Y.w()-1 do
-                D[i]  := S[i]
-        end
+  assert({ (inData.steps<>0) and }(inData.Groups<>0));
+  assert({ (truthData.steps<>0) and }(truthData.Groups<>0));
+  inSize     := inData.Groups   *inData.groupSize();
+  truthSize  := truthData.Groups*truthData.groupSize();
+  batchCount := X.Size() div inSize;
+  assert(batchCount = Y.Size() div truthSize);
+  for j := 0 to n -1 do
+      begin
+          index := random(batchCount);
+          //move(X.data[X.w() * index], A[j * X.w()], X.w() * sizeof(single));
+          S := pointer(X.data + inSize* index);
+          D := pointer(inData.Data + j* inSize);
+          move(S[0], D[0], inSize * sizeof(single));
+
+          S := pointer(Y.data + truthSize * index);
+          D := pointer(truthData.Data + j* truthSize);
+          move(S[0], D[0], truthSize * sizeof(single));
+      end;
+
+  inData.pushToDevice;
+  truthData.pushToDevice;
 end;
 
-procedure TData.getBatch(const n, offset: SizeInt; const A, B: PSingle);
+procedure TData.getBatch(const N, offset: SizeInt; const inData, truthData: TSingleTensor);
 var
-    j, i: SizeInt;
-    index: SizeInt;
+    j, inSize, truthSize: SizeInt;
     S, D:PSingle;
 begin
-    for j := 0 to n -1 do
-        begin
-            index := offset+j;
-            S := pointer(X.data + X.w() * index);
-            D := A + j * X.w();
-            move(S[0], D[0], X.w() * sizeof(single));
-            //for i:=0 to X.w()-1 do
-            //    D[i]  := S[i];
-            if assigned(B) then begin
-                S := pointer(Y.data + Y.w() * index);
-                D := B + j * Y.w();
-                move(S[0], D[0], Y.w() * sizeof(single));
-                //for i:=0 to Y.w()-1 do
-                //  D[i]  := S[i]
-            end
-        end
+  assert({ (inData.steps<>0) and }(inData.Groups<>0));
+  assert({ (truthData.steps<>0) and }(truthData.Groups<>0));
+  inSize    := inData.groups   *inData.groupSize();
+  truthSize := truthData.groups*truthData.groupSize();
+  assert(offset*inSize + N*inSize<=X.size());
+  assert(offset*truthSize + N*truthSize<=Y.size());
+  for j := 0 to N -1 do
+      begin
+          S := pointer(X.data + offset*inSize + j*inSize);
+          D := pointer(inData.Data + j * inSize);
+          move(S[0], D[0], inSize * sizeof(single));
+          //for i:=0 to X.w()-1 do
+          //    D[i]  := S[i];
+          S := pointer(Y.data + offset*truthSize + j*truthSize);
+          D := pointer(truthData.Data + j * truthSize);
+          move(S[0], D[0], truthSize * sizeof(single));
+          //for i:=0 to Y.w()-1 do
+          //  D[i]  := S[i]
+      end;
+  inData.pushToDevice;
+  truthData.pushToDevice;
 end;
 
 { TTree }

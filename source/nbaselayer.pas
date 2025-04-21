@@ -87,10 +87,11 @@ type
     ev                       : TArray<cl_int>;
     {$endif}
     function getWorkspaceSize():SizeInt; virtual;
-    procedure Activate(const offset: SizeInt =0);   inline;
+    procedure Activate(const offset: SizeInt =0);   virtual;
     procedure Derivative(const offset: SizeInt =0); virtual;
+    procedure reGroup(const stepBatch :SizeInt);
 
-    function LayerName:string;
+    function LayerTypeStr:string;
     procedure setBatch(ABatch :SizeInt); virtual; abstract;
     procedure freeBatchNorm;
     //destructor Destroy();override;
@@ -162,6 +163,7 @@ type
           procedure start(const a:TLayerType);
           procedure finish(const a:TLayerType);
           function total():int64;
+          function isSubPropagation():longint;
           property Item[i:TLayerType]:int64 read GetItem ;default;
        end;
 
@@ -193,7 +195,6 @@ end;
 
 procedure TBaseLayer.Activate(const offset: SizeInt);
 begin
-  {$ifdef USE_TELEMETRY} if benchmark then metrics.act.start(ActivationType);{$endif}
   {$ifdef _USE_OPENCL}
   if output.computingDevice=cdOpenCL then begin;
     if not output.wasGPU then
@@ -201,8 +202,9 @@ begin
     ocl.ActivateArray(output.devData, batch * outputs, longint(ActivationType));
   end else
   {$endif}
-    activate_array(Pointer(output.Data + offset), batch * outputs, ActivationType);
-  {$ifdef USE_TELEMETRY} if benchmark then metrics.act.finish(ActivationType);{$endif}
+  assert(output.Size() - offset - batch * outputs >= 0, '[Activation] out of range!');
+
+  activate_array(Pointer(output.Data + offset), batch * outputs, ActivationType);
 end;
 
 procedure TBaseLayer.Derivative(const offset: SizeInt);
@@ -217,10 +219,24 @@ begin
     //ocl.finish;
   end else
   {$endif}
-    gradient_array(pointer(output.Data + offset), batch * outputs, ActivationType, pointer(Delta.Data + offset));
+  assert((IntPtr(output.data) >= IntPtr(output.DynData)) and (output.Size() - offset - batch * outputs >= 0), '[Gradient] Output out of range!');
+  assert((IntPtr(delta.data)  >= IntPtr(delta.DynData))  and (delta.Size()  - offset - batch * outputs >= 0), '[Gradient] Delta out of range!');
+  gradient_array(pointer(output.Data + offset), batch * outputs, ActivationType, pointer(Delta.Data + offset));
 end;
 
-function TBaseLayer.LayerName: string;
+procedure TBaseLayer.reGroup(const stepBatch: SizeInt);
+begin
+    output.groups := stepBatch;
+    if isBatchNormalized then begin
+        x      .groups := stepBatch;
+        x_norm .groups := stepBatch;
+    end;
+    if FTrain then begin
+        delta.Groups:= stepBatch;
+    end;
+end;
+
+function TBaseLayer.LayerTypeStr: string;
 begin
   case layerType of
       ltCONVOLUTIONAL:
@@ -399,7 +415,7 @@ end;
 
 {$ifdef USE_OPENCL}
 procedure TBaseLayer.batchNormGPU(var state: TNNetState);
-var blockSize : SizeInt;
+var outputStep, offset:SizeInt;
 begin
   {$ifdef USE_TELEMETRY}
     if benchmark then metrics.forward.start(ltBATCHNORM);
@@ -409,50 +425,56 @@ begin
     if not rolling_mean.wasGPU() then rolling_mean.pushToDevice;
     if not rolling_variance.wasGPU() then rolling_variance.pushToDevice;
 
+    outputStep := batch*outputs;
+    offset := state.step*outputStep;
+
     if LayerType = ltBATCHNORM then
         //state.input.copyTo(output);
-        ocl.copy(state.input.size(), state.input.devData, 0, 1, output.devData, 0, 1);
+        ocl.copy(outputStep, state.input.devData, 0, 1, output.devData, 0, 1);
 
     //if l.&type = ltCONNECTED then begin
     //    outC := outputs;
     //    outH :=1;
     //    outW:=1;
     //end;
-    blockSize := output.size() div (output.groups*biases.size());
+    if not scales.wasGPU() then scales.pushToDevice;
+    if not rolling_mean.wasGPU() then rolling_mean.pushToDevice;
+    if not rolling_variance.wasGPU() then rolling_variance.pushToDevice;
+
     if state.isTraining then begin
         //output.MeansAndVars(mean, variance);
-        ocl.meanAndVars(output.size(), mean.Size(), output.Groups, output.devData, mean.devData, variance.devData);
+        ocl.meanAndVars(outputStep, mean.Size(), output.Groups, output.devData, offset, mean.devData, variance.devData);
 
         //rolling_mean.Multiply(0.9);
         ocl.scale(rolling_mean.size(), 0.9, rolling_mean.devData, 1);
 
   //      //rolling_mean.axpy(0.1, mean);
-        ocl.axpy(rolling_mean.Size(), 0.1, mean.devData, 1, rolling_mean.devData, 1);
+        ocl.axpy(rolling_mean.Size(), 0.1, mean.devData, 0, 1, rolling_mean.devData, 0, 1);
 
   //      rolling_variance.Multiply(0.9);
         ocl.scale(rolling_variance.Size(), 0.9, rolling_variance.devData, 1);
 
   //      rolling_variance.axpy(0.1, variance);
-        ocl.axpy(rolling_variance.size(), 0.1, variance.devData, 1, rolling_variance.devData, 1);
+        ocl.axpy(rolling_variance.size(), 0.1, variance.devData, 0, 1, rolling_variance.devData, 0, 1);
 
   //      output.CopyTo(x);
-        ocl.copy(output.Size(), output.devData, 0, 1, x.devData, 0, 1);
+        ocl.copy(outputStep, output.devData, offset, 1, x.devData, offset, 1);
 
   //      output.Normalize(mean, variance);
-        ocl.normalize(mean.Size(), output.size(), output.groups, mean.devData, 1, variance.devData, 1, output.devData);
+        ocl.normalize(mean.Size(), outputStep, output.groups, mean.devData, 1, variance.devData, 1, output.devData, offset);
 
   //      output.copyTo(x_norm) ;
-        ocl.copy(output.size(), output.devData, 0, 1, x_norm.devData ,0, 1);
+        ocl.copy(outputStep, output.devData, offset, 1, x_norm.devData ,offset, 1);
     end else begin
   //      output.Normalize(rolling_mean, rolling_variance);
-        ocl.normalize(rolling_mean.Size(), output.size(), output.Groups, rolling_mean.devData, 1, rolling_variance.devData, 1, output.devData);
+        ocl.normalize(rolling_mean.Size(), outputStep, output.Groups, rolling_mean.devData, 1, rolling_variance.devData, 1, output.devData, 0);
     end;
 
 
 
     //output.Multiply(scales);
     //output.add(biases);
-    ocl.forwardScaleAdd(biases.size(), output.devData, blockSize, scales.devData, biases.devData, 1, output.groups);
+    ocl.forwardScaleAdd(outputStep, output.devData, offset, scales.size(), scales.devData, biases.devData, 1, output.groups);
 
   {$ifdef USE_TELEMETRY}
     ocl.finish();
@@ -461,6 +483,8 @@ begin
 end;
 
 procedure TBaseLayer.batchNormBackGPU(var state: TNNetState);
+var
+  outputStep, offset: SizeInt;
 begin
   {$ifdef USE_TELEMETRY}
   if benchmark then metrics.backward.start(ltBATCHNORM);
@@ -476,12 +500,15 @@ begin
   //if layerType = ltBATCHNORM then
   //  delta.copyTo(state.delta^);
   //ocl.backwardBias(bias_updates.Size(), bias_updates.devData, delta.size(), delta.devData, 1, delta.groups);  //todo [batchNormBack] should we "bias_updates.Add(delta)"  here?
-  ocl.addDots(delta.Size(), scale_updates.Size(), delta.groups, x_norm.devData, delta.devData, scale_updates.devData);
-  ocl.forwardScale(delta.size(), delta.devData, scales.Size(), scales.devData, 1, delta.groups);
-  ocl.meansAndVarsDelta(delta.size(), mean_delta.size(), delta.groups, delta.devData, x.devData, mean.devData, variance.devData, mean_delta.devData, variance_delta.devData);
-  ocl.normalizeDelta(delta.size(), mean.size(), delta.groups, delta.devData, x.devData, mean.devData, variance.devData, mean_delta.devData, variance_delta.devData);
+  outputStep := batch*outputs;
+  offset := state.step*outputStep;
+
+  ocl.addDots(outputStep, scale_updates.Size(), delta.groups, x_norm.devData, delta.devData, offset, scale_updates.devData);
+  ocl.forwardScale(outputStep, delta.devData, offset, scales.Size(), scales.devData, 1, delta.groups);
+  ocl.meansAndVarsDelta(outputStep, mean_delta.size(), delta.groups, delta.devData, x.devData, offset, mean.devData, variance.devData, mean_delta.devData, variance_delta.devData);
+  ocl.normalizeDelta(outputStep, mean.size(), delta.groups, delta.devData, x.devData, offset, mean.devData, variance.devData, mean_delta.devData, variance_delta.devData);
   if layerType = ltBATCHNORM then
-    ocl.copy(delta.size(), delta.devData, 0, 1, state.delta^.devData, 0, 1);
+    ocl.copy(outputStep, delta.devData, 0, 1, state.delta^.devData, 0, 1);
   {$ifdef USE_TELEMETRY}
   ocl.finish();
   if benchmark then metrics.backward.finish(ltBATCHNORM);
@@ -499,12 +526,12 @@ begin
   //scales.axpy(args.learningRate / args.batch, scale_updates);
   //scale_updates.Multiply(args.momentum);
   if layerType=ltBATCHNORM then begin
-    ocl.axpy(biases.size(), args.learningRate / args.batch, bias_updates.devData, 1, biases.devData, 1);
+    ocl.axpy(biases.size(), args.learningRate / args.batch, bias_updates.devData, 0, 1, biases.devData, 0, 1);
     ocl.scale(bias_updates.size(), args.momentum, bias_updates.devData, 1);
 
   end;
 
-  ocl.axpy(scales.size(), args.learningRate / args.batch, scale_updates.devData, 1, scales.devData, 1);
+  ocl.axpy(scales.size(), args.learningRate / args.batch, scale_updates.devData, 0, 1, scales.devData, 0, 1);
   ocl.scale(scale_updates.size(), args.momentum, scale_updates.devData, 1);
 
   {$ifdef USE_TELEMETRY}
@@ -673,6 +700,12 @@ begin
   for i:=low(TLayerType) to high(TLayerType) do
     inc(result, all[i])
 end;
+
+function TMetrics.TFw.isSubPropagation: longint;
+begin
+  result := stack
+end;
+
 {$endif USE_TELEMETRY}
 initialization
 

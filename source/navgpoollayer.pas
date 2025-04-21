@@ -59,23 +59,25 @@ end;
 
 procedure TAvgPoolLayer.forward(var state: TNNetState);
 var
-    b, i, k, out_index, in_index: SizeInt;
+    //i,
+    b, k, out_index, in_index, im_size: SizeInt;
 begin
     {$ifdef USE_TELEMeTRY}
     if benchmark then metrics.forward.start(layerType);
     {$endif}
+    im_size := w*h;
     for b := 0 to batch -1 do
-        for k := 0 to c -1 do
-            begin
-                out_index := k+b * c;
-                output.data[out_index] := 0;
-                for i := 0 to h * w -1 do
-                    begin
-                        in_index := i+h * w * (k+b * c);
-                        output.data[out_index] := output.data[out_index] + state.input.data[in_index]
-                    end;
-                output.data[out_index] := output.data[out_index] / (h * w)
-            end;
+        for k := 0 to c -1 do begin
+            out_index := k+b * c;
+            output.data[out_index] := state.input.Sum(1, im_size, out_index*im_size)/im_size;
+
+            //output.data[out_index] := 0;
+            //for i := 0 to h * w -1 do begin
+            //    in_index := i+h * w * (k+b * c);
+            //    output.data[out_index] := output.data[out_index] + state.input.data[in_index]
+            //end;
+            //output.data[out_index] := output.data[out_index] / (h * w)
+        end;
     {$ifdef USE_TELEMETRY}
     if benchmark then metrics.forward.finish(layerType);
     {$endif}
@@ -83,19 +85,26 @@ end;
 
 procedure TAvgPoolLayer.backward(var state: TNNetState);
 var
-    b, i, k, out_index, in_index: SizeInt;
-    t:int64;
+    b, i, k, out_index, in_index, im_size: SizeInt;
 begin
+    {$ifdef USE_TELEMeTRY}
+    if benchmark then metrics.backward.start(layerType);
+    {$endif}
+    im_size := w*h;
     for b := 0 to batch -1 do
         for k := 0 to c -1 do
             begin
                 out_index := k+b * c;
-                for i := 0 to h * w -1 do
-                    begin
-                        in_index := i+h * w * (k+b * c);
-                        state.delta.data[in_index] := state.delta.data[in_index] + (delta.data[out_index] / (h * w))
-                    end
+                state.delta.Add(delta.data[out_index] / im_size, im_size, 1, out_index*im_size);
+                //for i := 0 to h * w -1 do
+                //    begin
+                //        in_index := i+h * w * (k+b * c);
+                //        state.delta.data[in_index] := state.delta.data[in_index] + (delta.data[out_index] / (h * w))
+                //    end
             end
+    {$ifdef USE_TELEMeTRY}
+    if benchmark then metrics.backward.finish(layerType);
+    {$endif}
 end;
 
 end.

@@ -71,7 +71,7 @@ begin
   FTrain := ATrain
 end;
 
-procedure softmax(const n: SizeInt; const input: PSingle; const temp: single; const stride: SizeInt; const output: PSingle);   vectorcall;
+procedure softmax(const n: SizeInt; const input: PSingle; const temp: single; const stride: SizeInt; const output: PSingle);
 var i:SizeInt;
     sum, largest, e : single;
     o:PSingle;
@@ -111,6 +111,22 @@ begin
           , output + b*batch_size + g*group_size);
 end;
 
+class procedure TSoftmaxLayer.softmaxCrossEntropy(const pred, truth: TSingleTensor; var delta, error: TSingleTensor);
+var i:SizeInt;
+    t,p :single;
+begin
+  //todo [TSoftmaxLayer::softmaxCrossEntropy] simdfy & GPU
+  for i := 0 to Delta.size() -1 do begin
+      t := truth.data[i];
+      p := pred.data[i];
+      if t<>0 then
+          error.data[i] := -ln(max(p , sEPSILON))
+      else
+          error.data[i] := 0;
+      delta.data[i] := t - p;
+  end
+end;
+
 procedure TSoftmaxLayer.forward(var state: TNNetState);
 var
     i, count, group_size: SizeInt;
@@ -134,9 +150,8 @@ begin
     if assigned(state.truth.data) and not noloss then
         begin
             softmaxCrossEntropy(output, state.truth, delta, loss);
-            cost[0] := loss.Sum()
+            cost[0] := loss.Sum();
         end;
-
     {$ifdef USE_TELEMETRY}
      if benchmark then metrics.forward.finish(layerType);
     {$endif}
@@ -158,6 +173,7 @@ end;
 
 {$ifdef USE_OPENCL}
 procedure TSoftmaxLayer.forwardGPU(var state: TNNetState);
+var t1, t2, t3 :TSingleTensor;
 var
   i, count, group_size: SizeInt;
   t:TSingleTensor;
@@ -210,8 +226,13 @@ begin
     //writeln(state.index,' FW SOFTMAX sumSqrDelta : ', t.sumSqrDiff(delta):1:6);
     //readln;
     loss.pullFromDevice();
-    cost[0] := loss.Sum()
+    cost[0] := loss.Sum();
   end;
+
+  //output.pullFromDevice(t1);
+  //forward(state);
+  //t1.printStat();
+  //output.printStat();
 
   {$ifdef USE_TELEMETRY}
    if benchmark then metrics.forward.finish(layerType);
@@ -246,22 +267,6 @@ begin
   {$endif}
 end;
 {$endif}
-
-class procedure TSoftmaxLayer.softmaxCrossEntropy(const pred, truth: TSingleTensor; var delta, error: TSingleTensor);
-var i:SizeInt;
-    t,p :single;
-begin
-  //todo [TSoftmaxLayer::softmaxCrossEntropy] simdfy & GPU
-  for i := 0 to Delta.size() -1 do begin
-      t := truth.data[i];
-      p := pred.data[i];
-      if t<>0 then
-          error.data[i] := -ln(max(p , sEPSILON))
-      else
-          error.data[i] := 0;
-      delta.data[i] := t - p;
-  end
-end;
 
 end.
 
