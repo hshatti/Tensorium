@@ -503,7 +503,9 @@ begin
     //end;
     //wait_key_cv(5)
 
-    if (seen div batch) mod subDivisions = 0 then begin
+    Result := seen div (batch * subDivisions);
+
+    if seen mod (batch * subDivisions) = 0 then begin
       update();
       if assigned(OnAfterNetOptimization) then OnAfterNetOptimization(Self, i);
     end;

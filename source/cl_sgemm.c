@@ -1485,6 +1485,11 @@ __kernel void fmav( __global nfloat* src1, const long src1Offset, const long inc
    //dst[i*incd + dstOffset] = src1[i*inca + src1Offset] * src2[i*incb + src2Offset] + src3[i*incc + src3Offset];
 }
 
+__kernel void power(__global nfloat* base, const long srcOffset, const long srcStride, const nfloat expo, __global nfloat* dst, const long dstOffset, const long dstStride){
+
+   const long i = get_global_id(0);
+   dst[i*dstStride + dstOffset] = pow(base[i*srcStride + srcOffset], expo);
+}
 //__kernel void halftest(__global half* a, __global half* b, __global half* c){
 //   const long i = get_global_id(0);
 //  c[i] = a[i]+b[i];

@@ -206,7 +206,7 @@
         <UnitName Value="nBatchNormLayer"/>
         <EditorIndex Value="-1"/>
         <CursorPos X="6" Y="157"/>
-        <UsageCount Value="105"/>
+        <UsageCount Value="104"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\nlogisticlayer.pas"/>
@@ -230,7 +230,7 @@
         <IsVisibleTab Value="True"/>
         <EditorIndex Value="12"/>
         <TopLine Value="223"/>
-        <CursorPos Y="249"/>
+        <CursorPos X="34" Y="237"/>
         <UsageCount Value="101"/>
         <Loaded Value="True"/>
       </Unit>
@@ -257,7 +257,7 @@
         <EditorIndex Value="-1"/>
         <TopLine Value="212"/>
         <CursorPos Y="257"/>
-        <UsageCount Value="102"/>
+        <UsageCount Value="101"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\3rdparty\cudnn\source\cudnn_cnn.pas"/>
@@ -440,7 +440,7 @@
         <EditorIndex Value="1"/>
         <TopLine Value="40"/>
         <CursorPos X="7" Y="59"/>
-        <UsageCount Value="51"/>
+        <UsageCount Value="57"/>
         <Loaded Value="True"/>
       </Unit>
     </Units>

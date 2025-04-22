@@ -66,6 +66,7 @@ type
       dst: cl_mem; const dstOffset, incd: SizeInt;
       const events: TCLEvents= nil; event: PCLEvent = nil);
     procedure axpy(const N:SizeInt; const a:single; const x:cl_mem; const xOffset:SizeInt; const incx:SizeInt; const y:cl_mem; const yOffset:SizeInt; const incy:sizeInt; const events: TCLEvents = nil; event: PCLEvent = nil);
+    procedure power(const N:SizeInt; const x:cl_mem; const xOffset:SizeInt; const incx:SizeInt; const a:single; const y:cl_mem; const yOffset:SizeInt; const incy:sizeInt; const events: TCLEvents = nil; event: PCLEvent = nil);
     procedure scale(const N:SizeInt; const a:Single; const x:cl_mem; const stride:SizeInt; const events: TCLEvents = nil; event: PCLEvent = nil);
     procedure crossEntropyLogistic(const N:SizeInt; const pred, truth: cl_mem; delta, error: cl_mem; const events: TCLEvents = nil; event: PCLEvent = nil);
     procedure fill(const N:SizeInt; const x: cl_mem; const offset:SizeInt; const val:single; const stride :SizeInt;
@@ -628,6 +629,39 @@ begin
   {$ifdef USE_TELEMETRY}
   finish();
   tensorMetrics.finish(opAxpy);
+  {$endif}
+end;
+
+procedure TNNOpenCL.power(const N: SizeInt; const x: cl_mem;
+  const xOffset: SizeInt; const incx: SizeInt; const a: single;
+  const y: cl_mem; const yOffset: SizeInt; const incy: sizeInt;
+  const events: TCLEvents; event: PCLEvent);
+const kernelId = 41;
+var NN:SizeInt;
+begin
+  {$ifdef USE_TELEMETRY}
+  tensorMetrics.start(opPow);
+  {$endif}
+
+  SetGlobalWorkGroupSizes(N);
+  SetGlobalOffsets(0);
+  //NN:=LSize(N);
+  //SetLocalWorkGroupSizes(NN);
+  FErr := clSetKernelArg(Kernels[kernelId], 0, SizeOf(x)       , @x);    CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 1, SizeOf(xOffset) , @xOffset);    CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 2, SizeOf(incx)    , @incx);    CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 3, SizeOf(a)       , @a); CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 4, SizeOf(y)       , @y);    CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 5, SizeOf(yOffset) , @yOffset);    CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 6, SizeOf(incy)    , @incy); CheckError();
+  FErr := clEnqueueNDRangeKernel(
+     ActiveQueue, Kernels[kernelId],
+     WorkItemDimensions, @GlobalOffsets[0],
+     @GlobalWorkGroupSizes[0], nil{@LocalWorkGroupSizes[0]}
+     , length(events), pointer(events), event); CheckError();
+  {$ifdef USE_TELEMETRY}
+  finish();
+  tensorMetrics.finish(opPow);
   {$endif}
 end;
 

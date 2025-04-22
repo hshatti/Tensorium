@@ -8,7 +8,7 @@ uses
   {$ENDIF}
   SysUtils, math, ntensors, ntypes, nDatasets, nBaseLayer, nConnectedlayer
   , nLogisticLayer, nSoftmaxLayer, nCostLayer, nnet, nChrono, nConvolutionLayer, nUpSampleLayer, nRNNLayer
-  , nParser, Keyboard, nNormalizationLayer, termesc, steroids
+  , nLRNLayer, nParser, Keyboard, nNormalizationLayer, termesc, steroids
   {$if defined(MSWINDOWS)}
   , ShellApi, cudnn_graph, cudnn_adv, cudnn_ops, cudnn_cnn
   {$endif}
@@ -111,7 +111,7 @@ begin
         if net.layers[i].layerType=ltSOFTMAX then
           TSoftmaxLayer(net.layers[i]).temperature := temp;
 
-    seed := 'Sir Jamil al Shatti please ';
+    seed := 'Hello ';
 
     c := 0;
     for i := 1 to length(seed)-1 do begin
@@ -400,9 +400,9 @@ begin
   Randomize;
 
   //
-  //runTrainer;
-  loadRNN();
-  RunGenerator(OUTPUT_CHARS);
+  runTrainer;
+  //loadRNN();
+  //RunGenerator(OUTPUT_CHARS);
   //exit;
 
 {$ifdef USE_OPENCL}

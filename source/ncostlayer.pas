@@ -139,14 +139,26 @@ begin
       with TNNet(state.net) do
           for i:=0 to high(layers) do begin
               writeln('Layer ', layers[i].LayerTypeStr, ' [', i,'] :');
-              layers[i].weights.pullFromDevice;
-              nans := layers[i].weights.findNaNs;
-              if nans.Size()>0 then
-                  WriteLn('  weights #of NaNs : ', nans.size());
-              layers[i].biases.pullFromDevice;
-              nans := layers[i].biases.findNaNs;
-              if nans.Size()>0 then
-                  WriteLn('  biases #of NaNs : ', nans.size());
+              if layers[i].Weights.size()>0 then begin
+                layers[i].weights.pullFromDevice;
+                nans := layers[i].weights.findNaNs;
+                if nans.Size()>0 then
+                    WriteLn('  weights #of NaNs : ', nans.size());
+                layers[i].biases.pullFromDevice;
+                nans := layers[i].biases.findNaNs;
+                if nans.Size()>0 then
+                    WriteLn('  biases #of NaNs : ', nans.size());
+              end;
+              if i=0 then begin
+                input.pullFromDevice;
+                nans := input.findNaNs;
+                if nans.Size()>0 then
+                    WriteLn('  input #of NaNs : ', nans.size());
+                truth.pullFromDevice;
+                nans := truth.findNaNs;
+                if nans.Size()>0 then
+                    WriteLn('  truth #of NaNs : ', nans.size());
+              end;
               layers[i].output.pullFromDevice;
               nans := layers[i].output.findNaNs;
               if nans.Size()>0 then

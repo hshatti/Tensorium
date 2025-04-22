@@ -101,7 +101,7 @@ begin
                 //        in_index := i+h * w * (k+b * c);
                 //        state.delta.data[in_index] := state.delta.data[in_index] + (delta.data[out_index] / (h * w))
                 //    end
-            end
+            end;
     {$ifdef USE_TELEMeTRY}
     if benchmark then metrics.backward.finish(layerType);
     {$endif}
