@@ -1,4 +1,7 @@
-#define nfloat float
+#pragma OPENCL EXTENSION cl_khr_fp16 : enable
+#define nfloat  float
+#define sEPSILON 0.000001f
+
 
 /*
 inline nfloat mapX(const nfloat x){
@@ -282,6 +285,7 @@ __kernel void forward_bias(const int reshape, __global nfloat* a,  const long aO
       j = get_global_id(0);
       break;
   }
+  a += aOffset;
   //if (i==0 && k==0){
     //printf("        N = %ld\n", N);
     //printf("blockSize = %ld\n", blockSize);
@@ -375,7 +379,10 @@ nfloat leaky_activate(const nfloat x)
 
 nfloat tanh_activate(const nfloat x)
 {
-  //result := 2 / (1 + exp(ensureRange(-2 * x, minSingleExp, maxSingleExp))) - 1
+  //const nfloat px = exp(x);
+  //const nfloat nx = exp(-x);
+  //return (px - nx)/(px + nx);
+  //return 2 / (1 + exp(ensureRange(-2 * x, minSingleExp, maxSingleExp))) - 1
   return 2/ (1+exp(-2*x)) - 1 ;
 //  return  (exp(2*x)-1)/(exp(2*x)+1);
 }
@@ -511,7 +518,7 @@ __kernel void activate_array( __global nfloat* x, long const offset, const Activ
             //softmax_activate(N, x);
             //break
           default:
-            printf("[Activation] %d: not Implemented\n", (int)a);
+            if (i==0) printf("[Activation] %d: not Implemented\n", (int)a);
 
       }
    //printf("%ld, ", i);
@@ -609,7 +616,7 @@ nfloat leaky_gradient(const nfloat x)
 
 nfloat tanh_gradient(const nfloat x)
 {
-    return 1-x*x;
+    return 1.0f-x*x;
 }
 
 nfloat sech(const nfloat x)
@@ -723,51 +730,54 @@ __kernel void gradient_array(__global nfloat* x, long const offset, const Activa
     //   case acNORM_CHAN_SOFTMAX_MAXVAL:
     //
         default:
-            printf("[Gradient] : not Implemented %d\n", a);
-          ;
+            if (i==0) printf("[Gradient] : not Implemented %d\n", (int)a);
+
     }
 
 }
-__kernel void backward_bias(__global nfloat* a, const long blockSize, __global nfloat* bias, const long batch)
+__kernel void backward_bias(__global nfloat* dst, const long blockSize, __global nfloat* src, const long srcOffset, const long batch)
 {
 
     const long i = get_global_id(0);//if (i==0) printf("long %ull\n", sizeof(long));
     const long N = get_global_size(0);
     //for (long i=0 ; i<N ;i++) {
       nfloat sum = 0;
-      bias += i * blockSize;
+      src += i * blockSize + srcOffset;
       const long incbias = N*blockSize;
+      // take a shortcut
+      if(blockSize==1){
+        sum = sumv(batch, src+i, N);
+        dst[i] +=sum;
+        return;
+      }
+
       #pragma unroll 8
       for (long j=0; j<batch; j++){
-        sum += sumv(blockSize, bias, 1);
-        bias += incbias;
+        sum += sumv(blockSize, src, 1);
+        src += incbias;
       }
-      a[i] +=sum;
+      dst[i] +=sum;
 }
 
 __kernel void addv( __global nfloat* src1, const long src1Offset, const long inca, __global nfloat* src2, const long src2Offset, const long incb, __global nfloat* dst, const long dstOffset, const long incc){
 
    const long i = get_global_id(0);
-   src1 += src1Offset;
-   src2 += src2Offset;
-   dst += dstOffset;
 
-   dst[i*incc] = src1[i*inca] + src2[i*incb];
+   dst[i*incc + dstOffset] = src1[i*inca + src1Offset] + src2[i*incb + src2Offset];
 }
 
 __kernel void subv( __global nfloat* src1, const long src1Offset, const long inca, __global nfloat* src2, const long src2Offset, const long incb, __global nfloat* dst, const long dstOffset, const long incc){
 
    const long i = get_global_id(0);
-   src1 += src1Offset;
-   src2 += src2Offset;
-   dst += dstOffset;
 
-   dst[i*incc] = src1[i*inca] - src2[i*incb];
+   dst[i*incc + dstOffset] = src1[i*inca + src1Offset] - src2[i*incb + src2Offset];
 }
 
-__kernel void axpy(const nfloat a, __global const nfloat* x, const long incx, __global nfloat* y, const long incy){
+__kernel void axpy(const nfloat a, __global nfloat* x, const long xOffset, const long incx, __global nfloat* y, const long yOffset, const long incy){
 
    const long i = get_global_id(0);
+   x += xOffset;
+   y += yOffset;
    y[i*incy] += a*x[i*incx];
 
 }
@@ -779,34 +789,37 @@ __kernel void scale(const nfloat a, __global nfloat* x, const long incx){
 
 }
 
-#define sEPSILON 0.000001f
-
 __kernel void crossEntropyLogistics(__global const nfloat* pred, __global const nfloat* truth, __global nfloat* delta, __global nfloat* error){
 
   const long i = get_global_id(0);
   nfloat t = truth[i];
   nfloat p = pred[i];
-  //error[i] = -t*log(fmax(p, sEPSILON)) - (1-t) * log(fmax(1 - p, sEPSILON));
-  error[i] = -t*log(p) - (1-t) * log(1 - p);
+  error[i] = -t*log(fmax(p, sEPSILON)) - (1-t) * log(fmax(1 - p, sEPSILON));
+  //error[i] = -t*log(p) - (1-t) * log(1 - p);
   delta[i] = t - p;
    //printf("%ld, ", i);
 
 }
 
-__kernel void fill(__global nfloat* x, const nfloat val, const long stride){
+__kernel void fill(__global nfloat* x, const long offset, const nfloat val, const long stride){
 
    const long i = get_global_id(0);
-   x[i*stride] = val;
+   //x += offset;
+   x[i*stride + offset] = val;
 }
 
 // naive copy for now
 __kernel void copy(
-    __global nfloat* src, const long aOffset, const long inca
-  , __global nfloat* dst, const long bOffset, const long incb){
+    __global nfloat* src, const long srcOffset, const long srcInc
+  , __global nfloat* dst, const long dstOffset, const long dstInc){
 
    const long i = get_global_id(0);
-   src += aOffset; dst += bOffset;
-   dst[i*incb] = src[i*inca];
+   //src += srcOffset; dst += dstOffset;
+   //if (srcInc==1 && dstInc==1){
+   //  dst[i+dstOffset] = src[i+srcOffset];
+   //  return;
+   //}
+   dst[i*dstInc + dstOffset] = src[i*srcInc + srcOffset];
 }
 
 __kernel void forward_maxpool(
@@ -892,15 +905,15 @@ void move(const __global nfloat* src, __global nfloat* dst , const long count){
   for (long i=0 ; i<count; i++) dst[i] = src[i];
 }
 
-__kernel void softmaxCrossEntropy(const __global nfloat* pred, const __global nfloat* truth, __global nfloat* delta, __global nfloat* error){
+__kernel void crossEntropySoftmax(const __global nfloat* pred, const __global nfloat* truth, __global nfloat* delta, __global nfloat* error){
 
   const long i = get_global_id(0);
 
   nfloat t = truth[i];
   nfloat p = pred[i];
   if (t!=0)
-      //error[i] = -log(fmax(p, sEPSILON));
-      error[i] = -log(p);
+      error[i] = -log(fmax(p, sEPSILON));
+      //error[i] = -log(p);
   else
       error[i] = 0;
   delta[i] = t - p;
@@ -1212,17 +1225,29 @@ __kernel void fmavss(__global nfloat* src, const long offset, const nfloat scala
   const long idx = y*w + x;
   src += offset;
   dst += offset;
-  dst[idx] = mad(src[idx], scalar, bias);
+  //dst[idx] = mad(src[idx], scalar, bias);
+  dst[idx] = src[idx]*scalar + bias;
 
 }
 
-__kernel void means_vars(const long blocksize, const long groups, __global const nfloat* src, __global nfloat* means, __global nfloat* vars){
+__kernel void means_vars(const long blocksize, const long groups, __global nfloat* src, const long offset, __global nfloat* means, __global nfloat* vars){
 
     nfloat m = 0;
     nfloat v = 0;
     const long i = get_global_id(0);
     const long N = get_global_size(0);
     const long S = groups*blocksize;
+    src += offset;
+    // take a shortcut
+    if(blocksize==1){
+      m = sumv(groups, src+i, N);
+      m /= S;
+      v = rssv(groups, m, src+i, N);
+      means[i] = m;
+      vars[i]  = v / (S-1);
+      return;
+    }
+
     #pragma unroll
     for (long b=0; b<groups; b++){
         const long idx = (i + b*N)*blocksize;
@@ -1236,36 +1261,35 @@ __kernel void means_vars(const long blocksize, const long groups, __global const
     }
     means[i] = m;
     vars[i]  = v / (S-1);
-
 }
 
 __kernel void normvv(__global nfloat* mean, const long mean_stride, __global nfloat* variance, const long variance_stride, __global nfloat* dst, const long dst_stride)
 {
   const long i = get_global_id(0);
-  dst[i * dst_stride] = (dst[i*dst_stride] - mean[i*mean_stride])/sqrt(variance[i*variance_stride]);
+  dst[i * dst_stride] = (dst[i*dst_stride] - mean[i*mean_stride])/sqrt(fmax(variance[i*variance_stride], sEPSILON));
 }
 
 __kernel void normvs(__global nfloat* src, const nfloat mean, const nfloat variance)
 {
   const long i = get_global_id(0);
-  src[i] = (src[i] - mean)/sqrt(variance);
+  src[i] = (src[i] - mean)/sqrt(fmax(variance, sEPSILON));
 }
 
-__kernel void normblkvv(__global nfloat* means, const long means_stride, __global nfloat* vars, const long vars_stride, __global nfloat* dst)
+__kernel void normblkvv(__global nfloat* means, const long means_stride, __global nfloat* vars, const long vars_stride, __global nfloat* dst, const long offset)
 {
-  const long i = get_global_id(0); // means vars pos
-  const long j = get_global_id(1); // block pos
-  const long b = get_global_id(2); // batch batch pos
   const long blocksize = get_global_size(1);
   const long batchsize = get_global_size(0)*blocksize;
-  const nfloat v = sqrt(vars[i*vars_stride]);
+  const long i = get_global_id(0); // means vars pos
+  const long b = get_global_id(2); // batch batch pos
+  const long j = get_global_id(1)+ b*batchsize + i*blocksize + offset; // block pos
+  const nfloat v = sqrt(fmax(vars[i*vars_stride], sEPSILON));
   const nfloat m = means[i*means_stride];
-  dst += b*batchsize + i*blocksize;
+  //dst += b*batchsize + i*blocksize + offset;
   dst[j] = (dst[j] - m)/v;
 }
 
 __kernel void means_vars_delta(const long groups, const long blocksize,
-         __global nfloat* delta, __global nfloat* x,
+         __global nfloat* delta, __global nfloat* x, const long offset,
          __global nfloat* means, __global nfloat* vars,
          __global nfloat* means_delta, __global nfloat* vars_delta){
 
@@ -1273,7 +1297,20 @@ __kernel void means_vars_delta(const long groups, const long blocksize,
   nfloat v = 0;
   const long i = get_global_id(0);
   const long ndst = get_global_size(0);
-
+  x     += offset;
+  delta += offset;
+  // take a shortcut
+  if(blocksize==1){
+    #pragma unroll
+    for (long j=0 ;j<groups; j++){
+      const long index = i+j*ndst;
+      m += delta[index];
+      v += delta[index] * (x[index] - means[i]);
+    }
+    means_delta[i] = m * (-1.0f / sqrt(fmax(vars[i], sEPSILON)));
+    vars_delta[i]  = v * -0.5f * pow(fmax(vars[i], sEPSILON), -1.5f);
+    return;
+  }
   #pragma unroll
   for (long j=0 ;j<groups; j++)
     #pragma unroll
@@ -1282,14 +1319,14 @@ __kernel void means_vars_delta(const long groups, const long blocksize,
       m += delta[index];
       v += delta[index] * (x[index] - means[i]);
     }
-  //means_delta[i] = m * (-1.0 / sqrt(fmax(vars[i], sEPSILON)));
-  //vars_delta[i]  = v * -0.5f * pow(fmax(vars[i], sEPSILON), -1.5f);
-  means_delta[i] = m * (-1.0f / sqrt(vars[i]));
-  vars_delta[i]  = v * -0.5f / (vars[i]*sqrt(vars[i]));
+  means_delta[i] = m * (-1.0f / sqrt(fmax(vars[i], sEPSILON)));
+  vars_delta[i]  = v * -0.5f * pow(fmax(vars[i], sEPSILON), -1.5f);
+  //means_delta[i] = m * (-1.0f / sqrt(vars[i]));
+  //vars_delta[i]  = v * -0.5f / (vars[i]*sqrt(vars[i]));
 
 }
 
-__kernel void norm_delta(__global nfloat* x, __global nfloat* means, __global nfloat* vars, __global nfloat* means_delta, __global nfloat* vars_delta, __global nfloat* delta){
+__kernel void norm_delta(__global nfloat* x, const long offset, __global nfloat* means, __global nfloat* vars, __global nfloat* means_delta, __global nfloat* vars_delta, __global nfloat* delta){
   const long j = get_global_id(2);
   const long i = get_global_id(0);
   const long k = get_global_id(1);
@@ -1299,25 +1336,34 @@ __kernel void norm_delta(__global nfloat* x, __global nfloat* means, __global nf
 
   const long batchsize = blocksize * groups;
   const long index = (i + j*N) * blocksize +k;
+  delta += offset;
+  x     += offset;
   delta[index] =
-    //delta[index] / (sqrt(fmax(vars[i], sEPSILON))) +
-    delta[index] / (sqrt(vars[i])) +
+    delta[index] / (sqrt(fmax(vars[i], sEPSILON))) +
+    //delta[index] / (sqrt(vars[i])) +
     (2.0f * vars_delta[i] * (x[index] - means[i]) + means_delta[i]) / batchsize;
 
 }
 
-__kernel void add_dots(const long groups, const long blocksize, __global nfloat* src1, __global nfloat* src2, __global nfloat* dst){
+__kernel void add_dots(const long groups, const long blocksize, __global nfloat* src1, __global nfloat* src2, const long srcOffset, __global nfloat* dst){
 
     const long i = get_global_id(0);
     const long ndst = get_global_size(0);
     nfloat sum = 0;
+    src1 += srcOffset;
+    src2 += srcOffset;
+    // take a shortcut
+    if (blocksize==1){
+      sum = dotv(groups, src1 + i, ndst, src2 + i, ndst);
+      dst[i] += sum;
+      return;
+    }
     #pragma unroll
     for (long b=0; b<groups; b++){
       const long idx = (i + b * ndst) * blocksize;
       sum += dotv(blocksize, src1 + idx, 1, src2 + idx, 1);
     }
     dst[i] += sum;
-
 }
 
 __kernel void forward_scale(const int reshape, __global nfloat* a,  const long aOffset, __global nfloat* b, const long bOffset, const long incb)
@@ -1345,7 +1391,7 @@ __kernel void forward_scale(const int reshape, __global nfloat* a,  const long a
   //}
   //for (i = 0; i<N; i++)
   //  for (k = 0; k<batch; k++){
-  a += (k*N + i)*blockSize;
+  a += (k*N + i)*blockSize + aOffset;
   nfloat bb = b[i * incb];
   //#pragma unroll 8
   //    for (long j=0; j<blockSize; j++)
@@ -1378,7 +1424,7 @@ __kernel void forward_scale_add(const int reshape, __global nfloat* a,  const lo
   //}
   //for (i = 0; i<N; i++)
   //  for (k = 0; k<batch; k++){
-  a += (k*N + i)*blockSize;
+  a += (k*N + i)*blockSize + aOffset;
   nfloat ss = s[i * incb];
   nfloat bb = b[i * incb];
   //#pragma unroll 8
@@ -1389,7 +1435,7 @@ __kernel void forward_scale_add(const int reshape, __global nfloat* a,  const lo
   //}
 }
 
-#define RAND_MAX 10000
+#define RAND_MAX 1000u
 uint rand(const uint seed){
   //ulong res = ((seed + get_global_linear_id()) * 0x5DEECE66DL + 0xBL) & ((1L << 48) - 1);
   //return (res >> 16) % RAND_MAX;
@@ -1416,3 +1462,35 @@ kernel void backward_dropout(const nfloat probability, const nfloat scale, globa
 
 }
 
+kernel void cost_l2(global const nfloat* pred, global const nfloat* truth, global nfloat* delta, global nfloat* error){
+  long i = get_global_id(0);
+  nfloat r = truth[i] - pred[i];
+  delta[i] = r ;
+  error[i] = r*r;
+
+}
+
+__kernel void mulv( __global nfloat* src1, const long src1Offset, const long inca, __global nfloat* src2, const long src2Offset, const long incb, __global nfloat* dst, const long dstOffset, const long incc){
+
+   const long i = get_global_id(0);
+
+   dst[i*incc + dstOffset] = src1[i*inca + src1Offset] * src2[i*incb + src2Offset];
+}
+
+__kernel void fmav( __global nfloat* src1, const long src1Offset, const long inca, __global nfloat* src2, const long src2Offset, const long incb, __global nfloat* src3, const long src3Offset, const long incc, __global nfloat* dst, const long dstOffset, const long incd){
+
+   const long i = get_global_id(0);
+
+   dst[i*incd + dstOffset] = mad(src1[i*inca + src1Offset], src2[i*incb + src2Offset], src3[i*incc + src3Offset]);
+   //dst[i*incd + dstOffset] = src1[i*inca + src1Offset] * src2[i*incb + src2Offset] + src3[i*incc + src3Offset];
+}
+
+__kernel void power(__global nfloat* base, const long srcOffset, const long srcStride, const nfloat expo, __global nfloat* dst, const long dstOffset, const long dstStride){
+
+   const long i = get_global_id(0);
+   dst[i*dstStride + dstOffset] = pow(base[i*srcStride + srcOffset], expo);
+}
+//__kernel void halftest(__global half* a, __global half* b, __global half* c){
+//   const long i = get_global_id(0);
+//  c[i] = a[i]+b[i];
+//}

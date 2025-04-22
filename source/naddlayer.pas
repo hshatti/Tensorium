@@ -834,8 +834,8 @@ begin
   {$endif}
   if assigned(weights.data) then begin
       learning_rate := args.learningRate * learningRateScale;
-      ocl.axpy(weight_updates.size(), -args.decay * args.batch, weights.devData, 1, weight_updates.devData, 1);
-      ocl.axpy(weights.size(), args.learningRate, weight_updates.devData, 1, weights.devData, 1);
+      ocl.axpy(weight_updates.size(), -args.decay * args.batch, weights.devData, 0, 1, weight_updates.devData, 0, 1);
+      ocl.axpy(weights.size(), args.learningRate, weight_updates.devData, 0, 1, weights.devData, 0, 1);
       ocl.scale(weight_updates.size(), args.momentum, weight_updates.devData, 1);
   end;
   inherited updateGPU(args);

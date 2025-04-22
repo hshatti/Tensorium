@@ -22,6 +22,7 @@
 interface
 
 uses Classes, SysUtils, TypInfo, Generics.Defaults, syncobjs, Math
+  , termesc
   {$if defined(FRAMEWORK_FMX)}// Delphi FMX
   , UITypes, FMX.Graphics
   {$elseif defined(FPC)}
@@ -34,7 +35,6 @@ uses Classes, SysUtils, TypInfo, Generics.Defaults, syncobjs, Math
   , FPWriteBMP
   , FPReadJPEG
   , FPWriteJPEG
-  , termesc
   {$elseif defined(FRAMEWORK_VCL)}  // LCLC or VCL
   , Graphics
   {$endif}
@@ -121,6 +121,9 @@ type
   {$endif}
 
 type
+  PPHalf   = ^PHalf;
+  PHalf    = ^Half;
+  Half     =  Word;
   PPSingle = ^PSingle;
   PSizeInt = ^SizeInt;
   SizeInt = nativeint;
@@ -140,16 +143,15 @@ type
   {$endif}
 
   TMapProc<T, PT> = function(const a: T; const index: SizeInt;
-    const AShape: TArray<SizeInt>;
-    const src: PT): T;
+    const AShape: TArray<SizeInt>; const src: PT): T;
   TReduceProc<T, PT> = function(const a, b: T; const index: SizeInt;
     const src: PT; const N: SizeInt): T;
   {$ifdef FPC}
   TMapProcLambda<T, PT> = function(const a:T; const index:SizeInt;  const AShape:TArray<SizeInt>;const src: PT):T is Nested;
   TReduceProcLambda<T, PT>  = function(const a, b:T;  const index:SizeInt; const src: PT; const N:SizeInt):T is nested;
   {$else}
-  TMapProcLambda<T, PT> = reference to function(const a: T; const index: SizeInt;
-    const N: TArray<SizeInt>; const src: PT): T;
+  TMapProcLambda<T, PT> = reference to function(const a: T;
+    const index: SizeInt; const N: TArray<SizeInt>; const src: PT): T;
   TReduceProcLambda<T, PT> = reference to function(const a, b: T;
     const index: SizeInt; const src: PT; const N: SizeInt): T;
   {$endif}
@@ -166,6 +168,8 @@ type
   TThreadProcNested = reference to procedure(idx: IntPtr; ptr: pointer);
   {$endif}
   {$endif}
+  TSingles = array of single;
+  TDoubles = array of double;
 
   { TTensor }
   TTensor<T> = record
@@ -194,7 +198,8 @@ type
     TUnaryVecOp1 = procedure(const N: SizeInt; const ALPHA: T;
       const src: PT; const src1Stride: SizeInt);
     TUnaryVecOp2 = procedure(const N: SizeInt; const ALPHA: T;
-      const src: PT; const src1Stride: SizeInt; const dst: PT; const src2Stride: SizeInt);
+      const src: PT; const src1Stride: SizeInt; const dst: PT;
+      const src2Stride: SizeInt);
 
     TBinaryVecOp = procedure(const N: SizeInt; const src1: PT;
       const src1Stride: SizeInt; const src2: PT; const src2Stride: SizeInt;
@@ -206,12 +211,12 @@ type
     {$ifdef USE_OPENCL}
     devWorkspace : TCLMemory;
     {$endif}
-    defaultDevice : TComputingDevice;
+    defaultDevice: TComputingDevice;
     Plus, Minus, Times, Division: TBinaryFunc;
     sqr, sqrt, exp, log, __abs: TUnaryFunc;
     CastI: TCastIOp;
-    checkNan : function(const v:T):boolean;
-    checkInf : function(const v:T):boolean;
+    checkNan: function(const v: T): boolean;
+    checkInf: function(const v: T): boolean;
 
     fmavvv: TBinaryVecOp;
     fmavss: TFMAvssOp;
@@ -219,18 +224,21 @@ type
     sumsqrdiffvv, sumAbsDiffvv: TBinaryVecFunc;
     normvv, normblkvv: TBinaryVecOp;
 
-    sqrtv, expv, logv, andvv, orvv, xorvv, notv, log10v, log2v,
-    absv, absDiffv, sinv, cosv, tanv, cotanv, tanHv, arcsinv,
-    arcCosv, arcTanv, ArcSinHv, arcCosHv, arcTanHv: TUnaryVecOp;
+    sqrtv, expv, logv, andvv, orvv, xorvv, notv, log10v, log2v, absv,
+    absDiffv, sinv, cosv, tanv, cotanv, tanHv, arcsinv, arcCosv,
+    arcTanv, ArcSinHv, arcCosHv, arcTanHv: TUnaryVecOp;
 
-    addblkvv, subblkvv, mulblkvv, divblkvv : procedure(const N: SizeInt; const src: PT;
-      const src1Stride: SizeInt; const dst: PT; const dstStride: SizeInt; const batch : SizeInt = 1);
-    mulAddBlkvv : procedure (const N: SizeInt; const A: PT; const aStride: SizeInt; const B: PT; const bStride: SizeInt; const dst: PT; const dstStride: SizeInt; const batch:Sizeint = 1);
+    addblkvv, subblkvv, mulblkvv, divblkvv: procedure(const N: SizeInt;
+      const src: PT; const src1Stride: SizeInt; const dst: PT;
+      const dstStride: SizeInt; const batch: SizeInt = 1);
+    mulAddBlkvv: procedure(const N: SizeInt; const A: PT;
+      const aStride: SizeInt; const B: PT; const bStride: SizeInt;
+      const dst: PT; const dstStride: SizeInt; const batch: Sizeint = 1);
 
     argMaxv, argMinv, argmaxabsv, argminabsv: function(const N: SizeInt;
       const src: PT; const INCX: SizeInt): SizeInt;
-    argMaxv32, argMinv32, argmaxabsv32, argminabsv32: function(
-      const N: SizeInt; const src: PT; const INCX: int32): int32;
+    argMaxv32, argMinv32, argmaxabsv32, argminabsv32: function(const N: SizeInt;
+      const src: PT; const INCX: int32): int32;
     dotvv: function(N: SizeInt; src1: PT; stride1: SizeInt; src2: PT;
       stride2: SizeInt): T;
     minmaxvsi: procedure(const N: SizeInt; const src: PT; const stride: SizeInt;
@@ -248,7 +256,8 @@ type
     vcvts: procedure(const N: SizeInt; const src: PT; const dst: PSingle);
 
     threshv, absThreshv: function(const N: SizeInt; var src: PT;
-      const stride: SizeInt; const thresh: T; const ifAbove, ifEqualOrBelow: PT): SizeInt;
+      const stride: SizeInt; const thresh: T;
+      const ifAbove, ifEqualOrBelow: PT): SizeInt;
 
     matDet: function(const mat: PT; const rank: SizeInt): T;
     matDeg: procedure(const matIn: PT; const matOut: PT; const rank: SizeInt;
@@ -262,7 +271,10 @@ type
     rand: function(const a: T): T;
     randG: function(const aMean, aStdDev: T): T;
   public
+  const
+    Nothing = default(T);
   class var
+    noDeviceAllocation : boolean;
     Zero, One: T;
     addvv, subvv, mulvv, divvv, minvv, maxvv: TBinaryVecOp;
 
@@ -275,25 +287,23 @@ type
       const M, N, K: SizeInt; const ALPHA: T; const A: PT; const lda: SizeInt;
       const B: PT; const ldb: SizeInt; const BETA: T; const C: PT; const ldc: SizeInt);
     axpysvv: TUnaryVecOp2;
-    normvss: procedure(const N: SizeInt; const src: PT;
-      const aMean, aStdDev: T);
+    normvss: procedure(const N: SizeInt; const src: PT; const aMean, aStdDev: T);
     MeansAndVarsDelta: procedure(const delta, x, mean, variance: TTensor<T>;
-      const mean_delta, variance_delta: TTensor<T>; const offset:SizeInt =0);
+      const mean_delta, variance_delta: TTensor<T>; const offset: SizeInt = 0;
+      N: SizeInt = 0);
     normalizeDelta: procedure(
       const x, mean, variance, mean_delta, variance_delta: TTensor<T>;
-      const Delta: TTensor<T>; const offset : SizeInt =0);
+      const Delta: TTensor<T>; const offset: SizeInt = 0; N: SizeInt = 0);
     im2Colvv: procedure(const aChannels, aHeight, aWidth: Sizeint;
-      const kernelHeight, kernelWidth,
-      padHeight, padWidth, strideY, strideX, dilationY, dilationX: SizeInt;
-      const inData: PT; const inOffset: SizeInt;
-      const outData: PT; const outOffset: SizeInt; const batch: SizeInt = 1;
-      const multiThread: boolean = False);
+      const kernelHeight, kernelWidth, padHeight, padWidth, strideY,
+      strideX, dilationY, dilationX: SizeInt; const inData: PT;
+      const inOffset: SizeInt; const outData: PT; const outOffset: SizeInt;
+      const batch: SizeInt = 1; const multiThread: boolean = False);
     col2imvv: procedure(const aChannels, aHeight, aWidth: Sizeint;
-      const kernelHeight, kernelWidth,
-      padHeight, padWidth, strideY, strideX, dilationY, dilationX: SizeInt;
-      const inData: PT; const inOffset: SizeInt;
-      const outData: PT; const outOffset: SizeInt; const batch: SizeInt = 1;
-      const multiThread: boolean = False);
+      const kernelHeight, kernelWidth, padHeight, padWidth, strideY,
+      strideX, dilationY, dilationX: SizeInt; const inData: PT;
+      const inOffset: SizeInt; const outData: PT; const outOffset: SizeInt;
+      const batch: SizeInt = 1; const multiThread: boolean = False);
   public
     Data: PT;
     DynData: TArray<T>;
@@ -301,14 +311,15 @@ type
     devData: TCLMemory;
     {$elseif defined(USE_CUDA)}
     {$endif}
-    Groups, Steps: SizeInt;
+    Groups: SizeInt;
     computingDevice: TComputingDevice;
   private
     FShape: TSizes;
+    FSize: SizeInt;
     FDimSizes: TSizes;
     FStrides: TSizes;
     lastOP: TComputingDevice;
-  private
+  public
     function GetDimensions: SizeInt;
     function GetGroup(idx: SizeInt): TTensor<T>; overload;
     function GetValue(idx: TSizes): T;
@@ -366,7 +377,8 @@ type
     class function sqDiv(const a, b: int64): int64; static;
     class function sqCasti(const v: SizeInt): int64; static;
 
-    class procedure cvtsb(const N: SizeInt; const src: PSingle; const dst: pbyte); static;
+    class procedure cvtsb(const N: SizeInt; const src: PSingle;
+      const dst: pbyte); static;
     class procedure cvtsi8(const N: SizeInt; const src: PSingle;
       const dst: PShortInt); static;
     class procedure cvtsi16(const N: SizeInt; const src: PSingle;
@@ -380,7 +392,8 @@ type
 
     class procedure cvtdd(const N: SizeInt; const src: PDouble;
       const dst: PDouble); static;
-    class procedure cvtdb(const N: SizeInt; const src: PDouble; const dst: pbyte); static;
+    class procedure cvtdb(const N: SizeInt; const src: PDouble;
+      const dst: pbyte); static;
     class procedure cvtdi8(const N: SizeInt; const src: PDouble;
       const dst: PShortInt); static;
     class procedure cvtdi16(const N: SizeInt; const src: PDouble;
@@ -390,7 +403,8 @@ type
     class procedure cvtds(const N: SizeInt; const src: PDouble;
       const dst: PSingle); static;
 
-    class procedure cvtbi8(const N: SizeInt; const src: pbyte; const dst: PInt32); static;
+    class procedure cvtbi8(const N: SizeInt; const src: pbyte;
+      const dst: PInt32); static;
     class procedure cvtbi16(const N: SizeInt; const src: pbyte;
       const dst: PShortInt); static;
     class procedure cvtbi32(const N: SizeInt; const src: pbyte;
@@ -400,8 +414,10 @@ type
     class procedure cvtbd(const N: SizeInt; const src: pbyte; const dst: PDouble);
       static;
 
-    class procedure cvti8s(const N: SizeInt; const src: PInt32; const dst: PSingle); static;
-    class procedure cvti8d(const N: SizeInt; const src: PInt32; const dst: PDouble); static;
+    class procedure cvti8s(const N: SizeInt; const src: PInt32;
+      const dst: PSingle); static;
+    class procedure cvti8d(const N: SizeInt; const src: PInt32;
+      const dst: PDouble); static;
 
     class procedure cvti16s(const N: SizeInt; const src: PInt32;
       const dst: PSingle); static;
@@ -439,10 +455,16 @@ type
       const dst: PT; const func: TUnaryPFunc; const Data: PT = nil); overload; static;
     class function Dot(N: SizeInt; src1: PT; stride1: SizeInt;
       src2: PT; stride2: SizeInt = 1): T; overload; static;
-    class function sumSqrDiff(const N: SizeInt; const src1: PT; const stride1: SizeInt; const src2: PT; const stride2: SizeInt = 1): T; overload; static;
-    class function sumSqrDiff(const N: SizeInt; const src1: T; const src2: PT; const stride2: SizeInt = 1): T; overload; static;
-    class function sumAbsDiff(const N: SizeInt; const src1: PT; const stride1: SizeInt; const src2: PT; const stride2: SizeInt = 1): T; overload; static;
-    class function sumAbsDiff(const N: SizeInt; const src1: T; const src2: PT; const stride2: SizeInt = 1): T; overload; static;
+    class function sumSqrDiff(const N: SizeInt; const src1: PT;
+      const stride1: SizeInt; const src2: PT; const stride2: SizeInt = 1): T;
+      overload; static;
+    class function sumSqrDiff(const N: SizeInt; const src1: T;
+      const src2: PT; const stride2: SizeInt = 1): T; overload; static;
+    class function sumAbsDiff(const N: SizeInt; const src1: PT;
+      const stride1: SizeInt; const src2: PT; const stride2: SizeInt = 1): T;
+      overload; static;
+    class function sumAbsDiff(const N: SizeInt; const src1: T;
+      const src2: PT; const stride2: SizeInt = 1): T; overload; static;
     class function Variance(const N: SizeInt; const mean: T; const src: PT;
       const stride: SizeInt = 1): T; overload; static;
     class function sumSqr(const n: SizeInt; const src: PT;
@@ -461,27 +483,28 @@ type
     class function __min(const N: SizeInt; const src: PT; const stride: SizeInt): T;
       overload; static;
 
-    class procedure __max(const N: SizeInt; const src1: PT; const stride1: SizeInt;
-      const src2: PT; const stride2: SizeInt; const dst: PT; const dstStride: SizeInt);
-      overload; static;
-    class procedure __min(const N: SizeInt; const src1: PT; const stride1: SizeInt;
-      const src2: PT; const stride2: SizeInt; const dst: PT; const dstStride: SizeInt);
-      overload; static;
+    class procedure __max(const N: SizeInt; const src1: PT;
+      const stride1: SizeInt; const src2: PT; const stride2: SizeInt;
+      const dst: PT; const dstStride: SizeInt); overload; static;
+    class procedure __min(const N: SizeInt; const src1: PT;
+      const stride1: SizeInt; const src2: PT; const stride2: SizeInt;
+      const dst: PT; const dstStride: SizeInt); overload; static;
 
     class procedure __max(const N: SizeInt; const a: T; const src1: PT;
       const stride1: SizeInt); overload; static;
     class procedure __min(const N: SizeInt; const a: T; const src1: PT;
       const stride1: SizeInt); overload; static;
 
-    class procedure __maxs(const N: SizeInt; const src: PT; const groups: SizeInt;
-      const dst: PT); overload; static;
-    class procedure __mins(const N: SizeInt; const src: PT; const groups: SizeInt;
-      const dst: PT); overload; static;
+    class procedure __maxs(const N: SizeInt; const src: PT;
+      const groups: SizeInt; const dst: PT); overload; static;
+    class procedure __mins(const N: SizeInt; const src: PT;
+      const groups: SizeInt; const dst: PT); overload; static;
 
-    class procedure minMax(const N: SizeInt; const src: PT; const stride: SizeInt;
-      var outMin, outMax: T; var outArgMin, outArgMax: SizeInt); overload; static;
-    class procedure minMax(const N: SizeInt; const src: PT; const stride: SizeInt;
-      var outMin, outMax: T); overload; static;
+    class procedure minMax(const N: SizeInt; const src: PT;
+      const stride: SizeInt; var outMin, outMax: T; var outArgMin, outArgMax: SizeInt);
+      overload; static;
+    class procedure minMax(const N: SizeInt; const src: PT;
+      const stride: SizeInt; var outMin, outMax: T); overload; static;
 
     class function argMin(const N: SizeInt; const src: PT;
       const stride: SizeInt = 1): SizeInt; overload; static;
@@ -498,30 +521,32 @@ type
     class function argMaxAbs(const N: SizeInt; const src: PT;
       const stride: SizeInt = 1): SizeInt; overload; static;
 
-    class function argMin(const N: SizeInt; const src: PT; const stride: int32 = 1): int32;
-      overload; static;
-    class function argMax(const N: SizeInt; const src: PT; const stride: int32 = 1): int32;
-      overload; static;
-    class function argAbsMin(const N: SizeInt; const src: PT;
-      const stride: int32 = 1): int32;
-      overload; static;
-    class function argAbsMax(const N: SizeInt; const src: PT;
-      const stride: int32 = 1): int32;
-      overload; static;
+    class function argMin32(const N: SizeInt; const src: PT;
+      const stride: int32 = 1): int32; overload; static;
+    class function argMax32(const N: SizeInt; const src: PT;
+      const stride: int32 = 1): int32; overload; static;
+    class function argAbsMin32(const N: SizeInt; const src: PT;
+      const stride: int32 = 1): int32; overload; static;
+    class function argAbsMax32(const N: SizeInt; const src: PT;
+      const stride: int32 = 1): int32; overload; static;
 
-    class function threshold(const N: SizeInt; var src: PT; const stride: SizeInt;
-      const thresh: T; const ifAbove: PT = nil; const ifEqualOrBelow: PT = nil): SizeInt;
-      overload; static;
+    class function threshold(const N: SizeInt; var src: PT;
+      const stride: SizeInt; const thresh: T; const ifAbove: PT = nil;
+      const ifEqualOrBelow: PT = nil): SizeInt; overload; static;
     class function absThreshold(const N: SizeInt; var src: PT;
       const stride: SizeInt; const thresh: T; const ifAbove: PT = nil;
       const ifEqualOrBelow: PT = nil): SizeInt; overload; static;
     class procedure _conv2d(const src: PT; ker: PT; var dest: PT;
-      const wSrc, hSrc, wKernel, hKernel, wPad, hPad, xStr, yStr, xDil, yDil: SizeInt); static;
+      const wSrc, hSrc, wKernel, hKernel, wPad, hPad, xStr, yStr, xDil, yDil: SizeInt);
+      static;
     class procedure polynomial(const N: SizeInt; const coef: TArray<T>;
       dst: PT; const aStdDev: T); overload; static;
-    class function xLinear(const n, deg: SizeInt; const x: T; const coef: TArray<T>): T; static;
-    class function deCompose(var qr: PT; const m, n, rwidthq: SizeInt; var alpha: PT; var pivot: PSizeInt): integer; static;
-    class procedure solve(const qr: TArray<T>; const M, N, rwidthq: SizeInt; var alpha: TArray<T>; var pivot: TArray<SizeInt>; var r, y: TArray<T>); static;
+    class function xLinear(const n, deg: SizeInt; const x: T;
+      const coef: TArray<T>): T; static;
+    class function deCompose(var qr: PT; const m, n, rwidthq: SizeInt;
+      var alpha: PT; var pivot: PSizeInt): integer; static;
+    class procedure solve(const qr: TArray<T>; const M, N, rwidthq: SizeInt;
+      var alpha: TArray<T>; var pivot: TArray<SizeInt>; var r, y: TArray<T>); static;
 
 
     procedure AssignTo(var dst: TTensor<T>);
@@ -540,7 +565,7 @@ type
     property Shape: TSizes read FShape write SetShape;
     property Strides: TSizes read FStrides write SetStrides;
     property Value[idx: TSizes]: T read GetValue write SetValue;
-    constructor Create(const newShape: TSizes; aGroups: SizeInt = 0; ASteps: SizeInt = 0); overload;
+    constructor Create(const newShape: TSizes; aGroups: SizeInt = 0); overload;
     procedure Free();
     function wasGPU(): boolean; inline;
     {$if defined(USE_OPENCL)}
@@ -551,69 +576,78 @@ type
     {$endif}
     procedure pushToDevice;
     procedure pullFromDevice; overload;
-    procedure pullFromDevice(var dst :TTensor<T>); overload;
+    procedure pullFromDevice(var dst: TTensor<T>; N: SizeInt = 0;
+      const offset: SizeInt = 0); overload;
     procedure resetReference;
     //procedure convertTo<C>(var Trnsor:TTensor<C>);
     procedure Fill(const val: T; const interval: T; const stride: SizeInt = 1;
       start: SizeInt = 0; Count: SizeInt = -1); overload;
     procedure Fill(const val: T); overload;
     procedure FillExt(const val: T; const offset: SizeInt; const N: SizeInt); overload;
-    procedure Sort(dst:TTensor<T>; const Descending : boolean = false);overload;
-    procedure Sort(const Descending : boolean = false);overload;
+    procedure Sort(dst: TTensor<T>; const Descending: boolean = False); overload;
+    procedure Sort(const Descending: boolean = False); overload;
     procedure linSpace(const start: T; const Finish: T; const N: SizeInt = 0);
     procedure UniformDistribution(const minVal, maxVal: T);
     procedure NormalDistribution(const aMean, aStdDev: T);
-    function sample(const n : SizeInt):SizeInt;
-    function findNaNs:TArray<SizeInt>;
-    function findInfinities:TArray<SizeInt>;
+    function sample(const n: SizeInt): SizeInt;
+    function findNaNs: TArray<SizeInt>;
+    function findInfinities: TArray<SizeInt>;
     procedure setAll(const val: T; const stride: SizeInt = 1);
-    procedure reShape(const newShape: TSizes; const batch: SizeInt = 0; const aSteps:SizeInt =0);
-    function reSize(const newShape: TSizes; const batch: SizeInt = 0; const aSteps:SizeInt =0): TTensor<T>;
+    procedure reShape(const newShape: TSizes; const batch: SizeInt = 0);
+    function reSize(const newShape: TSizes; const batch: SizeInt = 0): TTensor<T>;
     function Equal(const tensor: TTensor<T>): boolean;
     procedure replace(const what, aReplace: T);
     procedure find(const what: T; var indecies: TArray<SizeInt>);
-    function indexOf(const val: T): SizeInt;
-    function Permute(const newArrange: TSizes; dstTensor: Pointer = nil): TTensor<T>; overload;
-    procedure CopyTo(const dst: TTensor<T>; const dstOffset :SizeInt =0; const dstStride: SizeInt = 1; const srcOffset : SizeInt = 0; const srcStride: SizeInt = 1; N: SizeInt = 0);
+    function indexOf(const val: T): SizeInt; overload;
+    function indexOf(const val: T; const tolerance: T): SizeInt; overload;
+    function Permute(const newArrange: TSizes; dstTensor: Pointer = nil): TTensor<T>;
+      overload;
+    procedure CopyTo(const dst: TTensor<T>; const dstOffset: SizeInt = 0;
+      const dstStride: SizeInt = 1; const srcOffset: SizeInt = 0;
+      const srcStride: SizeInt = 1; N: SizeInt = 0);
     procedure ShallowCopy(const Source: TTensor<T>); overload;
-    procedure ShallowCopy(const Source: TArray<T>; const AShape:TArray<SizeInt> = nil); overload;
+    procedure ShallowCopy(const Source: TArray<T>; const AShape: TArray<SizeInt> = nil);
+      overload;
     function getIndex(const idx: TSizes): SizeInt; inline;
     function Size(): SizeInt; inline;
     function groupSize(): SizeInt; inline;
     function byteSize(): SizeInt; inline;
     function as2dWidth(): SizeInt; inline;
-    function as2dHeight():sizeInt; inline;
+    function as2dHeight(): sizeInt; inline;
     procedure Squeeze(dim: SizeInt = -1);
     procedure UnSqueeze(newDim: TSizes = nil);
     function toString(): string;
     procedure fromString(const src: string; const separator: string = ',');
-    function loadFromFile(var F: file; blockSize: SizeInt = 0): SizeInt;
+    function loadFromFile(var F: file; blockSize: SizeInt = 0): SizeInt; overload;
+    function loadFromFile(const FileName: string; blockSize: SizeInt = 0): SizeInt;
       overload;
-    function loadFromFile(const FileName: string; blockSize: SizeInt = 0): SizeInt; overload;
-    function SaveToFile(var F: file; blockSize: SizeInt = 0): SizeInt;
-      overload;
+    function SaveToFile(var F: file; blockSize: SizeInt = 0): SizeInt; overload;
     procedure SaveToImage(const FileName: string; Index: SizeInt = -1;
       const aNormalize: boolean = True); overload;
 
     // Tensor Pointer oprations
-    procedure Add(const srcVector: PT; const dstOffset:SizeInt =0; N: SizeInt = -1; const dstStride: SizeInt = 1;
-      const srcStride: SizeInt = 1); overload;
+    procedure Add(const srcVector: PT; const dstOffset: SizeInt = 0;
+      N: SizeInt = -1; const dstStride: SizeInt = 1; const srcStride: SizeInt = 1);
+      overload;
     procedure Subtract(const srcVector: PT; N: SizeInt = -1;
       const dstStride: SizeInt = 1; const srcStride: SizeInt = 1); overload;
     procedure Multiply(const srcVector: PT; N: SizeInt = -1;
       const dstStride: SizeInt = 1; const srcStride: SizeInt = 1); overload;
-    procedure Divide(const srcVector: PT; N: SizeInt = -1; const dstStride: SizeInt = 1;
-      const srcStride: SizeInt = 1); overload;
+    procedure Divide(const srcVector: PT; N: SizeInt = -1;
+      const dstStride: SizeInt = 1; const srcStride: SizeInt = 1); overload;
 
     procedure &or(const a: PT; const start: SizeInt = 0; N: SizeInt = 0); overload;
     procedure &and(const a: PT; const start: SizeInt = 0; N: SizeInt = 0); overload;
     procedure &xor(const a: PT; const start: SizeInt = 0; N: SizeInt = 0); overload;
 
-    // Tensor Tensor Operation ( takes Groups into considration)
-    procedure Add(const src: TTensor<T>; const offset :SizeInt =0; aSize:SizeInt =0); overload;
+    // Tensor Tensor Operation (inplace)
+    procedure Add(const src: TTensor<T>; const dstOffset: SizeInt = 0;
+      const srcOffset: SizeInt = 0; aSize: SizeInt = 0); overload;
     procedure Subtract(const src: TTensor<T>); overload;
-    procedure Multiply(const src: TTensor<T>; const offset :SizeInt =0; aSize:SizeInt =0); overload;
+    procedure Multiply(const src: TTensor<T>; const offset: SizeInt = 0;
+      aSize: SizeInt = 0); overload;
     procedure Divide(const src: TTensor<T>); overload;
+
     procedure fusedMultiplyAdd(const scale, bias: TTensor<T>); overload;
     procedure axpy(const a: T; const x: TTensor<T>); overload;
     function threshold(const AThreshold: T; const ifAbove: PT = nil;
@@ -621,21 +655,28 @@ type
     function absThreshold(const AThreshold: T; const ifAbove: PT = nil;
       const ifElse: PT = nil; const stride: SizeInt = 1): SizeInt; overload;
 
-    procedure forwardScale(const src:TTensor<T>; const offset :SizeInt =0; aSize:SizeInt =0);
-    procedure forwardBias(const src: TTensor<T>; const offset :SizeInt =0; aSize:SizeInt =0);
+    procedure forwardScale(const src: TTensor<T>; const offset: SizeInt = 0;
+      aSize: SizeInt = 0);
+    procedure forwardBias(const src: TTensor<T>; const offset: SizeInt = 0;
+      aSize: SizeInt = 0);
     //procedure
-    procedure addSums(const src: TTensor<T>; const srcOffset :SizeInt =0; srcSize:SizeInt =0);
-    procedure addDots(const src1, src2: TTensor<T>; const offset: SizeInt =0);
+    procedure addSums(const src: TTensor<T>; const srcOffset: SizeInt = 0;
+      N: SizeInt = 0);
+    procedure addDots(const src1, src2: TTensor<T>; const offset: SizeInt = 0;
+      N: SizeInt = 0);
     procedure blockAdd(const src: TTensor<T>; const blockSize: SizeInt); overload;
     procedure blockSubtract(const src: TTensor<T>; const blockSize: SizeInt); overload;
     procedure blockMultiply(const src: TTensor<T>; const blockSize: SizeInt); overload;
     procedure blockDivide(const src: TTensor<T>; const blockSize: SizeInt); overload;
 
     // Tensor Scalar operation
-    procedure Add(const src: T; N: SizeInt = -1; const dstStride: SizeInt = 1); overload;
-    procedure Subtract(const src: T; N: SizeInt = -1; const dstStride: SizeInt = 1); overload;
-    procedure Multiply(const src: T; N: SizeInt = -1; const dstStride: SizeInt = 1); overload;
-    procedure Divide(const src: T; N: SizeInt = -1; const dstStride: SizeInt = 1); overload;
+    procedure Add(const src: T; N: SizeInt = -1; const dstStride: SizeInt = 1; const dstOffset:SizeInt = 0); overload;
+    procedure Subtract(const src: T; N: SizeInt = -1; const dstStride: SizeInt = 1);
+      overload;
+    procedure Multiply(const src: T; N: SizeInt = -1; const dstStride: SizeInt = 1);
+      overload;
+    procedure Divide(const src: T; N: SizeInt = -1; const dstStride: SizeInt = 1);
+      overload;
     procedure FusedMultiplyAdd(const scale, bias: T; const offset: SizeInt = 0;
       N: SizeInt = 0; const stride: SizeInt = 1); overload;
 
@@ -653,15 +694,19 @@ type
     procedure toSingles(const dst: PSingle; const start: SizeInt = 0; N: SizeInt = 0);
     procedure toDoubles(const dst: PDouble; const start: SizeInt = 0; N: SizeInt = 0);
 
-    procedure axpy(const a: T; const x: PT; N: SizeInt = -1; const offset: SizeInt = 0;
-      dstStride: SizeInt = 1; xStride: SizeInt = 1); overload;
+    procedure axpy(const a: T; const x: PT; N: SizeInt = -1;
+      const offset: SizeInt = 0; dstStride: SizeInt = 1; xStride: SizeInt = 1); overload;
     function dot(const src: PT; N: SizeInt = -1; const Stride: SizeInt = 1;
       const srcStride: SizeInt = 1): T; overload;
-    function sumSqrDiff(const src: PT; N: SizeInt = -1; const Stride: SizeInt = 1; const srcStride: SizeInt = 1): T; overload;
+    function sumSqrDiff(const src: PT; N: SizeInt = 0; const Stride: SizeInt = 1;
+      const srcStride: SizeInt = 1; const offset: SizeInt = 0): T; overload;
     function sumSqrDiff(const src: T; const Stride: SizeInt = 1): T; overload;
-    function sumAbsDiff(const src: PT; N: SizeInt = -1; const Stride: SizeInt = 1; const srcStride: SizeInt = 1): T; overload;
+    function sumAbsDiff(const src: PT; N: SizeInt = 0; const Stride: SizeInt = 1;
+      const srcStride: SizeInt = 1): T; overload;
     function sumAbsDiff(const src: T; const Stride: SizeInt = 1): T; overload;
-    procedure matMul(const mat, dstMat: TTensor<T>; const transA: CBLAS_TRANSPOSE = CblasNoTrans; transB: CBLAS_TRANSPOSE = CblasNoTrans); overload;
+    procedure matMul(const mat, dstMat: TTensor<T>;
+      const transA: CBLAS_TRANSPOSE = CblasNoTrans;
+      transB: CBLAS_TRANSPOSE = CblasNoTrans); overload;
     function matMul(const mat: TTensor<T>; const transA: CBLAS_TRANSPOSE = CblasNoTrans;
       transB: CBLAS_TRANSPOSE = CblasNoTrans): TTensor<T>; overload;
     function matDeterminant(): T; overload;
@@ -704,19 +749,24 @@ type
     function Area(): SizeInt;
     function Volume(): SizeInt;
 
-    function Sum(const stride: SizeInt = 1; N:SizeInt=0): T; overload;
+    function Sum(const stride: SizeInt = 1; N: SizeInt = 0;
+      const offset: SizeInt = 0): T; overload;
     procedure Sums(const dst: PT; groups: SizeInt = 0;
       const activation: TUnaryPFunc = nil; const _data: PT = nil); overload;
-    function mean(const stride: SizeInt = 1; N:SizeInt=0): T;
-    function Variance(const stride: SizeInt = 1; N:SizeInt=0): T; overload;
-    function stdDev(const stride: SizeInt = 1; N:SizeInt=0): T;
-    procedure MeanAndVar(var aMean, aVar: T; const stride:SizeInt=1; N:SizeInt=0); overload;
+    function mean(const stride: SizeInt = 1; N: SizeInt = 0;
+      const offset: SizeInt = 0): T;
+    function Variance(const stride: SizeInt = 1; N: SizeInt = 0): T; overload;
+    function stdDev(const stride: SizeInt = 1; N: SizeInt = 0): T;
+    procedure MeanAndVar(var aMean, aVar: T; const stride: SizeInt = 1;
+      N: SizeInt = 0; const offset: SizeInt = 0); overload;
     procedure Normalize(const aMean, aStdDev: T); overload;
     procedure Normalize(); overload;
-    procedure Normalize(const aMean, aStdDev: TTensor<T>; const offset:SizeInt =0; aSize:SizeInt =0); overload;
+    procedure Normalize(const aMean, aStdDev: TTensor<T>;
+      const offset: SizeInt = 0; aSize: SizeInt = 0); overload;
     procedure maxNormalize(const aScale: T);
 
-    procedure MeansAndVars(aMeans, aVars: TTensor<T>; const offset:SizeInt =0; aSize : SizeInt =0);
+    procedure MeansAndVars(aMeans, aVars: TTensor<T>; const offset: SizeInt = 0;
+      aSize: SizeInt = 0);
 
     function MSE(const vector: pointer; N: SizeInt): T;
 
@@ -733,7 +783,7 @@ type
     procedure maxs(const dst: PT; groups: SizeInt = 0); overload;
 
     procedure minMax(var outMin, outMax: T; var outArgMin, outArgMax: SizeInt;
-      const stride: SizeInt = 1; N:SizeInt = 0); overload;
+      const stride: SizeInt = 1; N: SizeInt = 0; const offset: SizeInt = 0); overload;
 
     procedure Clamp(const aMin, aMax: T; const dst: PT = nil);
     function argMin(const stride: SizeInt = 1): SizeInt; overload;
@@ -744,27 +794,40 @@ type
     procedure argMinAbs(const dst: PInt64); overload;
     procedure argMaxAbs(const dst: PInt64); overload;
 
-    procedure argMin(const dst: PInt32); overload;
-    procedure argMax(const dst: PInt32); overload;
-    procedure argMinAbs(const dst: PInt32); overload;
-    procedure argMaxAbs(const dst: PInt32); overload;
+    procedure argMin32(const dst: PInt32); overload;
+    procedure argMax32(const dst: PInt32); overload;
+    procedure argMinAbs32(const dst: PInt32); overload;
+    procedure argMaxAbs32(const dst: PInt32); overload;
 
     function minAbs(const stride: SizeInt = 1): T; overload;
     function maxAbs(const stride: SizeInt = 1): T; overload;
 
-    procedure sin(const dst: PT; const stride: SizeInt = 1; const dstStride: SizeInt = 1);
-    procedure cos(const dst: PT; const stride: SizeInt = 1; const dstStride: SizeInt = 1);
-    procedure tan(const dst: PT; const stride: SizeInt = 1; const dstStride: SizeInt = 1);
-    procedure cotan(const dst: PT; const stride: SizeInt = 1; const dstStride: SizeInt = 1);
-    procedure tanH(const dst: PT; const stride: SizeInt = 1; const dstStride: SizeInt = 1);
-    procedure arcSin(const dst: PT; const stride: SizeInt = 1; const dstStride: SizeInt = 1);
-    procedure arcCos(const dst: PT; const stride: SizeInt = 1; const dstStride: SizeInt = 1);
-    procedure arcTan(const dst: PT; const stride: SizeInt = 1; const dstStride: SizeInt = 1);
-    procedure arcSinH(const dst: PT; const stride: SizeInt = 1; const dstStride: SizeInt = 1);
-    procedure arcCosH(const dst: PT; const stride: SizeInt = 1; const dstStride: SizeInt = 1);
-    procedure arcTanH(const dst: PT; const stride: SizeInt = 1; const dstStride: SizeInt = 1);
-    procedure log10(const dst: PT; const stride: SizeInt = 1; const dstStride: SizeInt = 1);
-    procedure log2(const dst: PT; const stride: SizeInt = 1; const dstStride: SizeInt = 1);
+    procedure sin(const dst: PT; const stride: SizeInt = 1;
+      const dstStride: SizeInt = 1);
+    procedure cos(const dst: PT; const stride: SizeInt = 1;
+      const dstStride: SizeInt = 1);
+    procedure tan(const dst: PT; const stride: SizeInt = 1;
+      const dstStride: SizeInt = 1);
+    procedure cotan(const dst: PT; const stride: SizeInt = 1;
+      const dstStride: SizeInt = 1);
+    procedure tanH(const dst: PT; const stride: SizeInt = 1;
+      const dstStride: SizeInt = 1);
+    procedure arcSin(const dst: PT; const stride: SizeInt = 1;
+      const dstStride: SizeInt = 1);
+    procedure arcCos(const dst: PT; const stride: SizeInt = 1;
+      const dstStride: SizeInt = 1);
+    procedure arcTan(const dst: PT; const stride: SizeInt = 1;
+      const dstStride: SizeInt = 1);
+    procedure arcSinH(const dst: PT; const stride: SizeInt = 1;
+      const dstStride: SizeInt = 1);
+    procedure arcCosH(const dst: PT; const stride: SizeInt = 1;
+      const dstStride: SizeInt = 1);
+    procedure arcTanH(const dst: PT; const stride: SizeInt = 1;
+      const dstStride: SizeInt = 1);
+    procedure log10(const dst: PT; const stride: SizeInt = 1;
+      const dstStride: SizeInt = 1);
+    procedure log2(const dst: PT; const stride: SizeInt = 1;
+      const dstStride: SizeInt = 1);
 
     procedure addGaussianNoise(const aStdDev: T); overload;
     procedure addUniformNoise(const aErr: T); overload;
@@ -773,29 +836,45 @@ type
     function cosineSimilarity(src: PT): T;
     procedure LerpValues(const _min, _max, _min2, _max2: T);
     function countNotValue(const src: T; const stride: SizeInt = 1): SizeInt; overload;
-    function countValue(const src: T; const stride: SizeInt = 1): SizeInt;
-    function findValues(const N:SizeInt; const values:PT):TArray<SizeInt>; overload;
-    function findValues(const values:TArray<T>):TArray<SizeInt>; overload;
+    function countValue(const src: T; const stride: SizeInt = 1): SizeInt; overload;
+    function findValues(const N: SizeInt; const values: PT;
+      const inverted: boolean = False; const tolerance: T = nothing): TArray<SizeInt>;
+      overload;
+    function findValues(const values: TArray<T>; const inverted: boolean = False;
+      const tolerance: T = nothing): TArray<SizeInt>; overload;
     procedure polynomial(const coef: TArray<T>); overload;
     procedure polynomial(const coef: TArray<T>; const aStdDev: T); overload;
-    procedure histogram(const aCount: SizeInt; var dst: PInteger; outMin: PT = nil; outMax: PT = nil); overload;
+    procedure histogram(const aCount: SizeInt; var dst: PInteger;
+      outMin: PT = nil; outMax: PT = nil); overload;
 
-    function Histogram(const aCount: SizeInt; outMin:PT = nil ; outMax:PT = nil): TArray<integer>; overload;
+    function Histogram(const aCount: SizeInt; outMin: PT = nil;
+      outMax: PT = nil): TArray<integer>; overload;
 
-    function plot(const xAxis: TTensor<T>):TArray<SizeInt>; overload;
-    function plot():TArray<SizeInt>; overload;
+    function plot(const xAxis: TTensor<T>): TArray<SizeInt>; overload;
+    function plot(): TArray<SizeInt>; overload;
 
-    function print(const consolePixel: TTensorPrintStyle = psValues; tile: SizeInt = 1; minVal: double = 0; maxVal: double = 0):TArray<SizeInt>; overload;
-    function print(const scale: single; const gray: boolean = False; const tile: SizeInt = 1):TArray<SizeInt>; overload;
-    function print(const scale: single; const idx: SizeInt):TArray<SizeInt>; overload;
-    procedure printStat(N: SizeInt=0);
+    // ToDo : [Print] the last line of odd print "tile" or "group" numbers is not printing
+    function print(const consolePixel: TTensorPrintStyle = psValues;
+      tile: SizeInt = 1; minVal: double = 0; maxVal: double = 0): TArray<SizeInt>;
+      overload;
+    function print(const scale: single; const gray: boolean = False;
+      const tile: SizeInt = 1): TArray<SizeInt>; overload;
+    function print(const scale: single; const idx: SizeInt): TArray<SizeInt>; overload;
+    procedure printStat(N: SizeInt = 0; const offset: SizeInt = 0);
+    {$ifdef USE_OPENCL}
+    procedure printGpuStat(N: SizeInt=0; const offset:SizeInt =0);
+    procedure printGpuSumSqrDiff(N: SizeInt=0; const offset:SizeInt =0);
+    procedure printGpuDiff(N: SizeInt=0; const offset:SizeInt =0; const tolerance:T = nothing);
+    function GpuSumSqrDiff(N: SizeInt=0; const offset:SizeInt =0):T;
+    {$endif}
     function typeName(): string;
 
     procedure im2Col(const kernelWidth, kernelHeight, padWidth,
-      padHeight, strideX, strideY, dilationX, dilationY: SizeInt; var dst: TTensor<T>;
-      const AGroups: SizeInt = 1);
-    procedure col2Im(const kernelWidth, kernelHeight, padWidth, padHeight, strideX, strideY, dilationX, dilationY: SizeInt; var src: TTensor<T>;
-      const AGroups: SizeInt = 1);
+      padHeight, strideX, strideY, dilationX, dilationY: SizeInt;
+      var dst: TTensor<T>; const AGroups: SizeInt = 1);
+    procedure col2Im(const kernelWidth, kernelHeight, padWidth,
+      padHeight, strideX, strideY, dilationX, dilationY: SizeInt;
+      var src: TTensor<T>; const AGroups: SizeInt = 1);
     function map(const func: TMapFunc<T>): TTensor<T>; overload;
     function map(const func: TMapFuncLambda<T>): TTensor<T>; overload;
     procedure map(const func: TMapFunc<T>; var dst: TTensor<T>); overload;
@@ -813,23 +892,37 @@ type
 
     procedure getGroup(const idx: SizeInt; const dst: PT); overload;
     property Group[idx: SizeInt]: TTensor<T> read GetGroup write SetGroup;
-    class procedure histogram(const N: SizeInt; const src: PT; const aCount: SizeInt; dst: PInteger; outMin: PT = nil; outMax: PT = nil); overload; static;
-    class function SolveLeastSquares(const a: PT; const M, N, rwidtha: SizeInt; const b: PT; var x: PT): integer; overload; static;
-    class function FitPloynomial(const M: SizeInt; degree: SizeInt; const x, y: PT; var b: PT): integer; static;
+    class procedure histogram(const N: SizeInt; const src: PT;
+      const aCount: SizeInt; dst: PInteger; outMin: PT = nil; outMax: PT = nil);
+      overload; static;
+    class function SolveLeastSquares(const a: PT; const M, N, rwidtha: SizeInt;
+      const b: PT; var x: PT): integer; overload; static;
+    class function FitPloynomial(const M: SizeInt; degree: SizeInt;
+      const x, y: PT; var b: PT): integer; static;
 
-    class function countMatch(const N: SizeInt; const src1: PT; const stride1: SizeInt; const src2: PT; const stride2: SizeInt): SizeInt; static;
-    class function countNotValue(const N: SizeInt; const val: T; const src: PT; const stride: SizeInt = 1): SizeInt; overload; static;
-    class function countValue(const N: SizeInt; const val: T; const src: PT; const stride: SizeInt = 1): SizeInt; overload; static;
-    class procedure map(const func: TMapFunc<T>; const src: TTensor<T>; var dst: TTensor<T>); overload; static;
-    class procedure map(const func: TMapFuncLambda<T>; const src: TTensor<T>; var dst: TTensor<T>); overload; static;
-    class function reduce(const func: TReduceProc<T, PT>; const src: PT; const N, stride: SizeInt; const start: T): T; overload; static;
-    class function reduce(const func: TReduceProcLambda<T, PT>; const src: PT; const N, stride: SizeInt; const start: T): T; overload; static;
+    class function countMatch(const N: SizeInt; const src1: PT;
+      const stride1: SizeInt; const src2: PT; const stride2: SizeInt): SizeInt; static;
+    class function countNotValue(const N: SizeInt; const val: T;
+      const src: PT; const stride: SizeInt = 1): SizeInt; overload; static;
+    class function countValue(const N: SizeInt; const val: T;
+      const src: PT; const stride: SizeInt = 1): SizeInt; overload; static;
+    class procedure map(const func: TMapFunc<T>; const src: TTensor<T>;
+      var dst: TTensor<T>); overload; static;
+    class procedure map(const func: TMapFuncLambda<T>; const src: TTensor<T>;
+      var dst: TTensor<T>); overload; static;
+    class function reduce(const func: TReduceProc<T, PT>; const src: PT;
+      const N, stride: SizeInt; const start: T): T; overload; static;
+    class function reduce(const func: TReduceProcLambda<T, PT>;
+      const src: PT; const N, stride: SizeInt; const start: T): T; overload; static;
 
-    class function reduce(const func: TReduceProc<T, PT>; const src: PT; const N: SizeInt; const stride: SizeInt = 1): T; overload; static;
-    class function reduce(const func: TReduceProcLambda<T, PT>; const src: PT; const N: SizeInt; const stride: SizeInt = 1): T; overload; static;
+    class function reduce(const func: TReduceProc<T, PT>; const src: PT;
+      const N: SizeInt; const stride: SizeInt = 1): T; overload; static;
+    class function reduce(const func: TReduceProcLambda<T, PT>;
+      const src: PT; const N: SizeInt; const stride: SizeInt = 1): T; overload; static;
 
     class function product(const e: TSizes): SizeInt; overload; static;
-    class function product(const N:SizeInt; const e: PSizeInt): SizeInt; overload; static;
+    class function product(const N: SizeInt; const e: PSizeInt): SizeInt;
+      overload; static;
     class operator Implicit(arr: TArray<T>): TTensor<T>;
     class operator Implicit(arr: TArray<TArray<T>>): TTensor<T>;
     class operator Implicit(arr: TArray<TArray<TArray<T>>>): TTensor<T>;
@@ -890,7 +983,7 @@ type
     class procedure get_embedding(const src: PSingle;
       const src_w, src_h, src_c, embedding_size, cur_w, cur_h, cur_n, cur_b: SizeInt;
       dst: PSingle); static;
-    class procedure openPicture(const filename:string);static;
+    class procedure openPicture(const filename: string); static;
   end;
 
   { TTools }
@@ -902,9 +995,9 @@ type
       const Descending: boolean = False); static;
   end;
 
-//{$if defined(CPUX64)}
-//procedure nn_fast(const A, B, C:PSingle; const ALPHA:single; const lda, ldb, ldc, i, CN, k:IntPtr);assembler;
-//  {$endif}
+  //{$if defined(CPUX64)}
+  //procedure nn_fast(const A, B, C:PSingle; const ALPHA:single; const lda, ldb, ldc, i, CN, k:IntPtr);assembler;
+  //  {$endif}
 
 procedure cblas_sgemm(const Order: CBLAS_LAYOUT; const TransA, TransB: CBLAS_TRANSPOSE;
   const M, N, K: SizeInt; const ALPHA: single; const A: PSingle;
@@ -934,7 +1027,12 @@ procedure FillWord(var x; const count:SizeInt; const value:Word);
 function cblas_sdot(const N: SizeInt; const A: PSingle; const inca: SizeInt;
   const B: PSingle; const incb: SizeInt): single;
 function ftos(f: double; prec: integer = 0): string;
-procedure _line(const x0, y0, x1, y1: integer; const color: longword; const d: TBitPixels);
+procedure _line(const x0, y0, x1, y1: integer; const color: longword;
+  const d: TBitPixels);
+
+
+procedure FP16ToSingle(const N:SizeInt; const src:PHalf; dst:PSingle);
+procedure SingleTpFP16(const N:SizeInt; const src:PSingle; dst:PHalf);
 
 const
 
@@ -952,14 +1050,14 @@ const
   sSeparator: string = ',';
 
 var
-  rand_seed :uint32;
+  rand_seed: uint32;
   _mutex: TCriticalSection;
   saxpy: procedure(const N: SizeInt; const a: single; const x, y: PSingle);
   sdot: function(const N: SizeInt; const x, y: PSingle): single;
   daxpy: procedure(const N: SizeInt; const a: double; const x, y: PDouble);
   ddot: function(const N: SizeInt; const x, y: PDouble): double;
 
-  {$ifdef MSWINDOWS}
+{$ifdef MSWINDOWS}
 const
   kernel32 = 'kernel32.dll';
   STD_INPUT_HANDLE = DWORD(-10);
@@ -1003,10 +1101,10 @@ function CloseHandle(hObject: THandle): boolean; external kernel32;
 function WriteConsole(hConsoleOutput: THandle; const lpBuffer: Pointer;
   nNumberOfCharsToWrite: longword; var lpNumberOfCharsWritten: longword;
   lpReserved: Pointer): boolean; external kernel32 Name 'WriteConsoleA';
+{$endif}
 
-  {$endif}
-procedure srnd(const v:uint32);
-function rnd():integer;
+procedure srnd(const v: uint32);
+function rnd(): integer;
 
 {$ifdef USE_OPENCL}
 
@@ -1022,6 +1120,229 @@ var
 {$endif}
 
 implementation
+
+
+type
+    // 32-bit union for conversions
+  ConversionBits = record
+    case boolean of
+      false : (i32: longword);
+      true  : (f32: single);
+  end;
+
+procedure FP16ToSingle(const N: SizeInt; const src: PHalf; dst: PSingle);
+const mantissa_table:array[0..2047] of longword = (
+    $00000000, $33800000, $34000000, $34400000, $34800000, $34A00000, $34C00000, $34E00000, $35000000, $35100000, $35200000, $35300000, $35400000, $35500000, $35600000, $35700000,
+    $35800000, $35880000, $35900000, $35980000, $35A00000, $35A80000, $35B00000, $35B80000, $35C00000, $35C80000, $35D00000, $35D80000, $35E00000, $35E80000, $35F00000, $35F80000,
+    $36000000, $36040000, $36080000, $360C0000, $36100000, $36140000, $36180000, $361C0000, $36200000, $36240000, $36280000, $362C0000, $36300000, $36340000, $36380000, $363C0000,
+    $36400000, $36440000, $36480000, $364C0000, $36500000, $36540000, $36580000, $365C0000, $36600000, $36640000, $36680000, $366C0000, $36700000, $36740000, $36780000, $367C0000,
+    $36800000, $36820000, $36840000, $36860000, $36880000, $368A0000, $368C0000, $368E0000, $36900000, $36920000, $36940000, $36960000, $36980000, $369A0000, $369C0000, $369E0000,
+    $36A00000, $36A20000, $36A40000, $36A60000, $36A80000, $36AA0000, $36AC0000, $36AE0000, $36B00000, $36B20000, $36B40000, $36B60000, $36B80000, $36BA0000, $36BC0000, $36BE0000,
+    $36C00000, $36C20000, $36C40000, $36C60000, $36C80000, $36CA0000, $36CC0000, $36CE0000, $36D00000, $36D20000, $36D40000, $36D60000, $36D80000, $36DA0000, $36DC0000, $36DE0000,
+    $36E00000, $36E20000, $36E40000, $36E60000, $36E80000, $36EA0000, $36EC0000, $36EE0000, $36F00000, $36F20000, $36F40000, $36F60000, $36F80000, $36FA0000, $36FC0000, $36FE0000,
+    $37000000, $37010000, $37020000, $37030000, $37040000, $37050000, $37060000, $37070000, $37080000, $37090000, $370A0000, $370B0000, $370C0000, $370D0000, $370E0000, $370F0000,
+    $37100000, $37110000, $37120000, $37130000, $37140000, $37150000, $37160000, $37170000, $37180000, $37190000, $371A0000, $371B0000, $371C0000, $371D0000, $371E0000, $371F0000,
+    $37200000, $37210000, $37220000, $37230000, $37240000, $37250000, $37260000, $37270000, $37280000, $37290000, $372A0000, $372B0000, $372C0000, $372D0000, $372E0000, $372F0000,
+    $37300000, $37310000, $37320000, $37330000, $37340000, $37350000, $37360000, $37370000, $37380000, $37390000, $373A0000, $373B0000, $373C0000, $373D0000, $373E0000, $373F0000,
+    $37400000, $37410000, $37420000, $37430000, $37440000, $37450000, $37460000, $37470000, $37480000, $37490000, $374A0000, $374B0000, $374C0000, $374D0000, $374E0000, $374F0000,
+    $37500000, $37510000, $37520000, $37530000, $37540000, $37550000, $37560000, $37570000, $37580000, $37590000, $375A0000, $375B0000, $375C0000, $375D0000, $375E0000, $375F0000,
+    $37600000, $37610000, $37620000, $37630000, $37640000, $37650000, $37660000, $37670000, $37680000, $37690000, $376A0000, $376B0000, $376C0000, $376D0000, $376E0000, $376F0000,
+    $37700000, $37710000, $37720000, $37730000, $37740000, $37750000, $37760000, $37770000, $37780000, $37790000, $377A0000, $377B0000, $377C0000, $377D0000, $377E0000, $377F0000,
+    $37800000, $37808000, $37810000, $37818000, $37820000, $37828000, $37830000, $37838000, $37840000, $37848000, $37850000, $37858000, $37860000, $37868000, $37870000, $37878000,
+    $37880000, $37888000, $37890000, $37898000, $378A0000, $378A8000, $378B0000, $378B8000, $378C0000, $378C8000, $378D0000, $378D8000, $378E0000, $378E8000, $378F0000, $378F8000,
+    $37900000, $37908000, $37910000, $37918000, $37920000, $37928000, $37930000, $37938000, $37940000, $37948000, $37950000, $37958000, $37960000, $37968000, $37970000, $37978000,
+    $37980000, $37988000, $37990000, $37998000, $379A0000, $379A8000, $379B0000, $379B8000, $379C0000, $379C8000, $379D0000, $379D8000, $379E0000, $379E8000, $379F0000, $379F8000,
+    $37A00000, $37A08000, $37A10000, $37A18000, $37A20000, $37A28000, $37A30000, $37A38000, $37A40000, $37A48000, $37A50000, $37A58000, $37A60000, $37A68000, $37A70000, $37A78000,
+    $37A80000, $37A88000, $37A90000, $37A98000, $37AA0000, $37AA8000, $37AB0000, $37AB8000, $37AC0000, $37AC8000, $37AD0000, $37AD8000, $37AE0000, $37AE8000, $37AF0000, $37AF8000,
+    $37B00000, $37B08000, $37B10000, $37B18000, $37B20000, $37B28000, $37B30000, $37B38000, $37B40000, $37B48000, $37B50000, $37B58000, $37B60000, $37B68000, $37B70000, $37B78000,
+    $37B80000, $37B88000, $37B90000, $37B98000, $37BA0000, $37BA8000, $37BB0000, $37BB8000, $37BC0000, $37BC8000, $37BD0000, $37BD8000, $37BE0000, $37BE8000, $37BF0000, $37BF8000,
+    $37C00000, $37C08000, $37C10000, $37C18000, $37C20000, $37C28000, $37C30000, $37C38000, $37C40000, $37C48000, $37C50000, $37C58000, $37C60000, $37C68000, $37C70000, $37C78000,
+    $37C80000, $37C88000, $37C90000, $37C98000, $37CA0000, $37CA8000, $37CB0000, $37CB8000, $37CC0000, $37CC8000, $37CD0000, $37CD8000, $37CE0000, $37CE8000, $37CF0000, $37CF8000,
+    $37D00000, $37D08000, $37D10000, $37D18000, $37D20000, $37D28000, $37D30000, $37D38000, $37D40000, $37D48000, $37D50000, $37D58000, $37D60000, $37D68000, $37D70000, $37D78000,
+    $37D80000, $37D88000, $37D90000, $37D98000, $37DA0000, $37DA8000, $37DB0000, $37DB8000, $37DC0000, $37DC8000, $37DD0000, $37DD8000, $37DE0000, $37DE8000, $37DF0000, $37DF8000,
+    $37E00000, $37E08000, $37E10000, $37E18000, $37E20000, $37E28000, $37E30000, $37E38000, $37E40000, $37E48000, $37E50000, $37E58000, $37E60000, $37E68000, $37E70000, $37E78000,
+    $37E80000, $37E88000, $37E90000, $37E98000, $37EA0000, $37EA8000, $37EB0000, $37EB8000, $37EC0000, $37EC8000, $37ED0000, $37ED8000, $37EE0000, $37EE8000, $37EF0000, $37EF8000,
+    $37F00000, $37F08000, $37F10000, $37F18000, $37F20000, $37F28000, $37F30000, $37F38000, $37F40000, $37F48000, $37F50000, $37F58000, $37F60000, $37F68000, $37F70000, $37F78000,
+    $37F80000, $37F88000, $37F90000, $37F98000, $37FA0000, $37FA8000, $37FB0000, $37FB8000, $37FC0000, $37FC8000, $37FD0000, $37FD8000, $37FE0000, $37FE8000, $37FF0000, $37FF8000,
+    $38000000, $38004000, $38008000, $3800C000, $38010000, $38014000, $38018000, $3801C000, $38020000, $38024000, $38028000, $3802C000, $38030000, $38034000, $38038000, $3803C000,
+    $38040000, $38044000, $38048000, $3804C000, $38050000, $38054000, $38058000, $3805C000, $38060000, $38064000, $38068000, $3806C000, $38070000, $38074000, $38078000, $3807C000,
+    $38080000, $38084000, $38088000, $3808C000, $38090000, $38094000, $38098000, $3809C000, $380A0000, $380A4000, $380A8000, $380AC000, $380B0000, $380B4000, $380B8000, $380BC000,
+    $380C0000, $380C4000, $380C8000, $380CC000, $380D0000, $380D4000, $380D8000, $380DC000, $380E0000, $380E4000, $380E8000, $380EC000, $380F0000, $380F4000, $380F8000, $380FC000,
+    $38100000, $38104000, $38108000, $3810C000, $38110000, $38114000, $38118000, $3811C000, $38120000, $38124000, $38128000, $3812C000, $38130000, $38134000, $38138000, $3813C000,
+    $38140000, $38144000, $38148000, $3814C000, $38150000, $38154000, $38158000, $3815C000, $38160000, $38164000, $38168000, $3816C000, $38170000, $38174000, $38178000, $3817C000,
+    $38180000, $38184000, $38188000, $3818C000, $38190000, $38194000, $38198000, $3819C000, $381A0000, $381A4000, $381A8000, $381AC000, $381B0000, $381B4000, $381B8000, $381BC000,
+    $381C0000, $381C4000, $381C8000, $381CC000, $381D0000, $381D4000, $381D8000, $381DC000, $381E0000, $381E4000, $381E8000, $381EC000, $381F0000, $381F4000, $381F8000, $381FC000,
+    $38200000, $38204000, $38208000, $3820C000, $38210000, $38214000, $38218000, $3821C000, $38220000, $38224000, $38228000, $3822C000, $38230000, $38234000, $38238000, $3823C000,
+    $38240000, $38244000, $38248000, $3824C000, $38250000, $38254000, $38258000, $3825C000, $38260000, $38264000, $38268000, $3826C000, $38270000, $38274000, $38278000, $3827C000,
+    $38280000, $38284000, $38288000, $3828C000, $38290000, $38294000, $38298000, $3829C000, $382A0000, $382A4000, $382A8000, $382AC000, $382B0000, $382B4000, $382B8000, $382BC000,
+    $382C0000, $382C4000, $382C8000, $382CC000, $382D0000, $382D4000, $382D8000, $382DC000, $382E0000, $382E4000, $382E8000, $382EC000, $382F0000, $382F4000, $382F8000, $382FC000,
+    $38300000, $38304000, $38308000, $3830C000, $38310000, $38314000, $38318000, $3831C000, $38320000, $38324000, $38328000, $3832C000, $38330000, $38334000, $38338000, $3833C000,
+    $38340000, $38344000, $38348000, $3834C000, $38350000, $38354000, $38358000, $3835C000, $38360000, $38364000, $38368000, $3836C000, $38370000, $38374000, $38378000, $3837C000,
+    $38380000, $38384000, $38388000, $3838C000, $38390000, $38394000, $38398000, $3839C000, $383A0000, $383A4000, $383A8000, $383AC000, $383B0000, $383B4000, $383B8000, $383BC000,
+    $383C0000, $383C4000, $383C8000, $383CC000, $383D0000, $383D4000, $383D8000, $383DC000, $383E0000, $383E4000, $383E8000, $383EC000, $383F0000, $383F4000, $383F8000, $383FC000,
+    $38400000, $38404000, $38408000, $3840C000, $38410000, $38414000, $38418000, $3841C000, $38420000, $38424000, $38428000, $3842C000, $38430000, $38434000, $38438000, $3843C000,
+    $38440000, $38444000, $38448000, $3844C000, $38450000, $38454000, $38458000, $3845C000, $38460000, $38464000, $38468000, $3846C000, $38470000, $38474000, $38478000, $3847C000,
+    $38480000, $38484000, $38488000, $3848C000, $38490000, $38494000, $38498000, $3849C000, $384A0000, $384A4000, $384A8000, $384AC000, $384B0000, $384B4000, $384B8000, $384BC000,
+    $384C0000, $384C4000, $384C8000, $384CC000, $384D0000, $384D4000, $384D8000, $384DC000, $384E0000, $384E4000, $384E8000, $384EC000, $384F0000, $384F4000, $384F8000, $384FC000,
+    $38500000, $38504000, $38508000, $3850C000, $38510000, $38514000, $38518000, $3851C000, $38520000, $38524000, $38528000, $3852C000, $38530000, $38534000, $38538000, $3853C000,
+    $38540000, $38544000, $38548000, $3854C000, $38550000, $38554000, $38558000, $3855C000, $38560000, $38564000, $38568000, $3856C000, $38570000, $38574000, $38578000, $3857C000,
+    $38580000, $38584000, $38588000, $3858C000, $38590000, $38594000, $38598000, $3859C000, $385A0000, $385A4000, $385A8000, $385AC000, $385B0000, $385B4000, $385B8000, $385BC000,
+    $385C0000, $385C4000, $385C8000, $385CC000, $385D0000, $385D4000, $385D8000, $385DC000, $385E0000, $385E4000, $385E8000, $385EC000, $385F0000, $385F4000, $385F8000, $385FC000,
+    $38600000, $38604000, $38608000, $3860C000, $38610000, $38614000, $38618000, $3861C000, $38620000, $38624000, $38628000, $3862C000, $38630000, $38634000, $38638000, $3863C000,
+    $38640000, $38644000, $38648000, $3864C000, $38650000, $38654000, $38658000, $3865C000, $38660000, $38664000, $38668000, $3866C000, $38670000, $38674000, $38678000, $3867C000,
+    $38680000, $38684000, $38688000, $3868C000, $38690000, $38694000, $38698000, $3869C000, $386A0000, $386A4000, $386A8000, $386AC000, $386B0000, $386B4000, $386B8000, $386BC000,
+    $386C0000, $386C4000, $386C8000, $386CC000, $386D0000, $386D4000, $386D8000, $386DC000, $386E0000, $386E4000, $386E8000, $386EC000, $386F0000, $386F4000, $386F8000, $386FC000,
+    $38700000, $38704000, $38708000, $3870C000, $38710000, $38714000, $38718000, $3871C000, $38720000, $38724000, $38728000, $3872C000, $38730000, $38734000, $38738000, $3873C000,
+    $38740000, $38744000, $38748000, $3874C000, $38750000, $38754000, $38758000, $3875C000, $38760000, $38764000, $38768000, $3876C000, $38770000, $38774000, $38778000, $3877C000,
+    $38780000, $38784000, $38788000, $3878C000, $38790000, $38794000, $38798000, $3879C000, $387A0000, $387A4000, $387A8000, $387AC000, $387B0000, $387B4000, $387B8000, $387BC000,
+    $387C0000, $387C4000, $387C8000, $387CC000, $387D0000, $387D4000, $387D8000, $387DC000, $387E0000, $387E4000, $387E8000, $387EC000, $387F0000, $387F4000, $387F8000, $387FC000,
+    $38000000, $38002000, $38004000, $38006000, $38008000, $3800A000, $3800C000, $3800E000, $38010000, $38012000, $38014000, $38016000, $38018000, $3801A000, $3801C000, $3801E000,
+    $38020000, $38022000, $38024000, $38026000, $38028000, $3802A000, $3802C000, $3802E000, $38030000, $38032000, $38034000, $38036000, $38038000, $3803A000, $3803C000, $3803E000,
+    $38040000, $38042000, $38044000, $38046000, $38048000, $3804A000, $3804C000, $3804E000, $38050000, $38052000, $38054000, $38056000, $38058000, $3805A000, $3805C000, $3805E000,
+    $38060000, $38062000, $38064000, $38066000, $38068000, $3806A000, $3806C000, $3806E000, $38070000, $38072000, $38074000, $38076000, $38078000, $3807A000, $3807C000, $3807E000,
+    $38080000, $38082000, $38084000, $38086000, $38088000, $3808A000, $3808C000, $3808E000, $38090000, $38092000, $38094000, $38096000, $38098000, $3809A000, $3809C000, $3809E000,
+    $380A0000, $380A2000, $380A4000, $380A6000, $380A8000, $380AA000, $380AC000, $380AE000, $380B0000, $380B2000, $380B4000, $380B6000, $380B8000, $380BA000, $380BC000, $380BE000,
+    $380C0000, $380C2000, $380C4000, $380C6000, $380C8000, $380CA000, $380CC000, $380CE000, $380D0000, $380D2000, $380D4000, $380D6000, $380D8000, $380DA000, $380DC000, $380DE000,
+    $380E0000, $380E2000, $380E4000, $380E6000, $380E8000, $380EA000, $380EC000, $380EE000, $380F0000, $380F2000, $380F4000, $380F6000, $380F8000, $380FA000, $380FC000, $380FE000,
+    $38100000, $38102000, $38104000, $38106000, $38108000, $3810A000, $3810C000, $3810E000, $38110000, $38112000, $38114000, $38116000, $38118000, $3811A000, $3811C000, $3811E000,
+    $38120000, $38122000, $38124000, $38126000, $38128000, $3812A000, $3812C000, $3812E000, $38130000, $38132000, $38134000, $38136000, $38138000, $3813A000, $3813C000, $3813E000,
+    $38140000, $38142000, $38144000, $38146000, $38148000, $3814A000, $3814C000, $3814E000, $38150000, $38152000, $38154000, $38156000, $38158000, $3815A000, $3815C000, $3815E000,
+    $38160000, $38162000, $38164000, $38166000, $38168000, $3816A000, $3816C000, $3816E000, $38170000, $38172000, $38174000, $38176000, $38178000, $3817A000, $3817C000, $3817E000,
+    $38180000, $38182000, $38184000, $38186000, $38188000, $3818A000, $3818C000, $3818E000, $38190000, $38192000, $38194000, $38196000, $38198000, $3819A000, $3819C000, $3819E000,
+    $381A0000, $381A2000, $381A4000, $381A6000, $381A8000, $381AA000, $381AC000, $381AE000, $381B0000, $381B2000, $381B4000, $381B6000, $381B8000, $381BA000, $381BC000, $381BE000,
+    $381C0000, $381C2000, $381C4000, $381C6000, $381C8000, $381CA000, $381CC000, $381CE000, $381D0000, $381D2000, $381D4000, $381D6000, $381D8000, $381DA000, $381DC000, $381DE000,
+    $381E0000, $381E2000, $381E4000, $381E6000, $381E8000, $381EA000, $381EC000, $381EE000, $381F0000, $381F2000, $381F4000, $381F6000, $381F8000, $381FA000, $381FC000, $381FE000,
+    $38200000, $38202000, $38204000, $38206000, $38208000, $3820A000, $3820C000, $3820E000, $38210000, $38212000, $38214000, $38216000, $38218000, $3821A000, $3821C000, $3821E000,
+    $38220000, $38222000, $38224000, $38226000, $38228000, $3822A000, $3822C000, $3822E000, $38230000, $38232000, $38234000, $38236000, $38238000, $3823A000, $3823C000, $3823E000,
+    $38240000, $38242000, $38244000, $38246000, $38248000, $3824A000, $3824C000, $3824E000, $38250000, $38252000, $38254000, $38256000, $38258000, $3825A000, $3825C000, $3825E000,
+    $38260000, $38262000, $38264000, $38266000, $38268000, $3826A000, $3826C000, $3826E000, $38270000, $38272000, $38274000, $38276000, $38278000, $3827A000, $3827C000, $3827E000,
+    $38280000, $38282000, $38284000, $38286000, $38288000, $3828A000, $3828C000, $3828E000, $38290000, $38292000, $38294000, $38296000, $38298000, $3829A000, $3829C000, $3829E000,
+    $382A0000, $382A2000, $382A4000, $382A6000, $382A8000, $382AA000, $382AC000, $382AE000, $382B0000, $382B2000, $382B4000, $382B6000, $382B8000, $382BA000, $382BC000, $382BE000,
+    $382C0000, $382C2000, $382C4000, $382C6000, $382C8000, $382CA000, $382CC000, $382CE000, $382D0000, $382D2000, $382D4000, $382D6000, $382D8000, $382DA000, $382DC000, $382DE000,
+    $382E0000, $382E2000, $382E4000, $382E6000, $382E8000, $382EA000, $382EC000, $382EE000, $382F0000, $382F2000, $382F4000, $382F6000, $382F8000, $382FA000, $382FC000, $382FE000,
+    $38300000, $38302000, $38304000, $38306000, $38308000, $3830A000, $3830C000, $3830E000, $38310000, $38312000, $38314000, $38316000, $38318000, $3831A000, $3831C000, $3831E000,
+    $38320000, $38322000, $38324000, $38326000, $38328000, $3832A000, $3832C000, $3832E000, $38330000, $38332000, $38334000, $38336000, $38338000, $3833A000, $3833C000, $3833E000,
+    $38340000, $38342000, $38344000, $38346000, $38348000, $3834A000, $3834C000, $3834E000, $38350000, $38352000, $38354000, $38356000, $38358000, $3835A000, $3835C000, $3835E000,
+    $38360000, $38362000, $38364000, $38366000, $38368000, $3836A000, $3836C000, $3836E000, $38370000, $38372000, $38374000, $38376000, $38378000, $3837A000, $3837C000, $3837E000,
+    $38380000, $38382000, $38384000, $38386000, $38388000, $3838A000, $3838C000, $3838E000, $38390000, $38392000, $38394000, $38396000, $38398000, $3839A000, $3839C000, $3839E000,
+    $383A0000, $383A2000, $383A4000, $383A6000, $383A8000, $383AA000, $383AC000, $383AE000, $383B0000, $383B2000, $383B4000, $383B6000, $383B8000, $383BA000, $383BC000, $383BE000,
+    $383C0000, $383C2000, $383C4000, $383C6000, $383C8000, $383CA000, $383CC000, $383CE000, $383D0000, $383D2000, $383D4000, $383D6000, $383D8000, $383DA000, $383DC000, $383DE000,
+    $383E0000, $383E2000, $383E4000, $383E6000, $383E8000, $383EA000, $383EC000, $383EE000, $383F0000, $383F2000, $383F4000, $383F6000, $383F8000, $383FA000, $383FC000, $383FE000,
+    $38400000, $38402000, $38404000, $38406000, $38408000, $3840A000, $3840C000, $3840E000, $38410000, $38412000, $38414000, $38416000, $38418000, $3841A000, $3841C000, $3841E000,
+    $38420000, $38422000, $38424000, $38426000, $38428000, $3842A000, $3842C000, $3842E000, $38430000, $38432000, $38434000, $38436000, $38438000, $3843A000, $3843C000, $3843E000,
+    $38440000, $38442000, $38444000, $38446000, $38448000, $3844A000, $3844C000, $3844E000, $38450000, $38452000, $38454000, $38456000, $38458000, $3845A000, $3845C000, $3845E000,
+    $38460000, $38462000, $38464000, $38466000, $38468000, $3846A000, $3846C000, $3846E000, $38470000, $38472000, $38474000, $38476000, $38478000, $3847A000, $3847C000, $3847E000,
+    $38480000, $38482000, $38484000, $38486000, $38488000, $3848A000, $3848C000, $3848E000, $38490000, $38492000, $38494000, $38496000, $38498000, $3849A000, $3849C000, $3849E000,
+    $384A0000, $384A2000, $384A4000, $384A6000, $384A8000, $384AA000, $384AC000, $384AE000, $384B0000, $384B2000, $384B4000, $384B6000, $384B8000, $384BA000, $384BC000, $384BE000,
+    $384C0000, $384C2000, $384C4000, $384C6000, $384C8000, $384CA000, $384CC000, $384CE000, $384D0000, $384D2000, $384D4000, $384D6000, $384D8000, $384DA000, $384DC000, $384DE000,
+    $384E0000, $384E2000, $384E4000, $384E6000, $384E8000, $384EA000, $384EC000, $384EE000, $384F0000, $384F2000, $384F4000, $384F6000, $384F8000, $384FA000, $384FC000, $384FE000,
+    $38500000, $38502000, $38504000, $38506000, $38508000, $3850A000, $3850C000, $3850E000, $38510000, $38512000, $38514000, $38516000, $38518000, $3851A000, $3851C000, $3851E000,
+    $38520000, $38522000, $38524000, $38526000, $38528000, $3852A000, $3852C000, $3852E000, $38530000, $38532000, $38534000, $38536000, $38538000, $3853A000, $3853C000, $3853E000,
+    $38540000, $38542000, $38544000, $38546000, $38548000, $3854A000, $3854C000, $3854E000, $38550000, $38552000, $38554000, $38556000, $38558000, $3855A000, $3855C000, $3855E000,
+    $38560000, $38562000, $38564000, $38566000, $38568000, $3856A000, $3856C000, $3856E000, $38570000, $38572000, $38574000, $38576000, $38578000, $3857A000, $3857C000, $3857E000,
+    $38580000, $38582000, $38584000, $38586000, $38588000, $3858A000, $3858C000, $3858E000, $38590000, $38592000, $38594000, $38596000, $38598000, $3859A000, $3859C000, $3859E000,
+    $385A0000, $385A2000, $385A4000, $385A6000, $385A8000, $385AA000, $385AC000, $385AE000, $385B0000, $385B2000, $385B4000, $385B6000, $385B8000, $385BA000, $385BC000, $385BE000,
+    $385C0000, $385C2000, $385C4000, $385C6000, $385C8000, $385CA000, $385CC000, $385CE000, $385D0000, $385D2000, $385D4000, $385D6000, $385D8000, $385DA000, $385DC000, $385DE000,
+    $385E0000, $385E2000, $385E4000, $385E6000, $385E8000, $385EA000, $385EC000, $385EE000, $385F0000, $385F2000, $385F4000, $385F6000, $385F8000, $385FA000, $385FC000, $385FE000,
+    $38600000, $38602000, $38604000, $38606000, $38608000, $3860A000, $3860C000, $3860E000, $38610000, $38612000, $38614000, $38616000, $38618000, $3861A000, $3861C000, $3861E000,
+    $38620000, $38622000, $38624000, $38626000, $38628000, $3862A000, $3862C000, $3862E000, $38630000, $38632000, $38634000, $38636000, $38638000, $3863A000, $3863C000, $3863E000,
+    $38640000, $38642000, $38644000, $38646000, $38648000, $3864A000, $3864C000, $3864E000, $38650000, $38652000, $38654000, $38656000, $38658000, $3865A000, $3865C000, $3865E000,
+    $38660000, $38662000, $38664000, $38666000, $38668000, $3866A000, $3866C000, $3866E000, $38670000, $38672000, $38674000, $38676000, $38678000, $3867A000, $3867C000, $3867E000,
+    $38680000, $38682000, $38684000, $38686000, $38688000, $3868A000, $3868C000, $3868E000, $38690000, $38692000, $38694000, $38696000, $38698000, $3869A000, $3869C000, $3869E000,
+    $386A0000, $386A2000, $386A4000, $386A6000, $386A8000, $386AA000, $386AC000, $386AE000, $386B0000, $386B2000, $386B4000, $386B6000, $386B8000, $386BA000, $386BC000, $386BE000,
+    $386C0000, $386C2000, $386C4000, $386C6000, $386C8000, $386CA000, $386CC000, $386CE000, $386D0000, $386D2000, $386D4000, $386D6000, $386D8000, $386DA000, $386DC000, $386DE000,
+    $386E0000, $386E2000, $386E4000, $386E6000, $386E8000, $386EA000, $386EC000, $386EE000, $386F0000, $386F2000, $386F4000, $386F6000, $386F8000, $386FA000, $386FC000, $386FE000,
+    $38700000, $38702000, $38704000, $38706000, $38708000, $3870A000, $3870C000, $3870E000, $38710000, $38712000, $38714000, $38716000, $38718000, $3871A000, $3871C000, $3871E000,
+    $38720000, $38722000, $38724000, $38726000, $38728000, $3872A000, $3872C000, $3872E000, $38730000, $38732000, $38734000, $38736000, $38738000, $3873A000, $3873C000, $3873E000,
+    $38740000, $38742000, $38744000, $38746000, $38748000, $3874A000, $3874C000, $3874E000, $38750000, $38752000, $38754000, $38756000, $38758000, $3875A000, $3875C000, $3875E000,
+    $38760000, $38762000, $38764000, $38766000, $38768000, $3876A000, $3876C000, $3876E000, $38770000, $38772000, $38774000, $38776000, $38778000, $3877A000, $3877C000, $3877E000,
+    $38780000, $38782000, $38784000, $38786000, $38788000, $3878A000, $3878C000, $3878E000, $38790000, $38792000, $38794000, $38796000, $38798000, $3879A000, $3879C000, $3879E000,
+    $387A0000, $387A2000, $387A4000, $387A6000, $387A8000, $387AA000, $387AC000, $387AE000, $387B0000, $387B2000, $387B4000, $387B6000, $387B8000, $387BA000, $387BC000, $387BE000,
+    $387C0000, $387C2000, $387C4000, $387C6000, $387C8000, $387CA000, $387CC000, $387CE000, $387D0000, $387D2000, $387D4000, $387D6000, $387D8000, $387DA000, $387DC000, $387DE000,
+    $387E0000, $387E2000, $387E4000, $387E6000, $387E8000, $387EA000, $387EC000, $387EE000, $387F0000, $387F2000, $387F4000, $387F6000, $387F8000, $387FA000, $387FC000, $387FE000
+  );
+const exponent_table : array[0..63] of longword = (
+    $00000000, $00800000, $01000000, $01800000, $02000000, $02800000, $03000000, $03800000, $04000000, $04800000, $05000000, $05800000, $06000000, $06800000, $07000000, $07800000,
+    $08000000, $08800000, $09000000, $09800000, $0A000000, $0A800000, $0B000000, $0B800000, $0C000000, $0C800000, $0D000000, $0D800000, $0E000000, $0E800000, $0F000000, $47800000,
+    $80000000, $80800000, $81000000, $81800000, $82000000, $82800000, $83000000, $83800000, $84000000, $84800000, $85000000, $85800000, $86000000, $86800000, $87000000, $87800000,
+    $88000000, $88800000, $89000000, $89800000, $8A000000, $8A800000, $8B000000, $8B800000, $8C000000, $8C800000, $8D000000, $8D800000, $8E000000, $8E800000, $8F000000, $C7800000
+  );
+const offset_table : array[0..63] of word = (
+    0, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024,
+    0, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024
+  );
+var  bits : ConversionBits; i:SizeInt; value:word;
+begin
+  for i:=0 to N-1 do begin
+    value := src[i];
+    bits.i32 := mantissa_table[offset_table[value shr 10] + (value and $3FF)] + exponent_table[value shr 10];
+    dst[i] := bits.f32;
+  end;
+end;
+
+procedure SingleTpFP16(const N: SizeInt; const src: PSingle; dst: PHalf);
+    const base_table : array[0..511] of word = (
+      $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000,
+      $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000,
+      $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000,
+      $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000,
+      $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000,
+      $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000,
+      $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0001, $0002, $0004, $0008, $0010, $0020, $0040, $0080, $0100,
+      $0200, $0400, $0800, $0C00, $1000, $1400, $1800, $1C00, $2000, $2400, $2800, $2C00, $3000, $3400, $3800, $3C00,
+      $4000, $4400, $4800, $4C00, $5000, $5400, $5800, $5C00, $6000, $6400, $6800, $6C00, $7000, $7400, $7800, $7C00,
+      $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00,
+      $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00,
+      $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00,
+      $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00,
+      $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00,
+      $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00,
+      $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00, $7C00,
+      $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000,
+      $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000,
+      $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000,
+      $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000,
+      $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000,
+      $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8000,
+      $8000, $8000, $8000, $8000, $8000, $8000, $8000, $8001, $8002, $8004, $8008, $8010, $8020, $8040, $8080, $8100,
+      $8200, $8400, $8800, $8C00, $9000, $9400, $9800, $9C00, $A000, $A400, $A800, $AC00, $B000, $B400, $B800, $BC00,
+      $C000, $C400, $C800, $CC00, $D000, $D400, $D800, $DC00, $E000, $E400, $E800, $EC00, $F000, $F400, $F800, $FC00,
+      $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00,
+      $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00,
+      $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00,
+      $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00,
+      $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00,
+      $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00,
+      $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00, $FC00
+    );
+    const shift_table : array[0..511] of byte= (
+      24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24,
+      24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24,
+      24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24,
+      24, 24, 24, 24, 24, 24, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13,
+      13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24,
+      24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24,
+      24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24,
+      24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 13,
+      24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24,
+      24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24,
+      24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24,
+      24, 24, 24, 24, 24, 24, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13,
+      13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24,
+      24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24,
+      24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24,
+      24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 13
+    );
+var
+  bits: ConversionBits;
+  halfbits : word; i:SizeInt; value:single;
+begin
+  for i:=0 to N-1 do begin
+    bits.f32 := src[i];
+    dst[i] := base_table[bits.i32 shr 23] + word((bits.i32 and $7FFFFF) shr shift_table[bits.i32 shr 23]);
+  end
+end;
+
 
 {$ifdef FILLD_IMPL}
 procedure FillDWord(var x; const count:SizeInt; const value:LongWord);
@@ -1475,6 +1796,42 @@ asm
 
 end;
 
+function sSumSqrDiff(const N:SizeInt; const src1:PSingle; const src2:Psingle):single;assembler;
+asm
+  mov          rax      ,    N
+  vxorps       ymm0     ,    ymm0,  ymm0
+  shr          rax      ,    3  // div 8
+  jz           @rem1
+@while1:
+  vmovups      ymm1     ,    yword [src1]
+  vsubps       ymm2     ,    ymm1,  yword [src2]
+  vmulps       ymm2     ,    ymm2,  ymm2
+  vaddps       ymm0     ,    ymm0,  ymm2
+  add          src1        ,    8*4
+  add          src2        ,    8*4
+  dec          rax
+  jnz         @while1
+
+@rem1:
+  mov          rax       ,    N
+  and          rax       ,    7
+  jz           @done
+  vextractf128 xmm2     ,    ymm0,  1
+  vzeroupper
+  addps        xmm0     ,    xmm2
+@while2:
+  vmovss       xmm1     ,    dword  [src1]
+  vsubss       xmm2     ,    xmm1,  dword [src2]
+  vmulss       xmm2     ,    xmm2,  xmm2
+  vaddss       xmm0     ,    xmm0,  xmm2
+  add          src1        ,    4
+  add          src2        ,    4
+  dec          rax
+  jnz         @while2
+@done:
+  haddps       xmm0     ,    xmm0
+  haddps       xmm0     ,    xmm0
+end;
 {$endif}
 
 procedure cblas_sscal(const N: SizeInt; const ALPHA: single; const a: PSingle;
@@ -1508,18 +1865,18 @@ const
   TILE_M = 4; // four operations                 (for A)
   TILE_N = 2 * 8;  // AVX2 ymm register size * 2 (for B)
   TILE_K = 16;  // loops
-{$if defined(CPUX64)}
 
-procedure mad(const dst:PSingle; const src1: single; const src2:PSingle);  vectorcall;inline;
+{$if defined(CPUX64)}
+procedure mad(const src1: single; const src2:PSingle; const dst:PSingle);
 begin
-  dst[0] += src1 * src2[0];
-  dst[1] += src1 * src2[1];
-  dst[2] += src1 * src2[2];
-  dst[3] += src1 * src2[3];
-  dst[4] += src1 * src2[4];
-  dst[5] += src1 * src2[5];
-  dst[6] += src1 * src2[6];
-  dst[7] += src1 * src2[7];
+  dst[0] := dst[0] + src1 * src2[0];
+  dst[1] := dst[1] + src1 * src2[1];
+  dst[2] := dst[2] + src1 * src2[2];
+  dst[3] := dst[3] + src1 * src2[3];
+  dst[4] := dst[4] + src1 * src2[4];
+  dst[5] := dst[5] + src1 * src2[5];
+  dst[6] := dst[6] + src1 * src2[6];
+  dst[7] := dst[7] + src1 * src2[7];
 end;
 //assembler; nostackframe;
 //asm
@@ -1551,23 +1908,37 @@ begin
 
     C7 := C + (3+i)*ldc + j      ;
     C8 := C + (3+i)*ldc + j+8    ;
-
     for kk :=k to TILE_K + k-1  do begin
-      A1 := A[(i+0)*lda + kk] * ALPHA ;
-      A2 := A[(i+1)*lda + kk] * ALPHA ;
-      A3 := A[(i+2)*lda + kk] * ALPHA ;
-      A4 := A[(i+3)*lda + kk] * ALPHA ;
+    //asm
+    //  mov            rax,   [k]
+    //  mov            rcx,   rax
+    //  add            rax,   TILE_K
+    //@while1:
+    //  cmp            rcx,   rax
+    //  je            @done
+    //  mov            r10,   rcx
+    //  imul           r10,   [ldb]
+    //  add            r10,
+
       B1 := B + (kk) * ldb + j        ;
       B2 := B + (kk) * ldb + j +8     ;
 
-      mad(C1, A1, B1);
-      mad(C2, A1, B2);
-      mad(C3, A2, B1);
-      mad(C4, A2, B2);
-      mad(C5, A3, B1);
-      mad(C6, A3, B2);
-      mad(C7, A4, B1);
-      mad(C8, A4, B2);
+      A1 := A[(i+0)*lda + kk] * ALPHA ;
+      mad(A1, B1, C1);
+      mad(A1, B2, C2);
+
+      A2 := A[(i+1)*lda + kk] * ALPHA ;
+      mad(A2, B1, C3);
+      mad(A2, B2, C4);
+
+      A3 := A[(i+2)*lda + kk] * ALPHA ;
+      mad(A3, B1, C5);
+      mad(A3, B2, C6);
+
+      A4 := A[(i+3)*lda + kk] * ALPHA ;
+      mad(A4, B1, C7);
+      mad(A4, B2, C8);
+      //@done:
     end;
     inc(j, TILE_N)
   end
@@ -1580,8 +1951,10 @@ asm
   push               r13
   push               r14
   push               r15
+  push               rax
 {$ifdef MSWINDOWS}
-
+  //push                 rbp
+  //mov                  rbp      , rsp
   sub                  rsp      , 16*10                     // making stackspace to save xmm6-15
   vmovdqu              [rsp+$00], xmm6
   vmovdqu              [rsp+$10], xmm7
@@ -1597,7 +1970,9 @@ asm
 
   xor                r10      , r10
   //mov                r10      , CN
-@while_n:
+@while_j:
+  cmp                r10      , CN
+  jz                 @break_j
   mov                r11      , i
   imul               r11      , ldc
   add                r11      , r10                       // (0+i)*ldc + j
@@ -1621,14 +1996,15 @@ asm
   vmovups            ymm13    , yword [C + 4 * r15]       // C[(3+i)*ldc + j]
   vmovups            ymm15    , yword [C + 4 * r15 + 32]  // C[(3+i)*ldc + j+8]
 
-  xor                r11      , r11
+  xor                r11      , r11                          // kk := 0
 
 @while:
-
+  cmp                r11      , TILE_k
+  jz                 @exit_k
   mov                rax      , i
   imul               rax      , lda                           //  i * lda
   add                rax      , k                             //  i * lda + k
-  add                rax      , r11
+  add                rax      , r11                           //  +kk
 
 {$if defined(UNIX) or defined(POSIX)}
   vmulss             xmm3     , ALPHA  ,  dword [A + 4 * rax] // A[i * lda + k] * ALPHA
@@ -1715,9 +2091,6 @@ asm
   vaddps             ymm15    , ymm15   , ymm5
 {$endif}
 
-  inc                r11
-  cmp                r11      , TILE_K
-  jl                 @while
 
   vmovups            yword [C + 4 * r12]      , ymm8   // C[(0+i)*ldc + j]
   vmovups            yword [C + 4 * r12 + 32] , ymm10  // C[(0+i)*ldc + j+8]
@@ -1727,10 +2100,12 @@ asm
   vmovups            yword [C + 4 * r14 + 32] , ymm14  // C[(2+i)*ldc + j+8]
   vmovups            yword [C + 4 * r15]      , ymm13  // C[(3+i)*ldc + j]
   vmovups            yword [C + 4 * r15 + 32] , ymm15  // C[(3+i)*ldc + j+8]
-
+  inc                r11
+  jmp                @while
+@exit_k:
   add                r10    , TILE_N
-  cmp                r10    , CN
-  jl                 @while_n
+  jmp                @while_j
+@break_j:
 
 //restore non-volatile registers
 {$ifdef MSWINDOWS}
@@ -1745,12 +2120,15 @@ asm
   vmovdqu            xmm14  , [rsp+$80]
   vmovdqu            xmm15  , [rsp+$90]
   add                rsp     , 16*10
+  //mov                rsp     , rbp
+  //pop                rbp
 {$endif}
+  pop rax
   pop r15
   pop r14
   pop r13
   pop r12
-end;
+end;//['r12', 'r13', 'r14', 'r15', 'xmm6', 'xmm7', 'xmm8', 'xmm9', 'xmm10', 'xmm11', 'xmm12', 'xmm13', 'xmm14', 'xmm15'];
 
 procedure nn_fastMP( idx:IntPtr; ptr:pointer);
 var
@@ -1949,12 +2327,13 @@ begin
 end;
 
 const
-  TILEN :SizeInt = 8;
-  TILEK :SizeInt = 4;
-  TILEM :SizeInt = 4;
+  TILEN: SizeInt = 8;
+  TILEK: SizeInt = 4;
+  TILEM: SizeInt = 4;
+
 procedure s_nn(const f, t: IntPtr; const ptr: pointer);
 var
-  i, j, kk, tj, tk, M, N, K, lda, ldb, ldc, DM, RM, DN, RN, DK ,RK: IntPtr;
+  i, j, kk, tj, tk, M, N, K, lda, ldb, ldc, DM, RM, DN, RN, DK, RK: IntPtr;
   A_PART, ALPHA: single;
   p: PMPParams absolute ptr;
   A, B, C, AA, BB, CC: PSingle;
@@ -1982,12 +2361,14 @@ begin
   RN := TILEN * DN;
   RK := TILEK * DK;
 
-  inc(C, f*ldc);
-  inc(A, f*lda);
-  for i := f to t do  begin   // m
-    for kk := 0 to K - 1 do begin
-      A_PART := ALPHA*A[kk];
-      saxpy(N, A_PART, B + kk*ldb, C);
+  Inc(C, f * ldc);
+  Inc(A, f * lda);
+  for i := f to t do
+  begin   // m
+    for kk := 0 to K - 1 do
+    begin
+      A_PART := ALPHA * A[kk];
+      saxpy(N, A_PART, B + kk * ldb, C);
     end;
     //for kk := 0 to DK -1 do begin
     //  AA := A + kk*TILEK;
@@ -2019,16 +2400,14 @@ begin
     //    C[j] := C[j] + A_PART*BB[j]
     //end;
 
-    inc(C, ldc);
-    inc(A, lda)
+    Inc(C, ldc);
+    Inc(A, lda);
   end;
 end;
 
 
-procedure sgemm_nn(
-  const M, N, K: IntPtr; const ALPHA: single;
-  const A: PSingle; const lda: IntPtr;
-  const B: PSingle; const ldb: IntPtr;
+procedure sgemm_nn(const M, N, K: IntPtr; const ALPHA: single;
+  const A: PSingle; const lda: IntPtr; const B: PSingle; const ldb: IntPtr;
   const C: PSingle; const ldc: IntPtr); inline;
 var
   p: TMPParams;
@@ -2150,12 +2529,13 @@ begin
 
 
   if (TransA = CblasNoTrans) and (TransB = CblasNoTrans) then
-  // todo fast_gemm is disabled, not 100% accurate!
-  {$if defined(BIG_MATRECIES)} // optimized for big matrecies! it will perform close to openblas speed, [CAUSION] : unstable with small matrecies!
+    // todo fast_gemm is disabled, not 100% accurate!
+    {$if defined(BIG_MATRECIES)}
+    // optimized for big matrecies! it will perform close to openblas speed, [CAUSION] : unstable with small matrecies!
     if AVX2Support then
       gemm_nn_fast(M, N, K, ALPHA, A, lda, B, ldb, C, ldc)
     else
-  {$endif}
+      {$endif}
       sgemm_nn(M, N, K, ALPHA, A, lda, B, ldb, C, ldc)
   else if (TransA = CblasNoTrans) and (TransB = CblasTrans) then
     sgemm_nt(M, N, K, ALPHA, A, lda, B, ldb, C, ldc)
@@ -2312,8 +2692,8 @@ var
   i, stride: SizeInt;
   S: PSingle;
 begin
-  S := src + cur_b * (src_c * src_h * src_w) + cur_n * (embedding_size * src_h * src_w) +
-    cur_h * src_w + cur_w;
+  S := src + cur_b * (src_c * src_h * src_w) + cur_n *
+    (embedding_size * src_h * src_w) + cur_h * src_w + cur_w;
   stride := src_h * src_w;
   for i := 0 to embedding_size - 1 do
     dst[i] := S[i * stride];
@@ -2322,7 +2702,7 @@ end;
 class procedure TensorUtils.openPicture(const filename: string);
 begin
   {$if defined(MSWINDOWS)}
-  ShellExecute(0, 'open', pchar(filename), '', '', 0);
+  ShellExecute(0, 'open', PChar(filename), '', '', 0);
   {$endif}
 end;
 
@@ -2345,10 +2725,10 @@ begin
     J := R;
     P := Arr[(L + R) shr 1];
     repeat
-      while (neg * Compare(P, Arr[I]) > 0) and (I<=R) do
-        inc(I);
-      while (neg * Compare(P, Arr[J]) < 0) and (J>=0) do
-        dec(J);
+      while (neg * Compare(P, Arr[I]) > 0) and (I <= R) do
+        Inc(I);
+      while (neg * Compare(P, Arr[J]) < 0) and (J >= 0) do
+        Dec(J);
       if I <= J then
       begin
         Q := Arr[I];
@@ -2481,8 +2861,8 @@ begin
     x[incx * i] := x[incx * i] xor y[incy * i];
 end;
 
-procedure _and(const N: SizeInt; const x: int32; const y: PInt32;
-  const incy: SizeInt); overload; inline;
+procedure _and(const N: SizeInt; const x: int32; const y: PInt32; const incy: SizeInt);
+  overload; inline;
 var
   i: SizeInt;
 begin
@@ -2490,8 +2870,8 @@ begin
     y[incy * i] := x and y[incy * i];
 end;
 
-procedure _and(const N: SizeInt; const x: int64; const y: PInt64;
-  const incy: SizeInt); overload; inline;
+procedure _and(const N: SizeInt; const x: int64; const y: PInt64; const incy: SizeInt);
+  overload; inline;
 var
   i: SizeInt;
 begin
@@ -2499,8 +2879,8 @@ begin
     y[incy * i] := x and y[incy * i];
 end;
 
-procedure _and(const N: SizeInt; const x: byte; const y: pbyte;
-  const incy: SizeInt); overload; inline;
+procedure _and(const N: SizeInt; const x: byte; const y: pbyte; const incy: SizeInt);
+  overload; inline;
 var
   i: SizeInt;
 begin
@@ -2517,8 +2897,8 @@ begin
     y[incy * i] := x and y[incy * i];
 end;
 
-procedure _or(const N: SizeInt; const x: int32; const y: PInt32;
-  const incy: SizeInt); overload; inline;
+procedure _or(const N: SizeInt; const x: int32; const y: PInt32; const incy: SizeInt);
+  overload; inline;
 var
   i: SizeInt;
 begin
@@ -2526,8 +2906,8 @@ begin
     y[incy * i] := x or y[incy * i];
 end;
 
-procedure _or(const N: SizeInt; const x: int64; const y: PInt64;
-  const incy: SizeInt); overload; inline;
+procedure _or(const N: SizeInt; const x: int64; const y: PInt64; const incy: SizeInt);
+  overload; inline;
 var
   i: SizeInt;
 begin
@@ -2535,8 +2915,8 @@ begin
     y[incy * i] := x or y[incy * i];
 end;
 
-procedure _or(const N: SizeInt; const x: byte; const y: pbyte;
-  const incy: SizeInt); overload; inline;
+procedure _or(const N: SizeInt; const x: byte; const y: pbyte; const incy: SizeInt);
+  overload; inline;
 var
   i: SizeInt;
 begin
@@ -2553,8 +2933,8 @@ begin
     y[incy * i] := x or y[incy * i];
 end;
 
-procedure _xor(const N: SizeInt; const x: int32; const y: PInt32;
-  const incy: SizeInt); overload; inline;
+procedure _xor(const N: SizeInt; const x: int32; const y: PInt32; const incy: SizeInt);
+  overload; inline;
 var
   i: SizeInt;
 begin
@@ -2562,8 +2942,8 @@ begin
     y[incy * i] := x xor y[incy * i];
 end;
 
-procedure _xor(const N: SizeInt; const x: int64; const y: PInt64;
-  const incy: SizeInt); overload; inline;
+procedure _xor(const N: SizeInt; const x: int64; const y: PInt64; const incy: SizeInt);
+  overload; inline;
 var
   i: SizeInt;
 begin
@@ -2571,8 +2951,8 @@ begin
     y[incy * i] := x xor y[incy * i];
 end;
 
-procedure _xor(const N: SizeInt; const x: byte; const y: pbyte;
-  const incy: SizeInt); overload; inline;
+procedure _xor(const N: SizeInt; const x: byte; const y: pbyte; const incy: SizeInt);
+  overload; inline;
 var
   i: SizeInt;
 begin
@@ -2589,8 +2969,8 @@ begin
     y[incy * i] := x xor y[incy * i];
 end;
 
-procedure _shr(const N: SizeInt; const x: int32; const y: PInt32;
-  const incy: SizeInt); overload; inline;
+procedure _shr(const N: SizeInt; const x: int32; const y: PInt32; const incy: SizeInt);
+  overload; inline;
 var
   i: SizeInt;
 begin
@@ -2598,8 +2978,8 @@ begin
     y[incy * i] := y[incy * i] shr x;
 end;
 
-procedure _shr(const N: SizeInt; const x: int64; const y: PInt64;
-  const incy: SizeInt); overload; inline;
+procedure _shr(const N: SizeInt; const x: int64; const y: PInt64; const incy: SizeInt);
+  overload; inline;
 var
   i: SizeInt;
 begin
@@ -2607,8 +2987,8 @@ begin
     y[incy * i] := y[incy * i] shr x;
 end;
 
-procedure _shr(const N: SizeInt; const x: byte; const y: pbyte;
-  const incy: SizeInt); overload; inline;
+procedure _shr(const N: SizeInt; const x: byte; const y: pbyte; const incy: SizeInt);
+  overload; inline;
 var
   i: SizeInt;
 begin
@@ -2625,8 +3005,8 @@ begin
     y[incy * i] := y[incy * i] shr x;
 end;
 
-procedure _shl(const N: SizeInt; const x: int32; const y: PInt32;
-  const incy: SizeInt); overload; inline;
+procedure _shl(const N: SizeInt; const x: int32; const y: PInt32; const incy: SizeInt);
+  overload; inline;
 var
   i: SizeInt;
 begin
@@ -2634,8 +3014,8 @@ begin
     y[incy * i] := y[incy * i] shl x;
 end;
 
-procedure _shl(const N: SizeInt; const x: int64; const y: PInt64;
-  const incy: SizeInt); overload; inline;
+procedure _shl(const N: SizeInt; const x: int64; const y: PInt64; const incy: SizeInt);
+  overload; inline;
 var
   i: SizeInt;
 begin
@@ -2643,8 +3023,8 @@ begin
     y[incy * i] := y[incy * i] shl x;
 end;
 
-procedure _shl(const N: SizeInt; const x: byte; const y: pbyte;
-  const incy: SizeInt); overload; inline;
+procedure _shl(const N: SizeInt; const x: byte; const y: pbyte; const incy: SizeInt);
+  overload; inline;
 var
   i: SizeInt;
 begin
@@ -2697,22 +3077,23 @@ begin
     y[incy * i] := not x[incx * i];
 end;
 
-procedure srnd(const v:uint32);
+procedure srnd(const v: uint32);
 begin
-  rand_seed := v
+  rand_seed := v;
 end;
 
-function rnd():integer;
+function rnd(): integer;
 begin
-	rand_seed := rand_seed xor (rand_seed shl 13);
-	rand_seed := rand_seed xor (rand_seed shr 17);
-	rand_seed := rand_seed xor (rand_seed shl 5 );
-        result := (rand_seed mod $7FFFFFFF);
+  rand_seed := rand_seed xor (rand_seed shl 13);
+  rand_seed := rand_seed xor (rand_seed shr 17);
+  rand_seed := rand_seed xor (rand_seed shl 5);
+  Result := (rand_seed mod $7FFFFFFF);
 end;
 
 function _rand(const a: single): single; overload; inline;
 begin
-  Result := a * (rnd()/$7FFFFFFF);
+  Result := a * random();
+  //  Result := a * (rnd() / $7FFFFFFF);
 end;
 
 function _rand(const a: double): double; overload; inline;
@@ -2772,18 +3153,18 @@ end;
 
 function _cmp(const a, b: single): SizeInt; overload; inline;
 begin
-  if a=b then exit(0);
+  if a = b then exit(0);
   if a > b then exit(1);
-  result :=-1;
+  Result := -1;
   //if a < b then exit(-1);
 end;
 
 function _cmp(const a, b: double): SizeInt; overload; inline;
 begin
-  if a=b then exit(0);
+  if a = b then exit(0);
   if a > b then exit(1);
   //if a < b then exit(-1);
-  result :=-1;
+  Result := -1;
 end;
 
 function _cmp(const a, b: int32): SizeInt; overload; inline;
@@ -3349,6 +3730,37 @@ asm
 @done:
 end;
 
+procedure vsMul_avx2(const N:SizeInt; const A, B, C:PSingle);assembler;
+asm
+  mov          rax      ,    N
+  shr          rax      ,    3  // div 8
+  jz           @rem1
+@while1:
+  vmovups      ymm0     ,    yword [A]
+  vmulps       ymm1     ,    ymm0,  yword [B]
+  vmovups      yword[C] ,    ymm1
+  add          A        ,    8*4
+  add          B        ,    8*4
+  add          C        ,    8*4
+  dec          rax
+  jnz         @while1
+
+@rem1:
+  mov          rax       ,    N
+  and          rax       ,    7
+  jz           @done
+@while2:
+  vmovss       xmm0     ,    dword [A]
+  vmulss       xmm1     ,    xmm0,  dword [B]
+  vmovss       dword[C] ,    xmm1
+  add          A        ,    4
+  add          B        ,    4
+  add          C        ,    4
+  dec          rax
+  jnz         @while2
+@done:
+end;
+
 function vssum_avx2(const N:SizeInt; const A:PSingle):single;assembler;
 asm
   mov          r8       ,    N
@@ -3381,44 +3793,74 @@ end;
 
 {$endif}
 
-function vsSumI(const N:SizeInt; const src:PSingle; const stride:SizeInt):single;
-var i:SizeInt;
+function vsSumI(const N: SizeInt; const src: PSingle; const stride: SizeInt): single;
+var
+  i: SizeInt;
 begin
   {$if defined(CPUX64)}
   if AVX2Support and (stride=1) then
     exit(vssum_avx2(N, src));
   {$endif}
-  result := 0;
-  for i:=0 to N-1 do
-    result := result + src[i*stride]
+  Result := 0;
+  for i := 0 to N - 1 do
+    Result := Result + src[i * stride];
 end;
 
-function vdSumI(const N:SizeInt; const src:PSingle; const stride:SizeInt):single;
-var i:SizeInt;
+function vdSumI(const N: SizeInt; const src: PSingle; const stride: SizeInt): single;
+var
+  i: SizeInt;
 begin
-  result := 0;
-  for i:=0 to N-1 do
-    result := result + src[i*stride]
+  Result := 0;
+  for i := 0 to N - 1 do
+    Result := Result + src[i * stride];
 end;
 
-function vsRSS(const N: SizeInt; const mean: single; const src: PSingle; const stride: SizeInt):single;
-var i:Sizeint;
+function vsRSS(const N: SizeInt; const mean: single; const src: PSingle;
+  const stride: SizeInt): single;
+var
+  i: Sizeint;
 begin
-  {$ifdef CPUX64}
+  {$ifdef _CPUX64}
   if AVX2Support and (stride=1) then
     exit(srss(N, mean, src));
   {$endif}
-  result :=0;
-  for i:=0 to N-1 do
-    result := result + sqr(src[i*stride] - mean);
+  Result := 0;
+  for i := 0 to N - 1 do
+    Result := Result + sqr(src[i * stride] - mean);
 end;
 
-function vdRSS(const N: SizeInt; const mean: double; const src: PDouble; const stride: SizeInt):double;
-var i:Sizeint;
+function vdRSS(const N: SizeInt; const mean: double; const src: PDouble;
+  const stride: SizeInt): double;
+var
+  i: Sizeint;
 begin
-  result :=0;
-  for i:=0 to N-1 do
-    result := result + sqr(src[i*stride] - mean);
+  Result := 0;
+  for i := 0 to N - 1 do
+    Result := Result + sqr(src[i * stride] - mean);
+end;
+
+function vsSumSqrDiff(const N: SizeInt; const src1: PSingle;
+  const src1Stride: SizeInt; const src2: PSingle; const src2Stride: SizeInt): single;
+var
+  i: Sizeint;
+begin
+  {$ifdef CPUX64}
+  if AVX2Support and (src1Stride=1) and (src2Stride=1) then
+    exit(sSumSqrDiff(N, src1, src2));
+  {$endif}
+  Result := 0;
+  for i := 0 to N - 1 do
+    Result := Result + sqr(src1[i * src2Stride] - src2[i * src2Stride]);
+end;
+
+function vdSumSqrDiff(const N: SizeInt; const src1: PDouble;
+  const src1Stride: SizeInt; const src2: PDouble; const src2Stride: SizeInt): double;
+var
+  i: Sizeint;
+begin
+  Result := 0;
+  for i := 0 to N - 1 do
+    Result := Result + sqr(src1[i * src2Stride] - src2[i * src2Stride]);
 end;
 
 procedure vsAddI(const N: SizeInt; const a: PSingle; const inca: SizeInt;
@@ -3455,7 +3897,11 @@ procedure vsMulI(const N: SizeInt; const a: PSingle; const inca: SizeInt;
 var
   i: SizeInt;
 begin
-
+  {$ifdef CPUX64}
+  if AVX2Support and (inca=1) and (incb=1) and (incc=1) then
+    vsMul_avx2(N, A, B, C)
+  else
+  {$endif}
   for i := 0 to N - 1 do
     c[i * incc] := a[i * inca] * b[i * incb];
 
@@ -3682,7 +4128,7 @@ asm
   vzeroupper
 @while2:
   movss        xmm3      ,    xmm1
-  vfmadd231ss  xmm3      ,    xmm0,  yword [B]
+  vfmadd231ss  xmm3      ,    xmm0,  dword [B]
   //vmulss       xmm3     ,    xmm0,  dword [B]
   //vaddss       xmm3     ,    xmm1,  xmm3
 
@@ -3789,7 +4235,8 @@ begin
 
 end;
 
-procedure vsAddB(const N: SizeInt; const a: PSingle; const blockSize: SizeInt; const b: PSingle; const incb: SizeInt; const batch : SizeInt =1); overload; inline;
+procedure vsAddB(const N: SizeInt; const a: PSingle; const blockSize: SizeInt;
+  const b: PSingle; const incb: SizeInt; const batch: SizeInt = 1); overload; inline;
 var
   i, j, k: SizeInt;
   c: PSingle;
@@ -3807,8 +4254,9 @@ begin
   end;
   {$endif}
   for k := 0 to batch - 1 do
-    for i := 0 to N - 1 do begin
-      c := a + (k*N + i)*blockSize;
+    for i := 0 to N - 1 do
+    begin
+      c := a + (k * N + i) * blockSize;
       bb := b[i * incb];
       vssAddI(blockSize, bb, c, 1, c, 1);
       //for j:=0 to blockSize-1 do
@@ -3816,25 +4264,25 @@ begin
     end;
 end;
 
-procedure vsSubB(const N: SizeInt; const a: PSingle;
-  const blockSize: SizeInt; const b: PSingle; const incb: SizeInt; const batch:SizeInt = 1); overload; inline;
+procedure vsSubB(const N: SizeInt; const a: PSingle; const blockSize: SizeInt;
+  const b: PSingle; const incb: SizeInt; const batch: SizeInt = 1); overload; inline;
 var
   i, j, k: SizeInt;
   c: PSingle;
   bb: single;
 begin
-  for k:= 0 to batch -1 do
+  for k := 0 to batch - 1 do
     for i := 0 to N - 1 do
     begin
-      c :=  a + (k*N + i)*blockSize;
+      c := a + (k * N + i) * blockSize;
       bb := b[i * incb];
       for j := 0 to blockSize - 1 do
         c[j] := c[j] - bb;
     end;
 end;
 
-procedure vsMulB(const N: SizeInt; const a: PSingle;
-  const blockSize: SizeInt; const b: PSingle; const incb: SizeInt; const batch :SizeInt = 1); overload; inline;
+procedure vsMulB(const N: SizeInt; const a: PSingle; const blockSize: SizeInt;
+  const b: PSingle; const incb: SizeInt; const batch: SizeInt = 1); overload; inline;
 var
   i, j, k: SizeInt;
   c: PSingle;
@@ -3852,8 +4300,9 @@ begin
   end;
   {$endif}
   for k := 0 to batch - 1 do
-    for i := 0 to N - 1 do begin
-      c := a + (k*N + i)*blockSize;
+    for i := 0 to N - 1 do
+    begin
+      c := a + (k * N + i) * blockSize;
       bb := b[i * incb];
       vssMulI(blockSize, bb, c, 1, c, 1);
       //for j:=0 to blockSize-1 do
@@ -3861,25 +4310,26 @@ begin
     end;
 end;
 
-procedure vsDivB(const N: SizeInt; const a: PSingle;
-  const blockSize: SizeInt; const b: PSingle; const incb: SizeInt ; const batch : SizeInt = 1); overload; inline;
+procedure vsDivB(const N: SizeInt; const a: PSingle; const blockSize: SizeInt;
+  const b: PSingle; const incb: SizeInt; const batch: SizeInt = 1); overload; inline;
 var
   i, j, k: SizeInt;
   c: PSingle;
   bb: single;
 begin
-  for k:= 0 to batch -1 do
+  for k := 0 to batch - 1 do
     for i := 0 to N - 1 do
     begin
-      c := a + (k*N + i)*blockSize;
+      c := a + (k * N + i) * blockSize;
       bb := b[i * incb];
       for j := 0 to blockSize - 1 do
         c[j] := c[j] / bb;
     end;
 end;
 
-procedure vsMulAddB(const N: SizeInt; const a: PSingle;
-  const blockSize: SizeInt; const b: PSingle; const incb: SizeInt; const c: PSingle; const incc: SizeInt; const batch :SizeInt = 1); overload; inline;
+procedure vsMulAddB(const N: SizeInt; const a: PSingle; const blockSize: SizeInt;
+  const b: PSingle; const incb: SizeInt; const c: PSingle; const incc: SizeInt;
+  const batch: SizeInt = 1); overload; inline;
 var
   i, j, k: SizeInt;
   t: PSingle;
@@ -3898,94 +4348,96 @@ begin
   end;
   {$endif}
   for k := 0 to batch - 1 do
-    for i := 0 to N - 1 do begin
-      t := a + (k*N + i)*blockSize;
+    for i := 0 to N - 1 do
+    begin
+      t := a + (k * N + i) * blockSize;
       bb := b[i * incb];
       cc := c[i * incc];
-      for j:=0 to blockSize-1 do
-        t[j] := t[j] * bb + cc
+      for j := 0 to blockSize - 1 do
+        t[j] := t[j] * bb + cc;
     end;
 end;
 
-procedure vdAddB(const N: SizeInt; const a: PDouble;
-  const blockSize: SizeInt; const b: PDouble; const incb: SizeInt; const batch:SizeInt = 1); overload; inline;
+procedure vdAddB(const N: SizeInt; const a: PDouble; const blockSize: SizeInt;
+  const b: PDouble; const incb: SizeInt; const batch: SizeInt = 1); overload; inline;
 var
   i, j, k: SizeInt;
   c: PDouble;
   bb: double;
 begin
-  for k:= 0 to batch -1 do
+  for k := 0 to batch - 1 do
     for i := 0 to N - 1 do
     begin
-      c := a + (k*N + i)*blockSize;
+      c := a + (k * N + i) * blockSize;
       bb := b[i * incb];
       for j := 0 to blockSize - 1 do
         c[j] := c[j] + bb;
     end;
 end;
 
-procedure vdSubB(const N: SizeInt; const a: PDouble;
-  const blockSize: SizeInt; const b: PDouble; const incb: SizeInt; const batch:SizeInt = 1); overload; inline;
+procedure vdSubB(const N: SizeInt; const a: PDouble; const blockSize: SizeInt;
+  const b: PDouble; const incb: SizeInt; const batch: SizeInt = 1); overload; inline;
 var
   i, j, k: SizeInt;
   c: PDouble;
   bb: double;
 begin
-  for k:= 0 to batch -1 do
+  for k := 0 to batch - 1 do
     for i := 0 to N - 1 do
     begin
-      c := a + (k*N + i)*blockSize;
+      c := a + (k * N + i) * blockSize;
       bb := b[i * incb];
       for j := 0 to blockSize - 1 do
         c[j] := c[j] - bb;
     end;
 end;
 
-procedure vdMulB(const N: SizeInt; const a: PDouble;
-  const blockSize: SizeInt; const b: PDouble; const incb: SizeInt; const batch:SizeInt = 1); overload; inline;
+procedure vdMulB(const N: SizeInt; const a: PDouble; const blockSize: SizeInt;
+  const b: PDouble; const incb: SizeInt; const batch: SizeInt = 1); overload; inline;
 var
   i, j, k: SizeInt;
   c: PDouble;
   bb: double;
 begin
-  for k:= 0 to batch -1 do
+  for k := 0 to batch - 1 do
     for i := 0 to N - 1 do
     begin
-      c := a + (k*N + i)*blockSize;
+      c := a + (k * N + i) * blockSize;
       bb := b[i * incb];
       for j := 0 to blockSize - 1 do
         c[j] := c[j] * bb;
     end;
 end;
 
-procedure vdDivB(const N: SizeInt; const a: PDouble;
-  const blockSize: SizeInt; const b: PDouble; const incb: SizeInt; const batch:SizeInt = 1); overload; inline;
+procedure vdDivB(const N: SizeInt; const a: PDouble; const blockSize: SizeInt;
+  const b: PDouble; const incb: SizeInt; const batch: SizeInt = 1); overload; inline;
 var
   i, j, k: SizeInt;
   c: PDouble;
   bb: double;
 begin
-  for k:= 0 to batch -1 do
+  for k := 0 to batch - 1 do
     for i := 0 to N - 1 do
     begin
-      c := a + (k*N + i)*blockSize;
+      c := a + (k * N + i) * blockSize;
       bb := b[i * incb];
       for j := 0 to blockSize - 1 do
         c[j] := c[j] / bb;
     end;
 end;
 
-procedure vdMulAddB(const N: SizeInt; const a: PDouble;
-  const blockSize: SizeInt; const b: PDouble; const incb: SizeInt; const c: PDouble; const incc:SizeInt; const batch:SizeInt = 1); overload; inline;
+procedure vdMulAddB(const N: SizeInt; const a: PDouble; const blockSize: SizeInt;
+  const b: PDouble; const incb: SizeInt; const c: PDouble; const incc: SizeInt;
+  const batch: SizeInt = 1); overload; inline;
 var
   i, j, k: SizeInt;
   t: PDouble;
   bb, cc: double;
 begin
-  for k:= 0 to batch -1 do
+  for k := 0 to batch - 1 do
     for i := 0 to N - 1 do
     begin
-      t := a + (k*N + i)*blockSize;
+      t := a + (k * N + i) * blockSize;
       bb := b[i * incb];
       cc := c[i * incc];
       for j := 0 to blockSize - 1 do
@@ -4045,29 +4497,29 @@ begin
     src[i] := (src[i] - aMean) / aStdDev;
 end;
 
-procedure _snormvv(const N: SizeInt; const mean: PSingle; const meanStride: SizeInt;
-  const variance: PSingle; const varianceStride: SizeInt; const dst: PSingle;
-  const dstStride: SizeInt); overload; inline;
+procedure _snormvv(const N: SizeInt; const mean: PSingle;
+  const meanStride: SizeInt; const variance: PSingle; const varianceStride: SizeInt;
+  const dst: PSingle; const dstStride: SizeInt); overload; inline;
 var
   i: SizeInt;
 begin
   for i := 0 to N - 1 do
   begin
     dst[i * dstStride] := (dst[i * dstStride] - mean[i * meanStride]) /
-      sqrt(variance[i * varianceStride] + sEPSILON);
+      sqrt(max(variance[i * varianceStride], sEPSILON));
   end;
 end;
 
-procedure _dnormvv(const N: SizeInt; const mean: PDouble; const meanStride: SizeInt;
-  const variance: PDouble; const varianceStride: SizeInt; const dst: PDouble;
-  const dstStride: SizeInt); overload; inline;
+procedure _dnormvv(const N: SizeInt; const mean: PDouble;
+  const meanStride: SizeInt; const variance: PDouble; const varianceStride: SizeInt;
+  const dst: PDouble; const dstStride: SizeInt); overload; inline;
 var
   i: SizeInt;
 begin
   for i := 0 to N - 1 do
   begin
     dst[i * dstStride] := (dst[i * dstStride] - mean[i * meanStride]) /
-      sqrt(variance[i * varianceStride] + dEPSILON);
+      sqrt(max(variance[i * varianceStride], dEPSILON));
   end;
 end;
 
@@ -4083,7 +4535,7 @@ begin
   if AVX2Support then
     for i := 0 to N-1 do begin
         o := dst + i * blockSize;
-        d := sqrt(math.max(variance[i*varianceStride] , sEPSILON));
+        d := sqrt(math.max(variance[i*varianceStride], sEPSILON));
         snormvss_avx(blockSize, o, mean[i*meanStride], d)
     end
   else
@@ -4147,7 +4599,8 @@ begin
     2: Result := mat[0] * mat[3] - mat[1] * mat[2];
 
     3: Result := mat[0] * (mat[4] * mat[8] - mat[5] * mat[7]) - mat[1] *
-        (mat[3] * mat[8] - mat[5] * mat[6]) + mat[2] * (mat[3] * mat[7] - mat[4] * mat[6]);
+        (mat[3] * mat[8] - mat[5] * mat[6]) + mat[2] *
+        (mat[3] * mat[7] - mat[4] * mat[6]);
 
     4: Result :=
         (mat[0] * mat[5] - mat[4] * mat[1]) * (mat[10] * mat[15] - mat[14] * mat[11]) -
@@ -4183,7 +4636,8 @@ begin
     for i := 0 to rank - 1 do
     begin
       matsDegrade(matIn, @A[0], rank, j, i);
-      matOut[j * rank + i] := (1 - 2 * ((j + i) and 1)) * matsDeterminant(@A[0], rank - 1);
+      matOut[j * rank + i] := (1 - 2 * ((j + i) and 1)) *
+        matsDeterminant(@A[0], rank - 1);
       //if boolean((j+i) and 1) then
       //  matOut[j*rank + i] := -matsDeterminant(@A[0], rank-1)
       //else
@@ -4291,7 +4745,8 @@ begin
     2: Result := mat[0] * mat[3] - mat[1] * mat[2];
 
     3: Result := mat[0] * (mat[4] * mat[8] - mat[5] * mat[7]) - mat[1] *
-        (mat[3] * mat[8] - mat[5] * mat[6]) + mat[2] * (mat[3] * mat[7] - mat[4] * mat[6]);
+        (mat[3] * mat[8] - mat[5] * mat[6]) + mat[2] *
+        (mat[3] * mat[7] - mat[4] * mat[6]);
 
     4: Result :=
         (mat[0] * mat[5] - mat[4] * mat[1]) * (mat[10] * mat[15] - mat[14] * mat[11]) -
@@ -4327,7 +4782,8 @@ begin
     for i := 0 to rank - 1 do
     begin
       matdDegrade(matIn, @A[0], rank, j, i);
-      matOut[j * rank + i] := (1 - 2 * ((j + i) and 1)) * matdDeterminant(@A[0], rank - 1);
+      matOut[j * rank + i] := (1 - 2 * ((j + i) and 1)) *
+        matdDeterminant(@A[0], rank - 1);
       //if boolean((j+i) and 1) then
       //  matOut[j*rank + i] := -matdDeterminant(@A[0], rank-1)
       //else
@@ -4430,7 +4886,8 @@ begin
     dst[i] := trunc(src[i]);
 end;
 
-class procedure TTensor<T>.cvtsi32(const N: SizeInt; const src: PSingle; const dst: PInt32);
+class procedure TTensor<T>.cvtsi32(const N: SizeInt; const src: PSingle;
+  const dst: PInt32);
 var
   i: SizeInt;
 begin
@@ -4438,7 +4895,8 @@ begin
     dst[i] := trunc(src[i]);
 end;
 
-class procedure TTensor<T>.cvtsd(const N: SizeInt; const src: PSingle; const dst: PDouble);
+class procedure TTensor<T>.cvtsd(const N: SizeInt; const src: PSingle;
+  const dst: PDouble);
 var
   i: SizeInt;
 begin
@@ -4446,7 +4904,8 @@ begin
     dst[i] := src[i];
 end;
 
-class procedure TTensor<T>.cvtss(const N: SizeInt; const src: PSingle; const dst: PSingle);
+class procedure TTensor<T>.cvtss(const N: SizeInt; const src: PSingle;
+  const dst: PSingle);
 var
   i: SizeInt;
 begin
@@ -4454,7 +4913,8 @@ begin
     dst[i] := src[i];
 end;
 
-class procedure TTensor<T>.cvtdd(const N: SizeInt; const src: PDouble; const dst: PDouble);
+class procedure TTensor<T>.cvtdd(const N: SizeInt; const src: PDouble;
+  const dst: PDouble);
 var
   i: SizeInt;
 begin
@@ -4488,7 +4948,8 @@ begin
     dst[i] := trunc(src[i]);
 end;
 
-class procedure TTensor<T>.cvtdi32(const N: SizeInt; const src: PDouble; const dst: PInt32);
+class procedure TTensor<T>.cvtdi32(const N: SizeInt; const src: PDouble;
+  const dst: PInt32);
 var
   i: SizeInt;
 begin
@@ -4496,7 +4957,8 @@ begin
     dst[i] := trunc(src[i]);
 end;
 
-class procedure TTensor<T>.cvtds(const N: SizeInt; const src: PDouble; const dst: PSingle);
+class procedure TTensor<T>.cvtds(const N: SizeInt; const src: PDouble;
+  const dst: PSingle);
 var
   i: SizeInt;
 begin
@@ -4889,8 +5351,8 @@ begin
     dst[i * dstStride] := log2(src[i * srcStride]);
 end;
 
-procedure vlog(const N: SizeInt; const a: single;
-  const src: PSingle; const srcStride: SizeInt; const dst: PSingle; const dstStride: SizeInt);
+procedure vlog(const N: SizeInt; const a: single; const src: PSingle;
+  const srcStride: SizeInt; const dst: PSingle; const dstStride: SizeInt);
   overload; inline;
 var
   i: SizeInt;
@@ -4899,8 +5361,8 @@ begin
     dst[i * dstStride] := LogN(src[i * srcStride], a);
 end;
 
-procedure vlog(const N: SizeInt; const a: double;
-  const src: Pdouble; const srcStride: SizeInt; const dst: Pdouble; const dstStride: SizeInt);
+procedure vlog(const N: SizeInt; const a: double; const src: Pdouble;
+  const srcStride: SizeInt; const dst: Pdouble; const dstStride: SizeInt);
   overload; inline;
 var
   i: SizeInt;
@@ -4909,8 +5371,8 @@ begin
     dst[i * dstStride] := LogN(src[i * srcStride], a);
 end;
 
-procedure vPow(const N: SizeInt; const a: single;
-  const src: PSingle; const srcStride: SizeInt; const dst: PSingle; const dstStride: SizeInt);
+procedure vPow(const N: SizeInt; const a: single; const src: PSingle;
+  const srcStride: SizeInt; const dst: PSingle; const dstStride: SizeInt);
   overload; inline;
 var
   i: SizeInt;
@@ -4919,8 +5381,8 @@ begin
     dst[i * dstStride] := power(src[i * srcStride], a);
 end;
 
-procedure vPow(const N: SizeInt; const a: double;
-  const src: Pdouble; const srcStride: SizeInt; const dst: Pdouble; const dstStride: SizeInt);
+procedure vPow(const N: SizeInt; const a: double; const src: Pdouble;
+  const srcStride: SizeInt; const dst: Pdouble; const dstStride: SizeInt);
   overload; inline;
 var
   i: SizeInt;
@@ -5376,7 +5838,8 @@ begin
     Result := coef[n];
 end;
 
-class function TTensor<T>.deCompose(var qr: PT; const m, n, rwidthq: SizeInt; var alpha: PT; var pivot: PSizeInt): integer;
+class function TTensor<T>.deCompose(var qr: PT; const m, n, rwidthq: SizeInt;
+  var alpha: PT; var pivot: PSizeInt): integer;
 var
   i, j, jbar, k, ii: SizeInt;
   beta, sigma, alphak, qrkk, s: T;
@@ -5458,7 +5921,8 @@ begin
   end; {k}
 end; {decomp}
 
-class procedure TTensor<T>.solve(const qr: TArray<T>; const M, N, rwidthq: SizeInt; var alpha: TArray<T>; var pivot: TArray<SizeInt>; var r, y: TArray<T>);
+class procedure TTensor<T>.solve(const qr: TArray<T>; const M, N, rwidthq: SizeInt;
+  var alpha: TArray<T>; var pivot: TArray<SizeInt>; var r, y: TArray<T>);
 var
   i, j, ii: SizeInt;
   gamma, s: T;
@@ -5487,7 +5951,8 @@ begin
     y[pivot[i]] := z[i];
 end; {solve}
 
-class function TTensor<T>.SolveLeastSquares(const a: PT; const M, N, rwidtha: SizeInt; const b: PT; var x: PT): integer;
+class function TTensor<T>.SolveLeastSquares(const a: PT;
+  const M, N, rwidtha: SizeInt; const b: PT; var x: PT): integer;
 var
   i, j, ii: SizeInt;
   normy0, norme1, s: T;
@@ -5502,7 +5967,7 @@ begin
   pa := pointer(a);
   pb := pointer(b);
   px := pointer(x);
-  setLength(qr, M*N);
+  setLength(qr, M * N);
   setLength(alpha, n);
   setLength(e, n);
   setLength(y, n);
@@ -5541,7 +6006,8 @@ begin
   move(y[0], x[0], n * SizeOf(T));
 end;
 
-class function TTensor<T>.FitPloynomial(const M: SizeInt; degree: SizeInt; const x, y: PT; var b: PT): integer;
+class function TTensor<T>.FitPloynomial(const M: SizeInt; degree: SizeInt;
+  const x, y: PT; var b: PT): integer;
 var
   i, j: SizeInt;
   fsum, fpn, ppn, ppn1, xppn1, p, alphaj, betaj: T;
@@ -5553,11 +6019,15 @@ begin
   end;
   Result := 1;
   if not assigned(sumv) then sumv := TTensor<T>.sum;
-  if degree = 0 then begin
+  if degree = 0 then
+  begin
     fsum := sumv(m, y, 1);
     b[0] := division(fsum, casti(m));
-  end else begin
-    if degree > m - 1 then begin
+  end
+  else
+  begin
+    if degree > m - 1 then
+    begin
       fillchar(b[m], (degree - m + 1) * sizeof(T), 0);
       degree := m - 1;
     end;
@@ -5569,65 +6039,71 @@ begin
 
     xppn1 := zero;
     ppn1 := casti(m);
-    for i := 0 to m - 1 do begin
+    for i := 0 to m - 1 do
+    begin
       pn[i] := zero;
       pn1[i] := one;
-      xppn1 := plus(xppn1 , x[i]);
+      xppn1 := plus(xppn1, x[i]);
     end;
     alpha[0] := division(xppn1, ppn1);
     beta[0] := zero;
-    for j := 1 to degree - 1 do begin
+    for j := 1 to degree - 1 do
+    begin
       alphaj := alpha[j - 1];
       betaj := beta[j - 1];
       ppn := ppn1;
       ppn1 := zero;
       xppn1 := zero;
-      for i := 0 to m - 1 do begin
-        p := minus(times(minus(x[i] , alphaj) , pn1[i]) , times(betaj , pn[i]));
+      for i := 0 to m - 1 do
+      begin
+        p := minus(times(minus(x[i], alphaj), pn1[i]), times(betaj, pn[i]));
         pn[i] := pn1[i];
         pn1[i] := p;
         p := sqr(p);
-        ppn1 := plus(ppn1 , p);
-        xppn1 := plus(xppn1 , times(x[i] , p));
+        ppn1 := plus(ppn1, p);
+        xppn1 := plus(xppn1, times(x[i], p));
       end;
       alpha[j] := division(xppn1, ppn1);
       beta[j] := division(ppn1, ppn);
     end;
 
     fpn := zero;
-    for i := 0 to m - 1 do begin
+    for i := 0 to m - 1 do
+    begin
       pn[i] := zero;
       pn1[i] := one;
-      fpn := plus(fpn , y[i]);
+      fpn := plus(fpn, y[i]);
     end;
     a[0] := division(fpn, casti(m));
-    for j := 0 to degree - 1 do begin
+    for j := 0 to degree - 1 do
+    begin
       fpn := zero;
       ppn := zero;
       alphaj := alpha[j];
       betaj := beta[j];
-      for i := 0 to m - 1 do begin
-        p := minus(times(minus(x[i] , alphaj) , pn1[i]) , times(betaj , pn[i]));
+      for i := 0 to m - 1 do
+      begin
+        p := minus(times(minus(x[i], alphaj), pn1[i]), times(betaj, pn[i]));
         pn[i] := pn1[i];
         pn1[i] := p;
-        fpn := plus(fpn , times(y[i] , p));
-        ppn := plus(ppn , times(p , p));
+        fpn := plus(fpn, times(y[i], p));
+        ppn := plus(ppn, times(p, p));
       end;
       a[j + 1] := division(fpn, ppn);
     end;
 
     move(a[0], b[0], (degree + 1) * sizeof(T));
     for i := 0 to degree - 1 do
-      for j := degree - i - 1 downto 0 do begin
-        b[j + i] := minus(b[j + i] , times(alpha[j] , b[j + i + 1]));
+      for j := degree - i - 1 downto 0 do
+      begin
+        b[j + i] := minus(b[j + i], times(alpha[j], b[j + i + 1]));
         if j + i <> degree - 1 then
-          b[j + i] := minus(b[j + i] , times( beta[j + 1] , b[j + i + 2]));
+          b[j + i] := minus(b[j + i], times(beta[j + 1], b[j + i + 2]));
       end;
   end;
 end;
 
-constructor TTensor<T>.Create(const newShape: TSizes; aGroups: SizeInt;
-  ASteps: SizeInt);
+constructor TTensor<T>.Create(const newShape: TSizes; aGroups: SizeInt);
 var
   sz: SizeInt;
 begin
@@ -5636,12 +6112,13 @@ begin
   sz := product(newShape);
   if sz = 0 then exit;
   groups := 0;
-  reshape(newShape, aGroups, aSteps);
+  reshape(newShape, aGroups);
   setLength(DynData, sz);
   Data := Pointer(DynData);
 
   {$if defined(USE_OPENCL)}
   //if computingDevice = cdOpenCL then
+  if not noDeviceAllocation then
     devData := ocl.createDeviceBuffer(sz * sizeOf(T), TCLMemAccess.maReadWrite, nil);
   {$endif}
 end;
@@ -5659,11 +6136,12 @@ begin
   FShape := nil;
   FDimSizes := nil;
   FStrides := nil;
+  FSize := 0;
   Data := nil;
-  if length(DynData)>0 then
+  if length(DynData) > 0 then
   begin
     groups := 0;
-    steps := 0;
+    //steps := 0;
     //setLength(DynData, 0);
     DynData := nil;
     exit;
@@ -5683,15 +6161,16 @@ end;
 {$if defined(USE_OPENCL)}
 
 {$ASSERTIONS ON}
-procedure initOpenCL(const platformId :SizeInt; const deviceId: SizeInt);
+procedure initOpenCL(const platformId: SizeInt; const deviceId: SizeInt);
 begin
-    if not assigned(ocl) then begin
-      ocl:= TNNOpenCL.Create(TCLDeviceType.dtALL);
-      ocl.LoadFromFile(GetCurrentDir + '/../../../../NN/source/cl_sgemm.c' );
-    end;
-    ocl.ActivePlatformId := platformId;
-    ocl.ActiveDeviceId := deviceId;
-    if not ocl.isBuilt then ocl.build;
+  if not assigned(ocl) then
+  begin
+    ocl := TNNOpenCL.Create(TCLDeviceType.dtALL);
+    ocl.LoadFromFile(GetCurrentDir + '/../../../../NN/source/cl_sgemm.c');
+  end;
+  ocl.ActivePlatformId := platformId;
+  ocl.ActiveDeviceId := deviceId;
+  if not ocl.isBuilt then ocl.build;
 end;
 
 procedure TTensor<T>.setOCL;
@@ -5741,18 +6220,24 @@ begin
   {$endif}
 end;
 
-procedure TTensor<T>.pullFromDevice(var dst: TTensor<T>);
-var
-  sz: SizeInt;
+procedure TTensor<T>.pullFromDevice(var dst: TTensor<T>; N: SizeInt;
+  const offset: SizeInt);
 begin
   {$if defined(USE_OPENCL)}
   {$ifdef USE_TELEMETRY}
   if benchmark then tensorMetrics.start(opDeviceToHost);
   {$endif}
-  sz := byteSize();
-  if not assigned(dst.Data) then
-    dst.resize(FShape, groups);
-  ocl.ReadBuffer(devData, sz, dst.Data);ocl.CheckError();
+  if N = 0 then
+    N := size()
+  else if not assigned(dst.Data) then
+    dst.resize([N]);
+  if not assigned(dst.Data) then begin
+    dst.reshape([N]);
+    setLength(dst.dynData, N);
+    dst.data := pointer(dst.dynData);
+  end;
+  ocl.ReadBuffer(devData, sizeOf(T) * N, dst.Data, sizeOf(T) * offset);
+  ocl.CheckError();
   //ocl.finish();
   dst.lastOP := cdCPU;
   {$ifdef USE_TELEMETRY}
@@ -5763,7 +6248,7 @@ end;
 
 procedure TTensor<T>.resetReference;
 begin
-  Data := pointer(DynData)
+  Data := pointer(DynData);
 end;
 
 //procedure TTensor<T>.convertTo<C>(var Trnsor: TTensor<C>);
@@ -5800,42 +6285,46 @@ procedure TTensor<T>.Fill(const val: T);
 var
   i: SizeInt;
 begin
-  FillExt(val, 0, Size())
+  FillExt(val, 0, Size());
 end;
 
 procedure TTensor<T>.FillExt(const val: T; const offset: SizeInt; const N: SizeInt);
 var
   i: SizeInt;
+  D: PT;
 begin
   {$ifdef USE_TELEMETRY}
   if benchmark then tensorMetrics.start(opFill);
   {$endif}
+  assert(size() - offset - N >= 0);
+  D := Data + offset;
   case sizeOf(T) of
-    1: FillChar(Data[0], N, PAnsiChar(@val)^);
-    2: FillWord(Data[0], N, PWord(@val)^);
-    4: FillDWord(Data[0], N, PDWord(@val)^);
-    8: FillQWord(Data[0], N, PQWord(@val)^);
+    1: FillChar(D[0], N, pansichar(@val)^);
+    2: FillWord(D[0], N, PWord(@val)^);
+    4: FillDWord(D[0], N, PDWord(@val)^);
+    8: FillQWord(D[0], N, PQWord(@val)^);
     else
-       for i := 0 to N - 1 do
-         Data[i] := val
+      for i := 0 to N - 1 do
+        D[i] := val
   end;
   {$ifdef USE_TELEMETRY}
   if benchmark then tensorMetrics.finish(opFill);
   {$endif}
 end;
 
-procedure TTensor<T>.Sort(dst: TTensor<T>; const Descending : boolean = false);
+procedure TTensor<T>.Sort(dst: TTensor<T>; const Descending: boolean = False);
 begin
   copyTo(dst);
-  dst.Sort(Descending)
+  dst.Sort(Descending);
 end;
 
-procedure TTensor<T>.Sort(const Descending : boolean = false);
-var i, N:SizeInt;
+procedure TTensor<T>.Sort(const Descending: boolean = False);
+var
+  i, N: SizeInt;
 begin
   N := groupSize;
-  for i:= 0 to groups-1 do
-    TTools<T>.QuickSort(Data, i*N, (1+i)*N-1, compare, Descending);
+  for i := 0 to groups - 1 do
+    TTools<T>.QuickSort(Data, i * N, (1 + i) * N - 1, compare, Descending);
 end;
 
 procedure TTensor<T>.linSpace(const start: T; const Finish: T; const N: SizeInt);
@@ -5879,43 +6368,48 @@ var
   i: SizeInt;
 begin
   //float sum = sum_array(a, n);
-  _sum  := sum();
-  multiply(division(One , _sum));
+  _sum := sum();
+  multiply(division(One, _sum));
   r := rand(one);
-  for i := 0 to Size()-1 do begin
-      r := r - data[i];
-      if r <= 0 then exit(i);
+  for i := 0 to Size() - 1 do
+  begin
+    r := minus(r, Data[i]);
+    if Compare(r, zero) <= 0 then exit(i);
   end;
-  result := n - 1
+  Result := n - 1;
 
 end;
 
 function TTensor<T>.findNaNs: TArray<SizeInt>;
-var i, j:SizeInt;
+var
+  i, j: SizeInt;
 begin
-  assert(assigned(checkNan),'[findNaNs] : not implemented!');
-  setLength(result, Size());
+  assert(assigned(checkNan), '[findNaNs] : not implemented!');
+  setLength(Result, Size());
   j := 0;
-  for i:= 0 to Size()-1 do
-    if checkNan(data[i]) then begin
-      result[j]:=i;
-      inc(j)
+  for i := 0 to Size() - 1 do
+    if checkNan(Data[i]) then
+    begin
+      Result[j] := i;
+      Inc(j);
     end;
-  setLength(result, j)
+  setLength(Result, j);
 end;
 
 function TTensor<T>.findInfinities: TArray<SizeInt>;
-var i, j:SizeInt;
+var
+  i, j: SizeInt;
 begin
-  assert(assigned(checkNan),'[findInfinities] : not implemented!');
-  setLength(result, Size());
+  assert(assigned(checkNan), '[findInfinities] : not implemented!');
+  setLength(Result, Size());
   j := 0;
-  for i:= 0 to Size()-1 do
-    if checkInf(data[i]) then begin
-      result[j]:=i;
-      inc(j)
+  for i := 0 to Size() - 1 do
+    if checkInf(Data[i]) then
+    begin
+      Result[j] := i;
+      Inc(j);
     end;
-  setLength(result, j)
+  setLength(Result, j);
 end;
 
 procedure TTensor<T>.setAll(const val: T; const stride: SizeInt);
@@ -5926,19 +6420,15 @@ begin
     Data[i * stride] := val;
 end;
 
-procedure TTensor<T>.reShape(const newShape: TSizes; const batch: SizeInt;
-  const aSteps: SizeInt);
+procedure TTensor<T>.reShape(const newShape: TSizes; const batch: SizeInt);
 var
   i, Dim, newDim: SizeInt;
 begin
-  Assert((Length(newShape) > 0) and (batch >=0) and (aSteps>=0));
-  if aSteps>0 then
-    assert((length(newShape)>2) and (aSteps = newShape[0]) and (batch = newShape[1]))
-  else
-    if batch>0 then assert((length(newShape)>1) and (batch = newShape[0]));
+  Assert((Length(newShape) > 0) and (batch >= 0));
+  if batch > 0 then assert((length(newShape) > 1) and (batch = newShape[0]));
   newDim := length(newShape);
-  for i := 0 to newDim -1 do
-    assert(0<>newShape[i], format('[reShape] dimansion cannot be zero [%d]', [i]));
+  for i := 0 to newDim - 1 do
+    assert(0 <> newShape[i], format('[reShape] dimansion cannot be zero [%d]', [i]));
   Dim := Length(FShape);
   //setLength(FShape, newDim);
   //move(newShape[0], FShape[0], sizeOf(SizeInt)*newDim);
@@ -5952,13 +6442,14 @@ begin
 
   if batch <> 0 then
     Groups := batch;
-  if aSteps<>0 then
-    Steps := aSteps;
+  //if aSteps <> 0 then
+  //  Steps := aSteps;
 
   if Groups = 0 then
     Groups := 1;
-  if Steps = 0 then
-    Steps := 1;
+  //if Steps = 0 then
+  //  Steps := 1;
+  FSize := product(FShape);
   if length(FShape) < 2 then exit;
   setLength(FDimSizes, High(FShape));
   dim := FShape[High(FShape)];
@@ -5971,13 +6462,12 @@ begin
 
 end;
 
-function TTensor<T>.reSize(const newShape: TSizes; const batch: SizeInt;
-  const aSteps: SizeInt): TTensor<T>;
+function TTensor<T>.reSize(const newShape: TSizes; const batch: SizeInt): TTensor<T>;
 var
   SO, SN: SizeInt;
 begin
   SO := Size();
-  reshape(newShape, batch, aSteps);
+  reshape(newShape, batch);
   //data :=nil;
   //dynData:=nil;
   SN := product(newShape);
@@ -5986,7 +6476,7 @@ begin
   Data := pointer(DynData);
   {$if defined(USE_OPENCL)}
   //if computingDevice = cdOpenCL then
-  begin
+  if not noDeviceAllocation then begin
     if assigned(devData) then ocl.freeDeviceBuffer(devData);
     devData := ocl.createDeviceBuffer(SN * SizeOf(T));
   end;
@@ -6046,6 +6536,17 @@ begin
   Result := -1;
 end;
 
+function TTensor<T>.indexOf(const val: T; const tolerance: T): SizeInt;
+var
+  i: SizeInt;
+begin
+  for i := 0 to Size() - 1 do
+    if compare(__abs(minus(val, Data[i])), tolerance) <= 0 then
+      exit(i);
+
+  Result := -1;
+end;
+
 function TTensor<T>.Permute(const newArrange: TSizes; dstTensor: Pointer): TTensor<T>;
 var
   j, y, x: SizeInt;
@@ -6079,16 +6580,28 @@ var
   i: SizeInt;
   d, s: PT;
 begin
+  {$ifdef USE_TELEMETRY}
+  if benchmark then tensorMetrics.start(opCopy);
+  {$endif}
+
   if N = 0 then N := Size() div srcStride;
-{$if defined(_USE_OPENCL)}
-  if wasGPU then begin
-    ocl.FErr := longint(CLBlastScopy(N, devData, srcOffset, srcStride, dst.devData, dstOffset, dstStride, @ocl.ActiveQueue, nil));ocl.CheckError();
-    exit
+  assert(Size() - N * srcStride - srcOffset >= 0, '[CopyTo] Source range out of bound!');
+  assert(dst.Size() - N * dstStride - dstOffset >= 0, '[CopyTo] Destination range out of bound!');
+  {$if defined(_USE_OPENCL)}
+  if wasGPU then
+  begin
+    ocl.FErr := longint(CLBlastScopy(N, devData, srcOffset, srcStride,
+      dst.devData, dstOffset, dstStride, @ocl.ActiveQueue, nil));
+    ocl.CheckError();
+    exit;
   end;
-{$endif}
+  {$endif}
   if (dstStride = 1) and (srcStride = 1) then
   begin
-    move((Data + srcOffset)^, (dst.data + dstOffset)^, N * sizeOf(T));
+    move((Data + srcOffset)^, (dst.Data + dstOffset)^, N * sizeOf(T));
+    {$ifdef USE_TELEMETRY}
+    if benchmark then tensorMetrics.finish(opCopy);
+    {$endif}
     exit;
   end;
 
@@ -6096,6 +6609,10 @@ begin
   s := Data + srcOffset;
   for i := 0 to N - 1 do
     d[i * dstStride] := s[i * srcStride];
+  {$ifdef USE_TELEMETRY}
+  if benchmark then tensorMetrics.finish(opCopy);
+  {$endif}
+
 end;
 
 procedure TTensor<T>.ShallowCopy(const Source: TTensor<T>);
@@ -6146,13 +6663,13 @@ end;
 
 function TTensor<T>.as2dWidth(): SizeInt;
 begin
-  result := FShape[high(FShape)];
+  Result := FShape[high(FShape)];
 end;
 
 function TTensor<T>.as2dHeight(): sizeInt;
 begin
   if Dimensions = 1 then exit(1);
-  result := self.product(Dimensions - 1, pointer(FShape));
+  Result := self.product(Dimensions - 1, pointer(FShape));
 end;
 
 procedure TTensor<T>.Squeeze(dim: SizeInt);
@@ -6231,6 +6748,7 @@ var
   r: integer;
 begin
   if blockSize = 0 then blockSize := byteSize();
+  pullFromDevice;
   BlockWrite(F, Data[0], Math.min(byteSize(), blockSize * sizeOf(T)), r);
   Result := r;
 end;
@@ -6258,6 +6776,7 @@ var
 begin
   assert(Dimensions > 1, 'Tensor must have two dimenstions at least!');
   assert(index < Size() div area(), 'Image index out of range');
+  pullFromDevice;
   imgs := Size() div area();
   if index < 0 then
   begin
@@ -6348,11 +6867,12 @@ procedure TTensor<T>.Add(const srcVector: PT; const dstOffset: SizeInt;
 var
   i: SizeInt;
 begin
-  assert(dstOffset + N<=Size());
+  assert(dstOffset + N <= Size(), '[Add] out of range');
   if N <= 0 then N := Size() div dstStride;
   if assigned(addvv) then
   begin
-    addvv(N, Data + dstOffset, dstStride, srcVector, srcStride, Data + dstOffset, dstStride);
+    addvv(N, Data + dstOffset, dstStride, srcVector, srcStride, Data +
+      dstOffset, dstStride);
     exit;
   end;
   for i := 0 to N - 1 do
@@ -6365,7 +6885,7 @@ var
   i: SizeInt;
 begin
   if N <= 0 then N := Size() div dstStride;
-  if assigned(mulvv) then
+  if assigned(subvv) then
   begin
     subvv(N, Data, dstStride, srcVector, srcStride, Data, dstStride);
     exit;
@@ -6404,7 +6924,8 @@ begin
     Data[i * dstStride] := Division(Data[i * dstStride], srcVector[i * srcStride]);
 end;
 
-procedure TTensor<T>.Add(const src: T; N: SizeInt; const dstStride: SizeInt);
+procedure TTensor<T>.Add(const src: T; N: SizeInt; const dstStride: SizeInt;
+  const dstOffset: SizeInt);
 var
   i: SizeInt;
 begin
@@ -6414,14 +6935,14 @@ begin
   if N <= 0 then N := Size() div dstStride;
   if assigned(addvs) then
   begin
-    addvs(N, src, Data, dstStride, Data, dstStride);
+    addvs(N, src, Data+dstOffset, dstStride, Data+dstOffset, dstStride);
     {$ifdef USE_TELEMETRY}
     if benchmark then tensorMetrics.finish(opAddvs);
     {$endif}
     exit;
   end;
   for i := 0 to N - 1 do
-    Data[i * dstStride] := Plus(Data[i * dstStride], src);
+    Data[i * dstStride + dstOffset] := Plus(Data[i * dstStride + dstOffset], src);
   {$ifdef USE_TELEMETRY}
   if benchmark then tensorMetrics.finish(opAddvs);
   {$endif}
@@ -6528,45 +7049,46 @@ begin
   {$endif}
 end;
 
-procedure TTensor<T>.Add(const src: TTensor<T>; const offset: SizeInt;
-  aSize: SizeInt);
-var
-  i, j, N, NBlocks, blockSize, grp, sd, Sc: SizeInt;
-  _sum: T;
-  D1, D2: PT;
-  dstBatch: boolean;
+procedure TTensor<T>.Add(const src: TTensor<T>; const dstOffset: SizeInt;
+  const srcOffset: SizeInt; aSize: SizeInt);
+//var
+//  i, j, N, NBlocks, blockSize, grp, sd, Sc: SizeInt;
+//  _sum: T;
+//  D1, D2: PT;
+//  dstBatch: boolean;
 begin
   {$ifdef USE_TELEMETRY}
   if benchmark then tensorMetrics.start(opAddvv);
   {$endif}
   if aSize = 0 then aSize := Size();
-  sd := aSize;
-  sc := src.size();
-  if sd = sc then
-  {$ifdef USE_OPENCL}
+  //sd := aSize;
+  //sc := src.size();
+  //if (sd = sc) or (sc = size()) then
+  {$ifdef _USE_OPENCL}
     if computingDevice=cdOpenCL then begin
       if not wasGPU() then pushToDevice();
       if not src.wasGPU() then src.pushToDevice();
-      ocl.addvv(sd, src.devData, 0, 1, devData, 0, 1, devData, 0, 1);
+      ocl.addvv(sd, src.devData, srcOffset, 1, devData, dstOffset, 1, devData, dstOffset, 1);
       exit;
     end else
   {$endif}
-    begin
-      assert(aSize + offset <= Size());
-      addvv(aSize, Data + offset, 1, src.Data, 1, Data + offset, 1);
-      {$ifdef USE_TELEMETRY}
+  begin
+    assert(aSize + dstOffset <= Size());
+    addvv(aSize, Data + dstOffset, 1, src.Data + srcOffset, 1, Data + dstOffset, 1);
+    {$ifdef USE_TELEMETRY}
       if benchmark then tensorMetrics.finish(opAddvv);
-      {$endif}
-      exit;
-    end;
+    {$endif}
+    exit;
+  end;
+(*
   dstBatch := sd > sc;
   if (groups = src.groups) and (src.groups > 1) then
   begin
     NBlocks := sd div groups;
     blockSize := sc div groups;
     N := Math.min(NBlocks, blockSize);
-    D1 := Data + offset;
-    D2 := src.Data;
+    D1 := Data + dstOffset;
+    D2 := src.Data + srcOffset;
     for i := 0 to groups - 1 do
     begin
       addvv(N, D1, 1, D2, 1, D1, 1);
@@ -6593,9 +7115,10 @@ begin
     blockSize := NBlocks div (grp * N);
   end;
   Assert(grp * N * BlockSize = NBlocks, '[Add] : Tensor sizes doesn''t align');
+
   if dstBatch then    // forward bias
   begin
-    assert(aSize + offset <= Size());
+    assert(aSize + dstOffset <= Size());
     {$ifdef _USE_OPENCL}
     if computingDevice=cdOpenCL then begin
       if not src.wasGPU() then
@@ -6605,7 +7128,7 @@ begin
       ocl.forwardBias(sd, devData , sc, src.devData, 1, groups);
     end else
     {$endif}
-      addblkvv(N, Data + offset , blockSize, src.Data, 1, groups);
+      addblkvv(N, Data + dstOffset , blockSize, src.Data + srcOffset, 1, groups);
     {$ifdef USE_TELEMETRY}
     if benchmark then tensorMetrics.finish(opAddvv);
     {$endif}
@@ -6623,10 +7146,10 @@ begin
   {$endif}
   begin
     blockSize := blockSize div src.steps;
-    assert(NBLocks + offset <= src.Size());
+    assert(NBLocks + dstOffset <= src.Size());
     if not assigned(sumv) then sumv := TTensor<T>.sum;
-    D1 := Data ;
-    D2 := src.Data + offset;
+    D1 := Data + srcOffset;
+    D2 := src.Data + dstOffset;
     //if blockSize=1 then
     //  for i := 0 to N - 1 do
     //    data[i] := sumv(groups, src.data+ i , N)
@@ -6639,6 +7162,7 @@ begin
         D1[i] := Plus(D1[i], _sum);
       end
   end;
+  *)
   {$ifdef USE_TELEMETRY}
   if benchmark then tensorMetrics.finish(opAddvv);
   {$endif}
@@ -6698,7 +7222,7 @@ begin
   {$ifdef USE_TELEMETRY}
   if benchmark then tensorMetrics.start(opMulvv);
   {$endif}
-  if aSize=0 then aSize := Size();
+  if aSize = 0 then aSize := Size();
   assert(offset + aSize <= Size());
   NBlocks := aSize;
   N := src.Size();
@@ -6731,7 +7255,7 @@ begin
   {$ifdef USE_TELEMETRY}
   if benchmark then tensorMetrics.finish(opMulvv);
   {$endif}
-  assert(false, '[add] unmatching vector sizes!');
+  assert(False, '[add] unmatching vector sizes!');
 
 end;
 
@@ -6789,12 +7313,14 @@ begin
   {$ifdef USE_TELEMETRY}
   if benchmark then tensorMetrics.start(opBatchFmavss);
   {$endif}
-  assert(assigned(addvv) and assigned(mulvv), '[fuseMultiplyAdd] operation not supported for this type.');
+  assert(assigned(addvv) and assigned(mulvv),
+    '[fuseMultiplyAdd] operation not supported for this type.');
   NBlocks := size();
   N := scale.Size();
   assert((N = bias.Size()) and (scale.groups = bias.groups));
   if (NBlocks = N) then
   begin
+    // todo [FuseMultiplyAdd] vectors FMA to implement SIMD
     mulvv(Size(), Data, 1, scale.Data, 1, Data, 1);
     addvv(Size(), Data, 1, bias.Data, 1, Data, 1);
     {$ifdef USE_TELEMETRY}
@@ -6922,19 +7448,17 @@ end;
 procedure TTensor<T>.forwardScale(const src: TTensor<T>; const offset: SizeInt;
   aSize: SizeInt);
 var
-  i, N, blockSize, NBlocks: SizeInt;
+  i, N, blockSize: SizeInt;
   D1, D2: PT;
 begin
   {$ifdef USE_TELEMETRY}
   if benchmark then tensorMetrics.start(opForwardScale);
   {$endif}
-  if aSize=0 then aSize := Size();
+  if aSize = 0 then aSize := Size();
   assert(offset + aSize <= Size());
-  NBlocks := aSize;
   N := src.Size();
-  blockSize := NBlocks div (Groups * N);
-  Assert(Groups * N * BlockSize = NBlocks, '[Multiply] : Tensor sizes doesn''t align');
-  blockSize := blockSize div steps;
+  blockSize := aSize div (Groups * N);
+  Assert(Groups * N * BlockSize = aSize, '[Multiply] : Tensor sizes doesn''t align');
   D1 := Data + offset;
   for i := 0 to groups - 1 do
     mulblkvv(N, D1 + i * N * blockSize, blockSize, src.Data, 1);
@@ -6945,7 +7469,8 @@ end;
 
 procedure TTensor<T>.forwardBias(const src: TTensor<T>; const offset: SizeInt;
   aSize: SizeInt);
-var N, blockSize : SizeInt;
+var
+  N, blockSize: SizeInt;
 begin
   {$ifdef USE_TELEMETRY}
   if benchmark then tensorMetrics.start(opForwardBias);
@@ -6956,83 +7481,107 @@ begin
   Assert(groups * N * BlockSize = aSize, '[Add] : Tensor sizes doesn''t align');
 
   assert(aSize + offset <= Size());
-  addblkvv(N, Data + offset , blockSize, src.Data, 1, groups);
+  addblkvv(N, Data + offset, blockSize, src.Data, 1, groups);
   {$ifdef USE_TELEMETRY}
   if benchmark then tensorMetrics.finish(opForwardBias);
   {$endif}
 end;
 
 procedure TTensor<T>.addSums(const src: TTensor<T>; const srcOffset: SizeInt;
-  srcSize: SizeInt);
+  N: SizeInt);
 var
   b, i, j, nDst, blocksize: SizeInt;
-  _sum :T;
+  _sum: T;
   D1, D2: PT;
 begin
   {$ifdef USE_TELEMETRY}
   if benchmark then tensorMetrics.start(opBackwardBias);
   {$endif}
-  if srcSize =0 then srcSize:= src.Size;
+  if N = 0 then N := src.Size;
 
   nDst := Size;
 
-  blockSize := srcSize div (src.Groups * nDst);
-  assert(srcSize = src.groups * nDst * blockSize, '[addSum] : Tensor sizes doesn''t align');
+  blockSize := N div (src.Groups * nDst);
+  assert(N = src.groups * nDst * blockSize, '[addSum] : Tensor sizes doesn''t align.');
   // todo Optimize addSums
-  blockSize := blockSize div src.steps;
-  assert(srcSize + srcOffset <= src.Size(), '[addSum] out of tensor bounds');
-  D1 := Data ;
+  assert(N + srcOffset <= src.Size(), '[addSum] out of tensor bounds.');
+  D1 := Data;
   D2 := src.Data + srcOffset;
 
-  if blockSize = 1 then begin
+  if not assigned(sumv) then sumv := TTensor<T>.sum;
+  if blockSize = 1 then
+  begin
     assert(assigned(addvv), '[addSums] operation not supported for this type.');
-    for j := 0 to src.groups - 1 do
-      addvv(nDst, D2, 1, D1, 1, D1, 1);
+    for i := 0 to nDst - 1 do
+    begin
+      //_sum := Default(T);
+      //for j := 0 to src.groups - 1 do
+      //  _sum := Plus(_sum, D2[j * nDst + i]);
+      D1[i] := Plus(D1[i], sumv(src.groups, D2 + i, nDst));
+    end;
     {$ifdef USE_TELEMETRY}
     if benchmark then tensorMetrics.finish(opBackwardBias);
     {$endif}
-    exit
+    exit;
   end;
 
-  if not assigned(sumv) then sumv := TTensor<T>.sum;
   //if blockSize=1 then
   //  for i := 0 to N - 1 do
   //    data[i] := sumv(groups, src.data+ i , N)
   //else
   for i := 0 to nDst - 1 do
-    begin
-      _sum := Default(T);
-      for j := 0 to src.groups - 1 do
-        _sum := Plus(_sum, sumv(blockSize, D2 + (j * nDst + i) * blockSize, 1));
-      D1[i] := Plus(D1[i], _sum);
-    end;
+  begin
+    _sum := Default(T);
+    for j := 0 to src.groups - 1 do
+      _sum := Plus(_sum, sumv(blockSize, D2 + (j * nDst + i) * blockSize, 1));
+    D1[i] := Plus(D1[i], _sum);
+  end;
   {$ifdef USE_TELEMETRY}
   if benchmark then tensorMetrics.finish(opBackwardBias);
   {$endif}
 end;
 
-procedure TTensor<T>.addDots(const src1, src2: TTensor<T>; const offset: SizeInt);
+procedure TTensor<T>.addDots(const src1, src2: TTensor<T>;
+  const offset: SizeInt; N: SizeInt);
 var
-  b, i, idx, N, nDst, blocksize: SizeInt;
+  b, i, idx, nDst, blocksize: SizeInt;
   sum: T;
-  D1, D2:PT;
+  D1, D2: PT;
 begin
   {$ifdef USE_TELEMETRY}
   if benchmark then tensorMetrics.start(opAddDots);
   {$endif}
 
-  N := src1.Size;
-  assert((N = src2.size()) and (src1.groups = src2.groups),
+  if N = 0 then N := src1.Size;
+  assert((N <= src2.size()) and (src1.groups = src2.groups),
     'Source tensors must have the same size and groups');
   nDst := Size;
   blockSize := N div (nDst * src1.Groups);
   assert(N = src1.groups * nDst * blockSize, '[addDot] : Tensor sizes doesn''t align');
-  blockSize := blockSize div src1.steps;
   D1 := src1.Data + offset;
   D2 := src2.Data + offset;
 
   if not assigned(dotvv) then dotvv := TTensor<T>.dot;
   // todo Optimize addDots
+  if blocksize = 1 then
+  begin
+
+    for i := 0 to nDst - 1 do
+    begin
+      //sum := Default(T);
+      //for b := 0 to src1.Groups - 1 do begin
+      //  idx := (i + b * nDst);
+      //  sum := plus(sum, D1[idx]*D2[idx]);
+      //end;
+      Data[i] := plus(Data[i], dotvv(src1.groups, D1 + i, nDst, D2 + i, nDst));
+    end;
+
+    {$ifdef USE_TELEMETRY}
+    if benchmark then tensorMetrics.finish(opAddDots);
+    {$endif}
+    exit;
+  end;
+
   for i := 0 to nDst - 1 do
   begin
     sum := Default(T);
@@ -7206,7 +7755,7 @@ end;
 function TTensor<T>.dot(const src: PT; N: SizeInt; const Stride: SizeInt;
   const srcStride: SizeInt): T;
 begin
-  if N < 0 then
+  if N <= 0 then
     N := Size() div Stride;
   if not assigned(dotvv) then dotvv := dot;
   exit(dotvv(N, Data, Stride, src, srcStride));
@@ -7214,12 +7763,12 @@ begin
 end;
 
 function TTensor<T>.sumSqrDiff(const src: PT; N: SizeInt; const Stride: SizeInt;
-  const srcStride: SizeInt): T;
+  const srcStride: SizeInt; const offset: SizeInt): T;
 begin
-  if N < 0 then
+  if N <= 0 then
     N := Size() div Stride;
   if not assigned(sumsqrdiffvv) then sumsqrdiffvv := sumSqrDiff;
-  exit(sumsqrdiffvv(N, Data, Stride, src, srcStride));
+  exit(sumsqrdiffvv(N, Data + offset, Stride, src, srcStride));
 end;
 
 function TTensor<T>.sumSqrDiff(const src: T; const Stride: SizeInt): T;
@@ -7228,8 +7777,8 @@ begin
   exit(sumsqrdiffv(size() div stride, src, Data, stride));
 end;
 
-function TTensor<T>.sumAbsDiff(const src: PT; N: SizeInt;
-  const Stride: SizeInt; const srcStride: SizeInt): T;
+function TTensor<T>.sumAbsDiff(const src: PT; N: SizeInt; const Stride: SizeInt;
+  const srcStride: SizeInt): T;
 begin
   if N < 0 then
     N := Size() div Stride;
@@ -7450,7 +7999,7 @@ end;
 
 function TTensor<T>.SolveLeastSquares(const b: PT; var coef: PT): integer;
 begin
-
+  // todo [SolveLeastSquare]    implement
 end;
 
 procedure TTensor<T>.Conv2D(const AKernels, dst: TTensor<T>;
@@ -7461,7 +8010,8 @@ var
   b, imColSize, k, filters, outImgSize, filt, chan: SizeInt;
   srcIm, dstIm, ker: PT;
   mt: boolean;
-  aOffset, bOffset : SizeInt;  t:TSingleTensor;
+  aOffset, bOffset: SizeInt;
+  t: TSingleTensor;
   {$ifdef USE_OPENCL}
   _A, _B, _C: TCLMemory;
   {$endif}
@@ -7480,7 +8030,7 @@ begin
   k := c * kSize;
   imColSize := c() * kSize * outImgSize;
   if ((kSize <> 1) or (xDilation * yDilation <> 1) or (xStride * yStride <> 1)) and
-    (length(workspace) < groups*imColSize) then
+    (length(workspace) < groups * imColSize) then
   begin
     //writeln('Reallocating.. Actual: ',length(workSpace), ' Required: ', imColSize);
     setLength(workspace, groups * imColSize);
@@ -7571,20 +8121,25 @@ begin
   end else
   {$endif}
   begin
-    mt := groups=1;
+    mt := groups = 1;
     {$ifdef USE_TELEMETRY}
     if benchmark then tensorMetrics.start(opIm2col);
     {$endif}
-    if (kSize <> 1) or (xDilation*yDilation<>1) or (xStride*yStride<>1) then begin
-      bOffset := imColSize ;
-      for b:=0 to groups-1 do
-        im2Colvv(c, h, w, AKernels.h, aKernels.w, hPadding, wPadding, yStride, xStride, xDilation, yDilation, data, b*volume(), pointer(workspace), b * bOffset, 1, mt);
+    if (kSize <> 1) or (xDilation * yDilation <> 1) or (xStride * yStride <> 1) then
+    begin
+      bOffset := imColSize;
+      for b := 0 to groups - 1 do
+        im2Colvv(c, h, w, AKernels.h, aKernels.w, hPadding, wPadding,
+          yStride, xStride, xDilation, yDilation, Data, b * volume(), pointer(workspace),
+          b * bOffset, 1, mt);
       srcIm := pointer(workspace);
-    end else begin
+    end
+    else
+    begin
       bOffset := volume();
-      srcIm := data
+      srcIm := Data;
     end;
-    dstIM := dst.data;
+    dstIM := dst.Data;
     {$ifdef USE_TELEMETRY}
     if benchmark then tensorMetrics.finish(opIm2col);
     {$endif}
@@ -7592,13 +8147,16 @@ begin
     {$ifdef USE_TELEMETRY}
     if benchmark then tensorMetrics.start(opGemm);
     {$endif}
-    for b:=0 to groups-1 do begin
-      gemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, filters, outImgSize, k, one, AKernels.data, k, srcIM + b * bOffset , outImgSize, zero, dstIM + b*outImgSize*filters, outImgSize);
+    for b := 0 to groups - 1 do
+    begin
+      gemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, filters,
+        outImgSize, k, one, AKernels.Data, k, srcIM + b * bOffset, outImgSize,
+        zero, dstIM + b * outImgSize * filters, outImgSize);
     end;
     {$ifdef USE_TELEMETRY}
     if benchmark then tensorMetrics.finish(opGemm);
     {$endif}
-  end
+  end;
   //for b:=0 to groups-1 do
   //  for chan :=0 to c()-1 do begin
   //    srcIM := data + b * groupSize() + chan*area() ;
@@ -7817,7 +8375,7 @@ var
   aMean, aStdDev: T;
 begin
   MeanAndVar(aMean, aStdDev);
-  if aStdDev=0 then exit;
+  if compare(aStdDev, zero) = 0 then exit;
   aStdDev := Self.sqrt(aStdDev);
   if assigned(normvss) then
     normvss(Size(), Data, aMean, aStdDev)
@@ -7856,9 +8414,10 @@ begin
   N := aMean.Size();
   assert(aMean.Size() = aStdDev.Size(),
     'NORMALIZE : [Mean] and [StdDev] Tensor sizes do not match.');
-  if aSize=0 then aSize := Size();
+  if aSize = 0 then aSize := Size();
   blockSize := aSize div (Groups * N);
   assert(Groups * N * blockSize = aSize, 'NORMALIZE : Tensor sizes must align.');
+  assert(offset + blockSize * N * groups <= size(), '[Normalize] offset out of bounds!');
   D := Data + offset;
   if blockSize = 1 then
     for i := 0 to Groups - 1 do
@@ -7881,9 +8440,9 @@ asm
   jz           @rem1
 @while1:
   vmovups      ymm2     ,    yword[x]
-  vsubps       ymm2     ,    ymm2,  ymm1
-  vmulps       ymm2     ,    ymm2,  yword[delta]
-  vaddps       ymm0     ,    ymm0,  ymm2
+  vsubps       ymm2     ,    ymm2,  ymm1          // x[i] - aMean
+  vmulps       ymm2     ,    ymm2,  yword[delta]  //(x[i] - aMean) * delta[i]
+  vaddps       ymm0     ,    ymm0,  ymm2          // + v
   add          x        ,    8*4
   add          delta    ,    8*4
   dec          rax
@@ -7897,7 +8456,7 @@ asm
   vzeroupper
   addps        xmm0     ,    xmm2
 @while2:
-  movss        xmm2     ,    dword[x]
+  vmovss       xmm2     ,    dword[x]
   vsubss       xmm2     ,    xmm2,  xmm1
   vmulss       xmm2     ,    xmm2,  dword[delta]
   vaddss       xmm0     ,    xmm0,  xmm2
@@ -7920,13 +8479,14 @@ asm
   movss        xmm0     ,    meanDelta
   vbroadcastss ymm0     ,    xmm0
 
-  movss        xmm1     ,    varDelta
+  vmovss       xmm1     ,    varDelta
   vbroadcastss ymm1     ,    xmm1
 
-  movss        xmm2     ,    aMean
+  vmovss       xmm2     ,    aMean
   vbroadcastss ymm2     ,    xmm2
 
-  rcpss        xmm3     ,    dword [aStdDev]
+  //rcpss        xmm3     ,    dword [aStdDev]
+  vmovss       xmm3     ,    dword [aStdDev]
   vbroadcastss ymm3     ,    xmm3
 
   shr          rax      ,    3  // div 8
@@ -7935,7 +8495,7 @@ asm
   //        (2 * variance_delta.Data[i] * (x.Data[index] - mean.Data[i]) + mean_delta.Data[i]) / batchSize;
 @while1:
   vmovups      ymm4     ,    yword  [delta]
-  vmulps       ymm4     ,    ymm4,  ymm3           // delta / aStdDev
+  vdivps       ymm4     ,    ymm4,  ymm3           // delta / aStdDev
   vmovups      ymm5     ,    yword  [x]
   vsubps       ymm5     ,    ymm5,  ymm2           //  x - amean
   vmulps       ymm5     ,    ymm5,  ymm1           // (x - amean) * varDelta
@@ -7953,14 +8513,14 @@ asm
   jz           @done
 
   @while2:
-  movss        xmm4     ,    dword  [delta]
-  vmulss       xmm4     ,    xmm4,  xmm3           // delta / aStdDev
-  movss        xmm5     ,    dword  [x]
+  vmovss       xmm4     ,    dword  [delta]
+  vdivss       xmm4     ,    xmm4,  xmm3           // delta / aStdDev
+  vmovss       xmm5     ,    dword  [x]
   vsubss       xmm5     ,    xmm5,  xmm2           //  x - amean
   vmulss       xmm5     ,    xmm5,  xmm1           // (x - amean) * varDelta
   vaddss       xmm5     ,    xmm5,  xmm0           // + meanDelta => xmm5
   vaddss       xmm4     ,    xmm4,  xmm5           // + xmm5
-  movss        dword [delta]     ,  xmm4
+  vmovss       dword [delta]     ,  xmm4
 
   add          x        ,    4
   add          delta    ,    4
@@ -7971,52 +8531,62 @@ asm
 end;
 {$endif}
 
-procedure sNormalizeDelta_pas(const N:SizeInt; delta:PSingle; const x:PSingle; const meanDelta, varDelta, aMean, aStdDev : single);
-var i:SizeInt; r:single;
+procedure sNormalizeDelta_pas(const N: SizeInt; delta: PSingle;
+  const x: PSingle; const meanDelta, varDelta, aMean, aStdDev: single);
+var
+  i: SizeInt;
+  r: single;
 begin
-  for i:=0 to N-1 do
-        Delta[i] := Delta[i] / aStdDev +
-          (varDelta * (x[i] - aMean) + meanDelta);
+  for i := 0 to N - 1 do
+    Delta[i] := Delta[i] / aStdDev + (varDelta * (x[i] - aMean) + meanDelta);
 end;
 
 procedure sMeanAndVarianceDelta(const delta, x, mean, variance: TTensor<single>;
-  const mean_delta, variance_delta: TTensor<single>; const offset : SizeInt =0);
+  const mean_delta, variance_delta: TTensor<single>; const offset: SizeInt = 0;
+  N: SizeInt = 0);
 var
-  i, j, k, N, nDst, blockSize, index: SizeInt;
+  i, j, k, nDst, blockSize, index: SizeInt;
   m, v: single;
 begin
   {$ifdef USE_TELEMETRY}
   if benchmark then tensorMetrics.start(opMeansVarsDelta);
   {$endif}
-  N := Delta.Size();
+  if N = 0 then N := Delta.Size();
   nDst := mean.Size();
   blockSize := N div (nDst * Delta.groups);
-
-  Assert((N = nDst * Delta.Groups * blockSize) and (x.Size() = N) and
-    (mean.Size = nDst) and (variance.Size = nDst) and
-    (mean_delta.size = nDst) and (variance_delta.size() = nDst),
+  Assert(N <= delta.Size());
+  Assert((N = blockSize * nDst * Delta.Groups) and (x.Size() = Delta.size()) and
+    (variance.Size = nDst) and (mean_delta.size = nDst) and
+    (variance_delta.size() = nDst),
     '[MeanAndVarDelta] Tensor sizes must be aligned.');
-  blockSize := blockSize div delta.steps;
+  assert(offset + blockSize * nDst * delta.Groups <= delta.size(),
+    '[MeanAndVarianceDelta] offset is out of bounds!.');
   for i := 0 to nDst - 1 do
   begin
     m := 0;
     v := 0;
-    for j := 0 to Delta.groups - 1 do begin
-      m := m + vsSumI(blockSize, Delta.Data + offset + (i + j * nDst) * blockSize, 1);
-      {$ifdef CPUX64}
+
+    for j := 0 to Delta.groups - 1 do
+    begin
+      //assert(offset + (i + j * nDst) * blockSize + blocksize <= delta.size);
+      m := m + vsSumI(blockSize, pointer(Delta.Data + offset + (i + j * nDst) * blockSize), 1);
+      // domething wrong with AVX impelementation,
+      // not gaining any speed, revert to pure pascal
+      {$ifdef _CPUX64}
       if AVX2Support then begin
         index := (i + j*nDst)*blockSize;
         v := v + sVarinceDelta(blockSize, mean.data[i], Delta.data + offset + index, x.Data + index);
       end else
       {$endif}
-      for k := 0 to blockSize - 1 do begin
+      for k := 0 to blockSize - 1 do
+      begin
         index := (i + j * nDst) * blockSize + k;
         //m := m + Delta.Data[index];
         v := v + Delta.Data[index + offset] * (x.Data[index + offset] - mean.Data[i]);
       end;
     end;
-    mean_delta.Data[i] := m * (-1.0 / sqrt(max(variance.Data[i] , sEPSILON)));
-    variance_delta.Data[i] := v * -0.5 * Power(max(variance.Data[i] , sEPSILON), -3.0 / 2.0);
+    mean_delta.Data[i] := m * (-1.0 / sqrt(max(variance.Data[i], sEPSILON)));
+    variance_delta.Data[i] := v * -0.5 * Power(max(variance.Data[i], sEPSILON), -3.0 / 2.0);
   end;
   {$ifdef USE_TELEMETRY}
   if benchmark then tensorMetrics.finish(opMeansVarsDelta)
@@ -8025,10 +8595,11 @@ end;
 
 
 procedure sNormalizeDelta(const x, mean, variance, mean_delta,
-  variance_delta: TTensor<single>; const Delta: TTensor<single>; const offset:SizeInt =0);
+  variance_delta: TTensor<single>; const Delta: TTensor<single>;
+  const offset: SizeInt = 0; aSize: SizeInt = 0);
 var
-  i, j, k, N, NBlocks, blockSize, batchSize, index: SizeInt;
-  dd, xx:PSingle;
+  i, j, k, N, blockSize, batchSize, index: SizeInt;
+  dd, xx: PSingle;
 begin
 
   {$ifdef USE_TELEMETRY}
@@ -8036,25 +8607,32 @@ begin
   {$endif}
   // todo [sNormalizeDelta] check two cases , if src has group>1 or dst group >1
   N := mean.Size();
-  NBlocks := Delta.Size();
-  blockSize := NBlocks div (N * Delta.groups);
-  Assert((NBlocks = N * Delta.Groups * blockSize) and
-    (x.Size() = NBlocks) and (mean.Size = N) and
-    (variance.Size = N) and (mean_delta.size = N) and
-    (variance_delta.size() = N), '[normalizeDelta] Tensor sizes must be aligned.');
-  blockSize := blockSize div delta.steps;
+  assert(N <= Delta.Size());
+  if aSize = 0 then aSize := Delta.Size();
+  blockSize := aSize div (N * Delta.groups);
+  Assert((aSize =  blockSize * N * Delta.Groups) and (x.Size() = delta.Size()) and (aSize<=delta.Size())and
+    (variance.Size = N) and (mean_delta.size = N) and (variance_delta.size() = N),
+    '[normalizeDelta] Tensor sizes must be aligned.');
+
+  assert(offset + blockSize * N * delta.Groups <= delta.size(), '[NormalizeDelta] offset is out of bounds!.');
+
   batchSize := blockSize * Delta.groups;
   for j := 0 to Delta.groups - 1 do
-    for i := 0 to N - 1 do begin
+    for i := 0 to N - 1 do
+    begin
       index := (i + j * N) * blockSize;
-      dd := delta.Data + offset + index;
-      xx := x.Data + offset + index;
-      {$ifdef CPUX64}  //todo : sNormalizeDelta_avx is not stable yet, revisit
+      //assert(index + offset + blockSize<= delta.size());
+      dd := pointer(delta.Data + offset + index);
+      xx := pointer(x.Data + offset + index);
+      {$ifdef _CPUX64}
+  //todo : sNormalizeDelta_avx is not stable yet, revisit
       if AVX2Support then begin
         sNormalizeDelta_avx(blockSize, dd, xx, mean_delta.data[i]/batchSize, 2*variance_delta.data[i]/batchSize, mean.data[i], sqrt(max(variance.Data[i], sEPSILON)));
       end else
       {$endif}
-        sNormalizeDelta_pas(blockSize, dd, xx, mean_delta.data[i]/batchSize, 2*variance_delta.data[i]/batchSize, mean.data[i], sqrt(max(variance.Data[i], sEPSILON)));
+      sNormalizeDelta_pas(blockSize, dd, xx, mean_delta.Data[i] / batchSize,
+        2 * variance_delta.Data[i] / batchSize, mean.Data[i],
+        sqrt(max(variance.Data[i], sEPSILON)));
       //for k := 0 to blockSize - 1 do begin
       //  dd[k] :=
       //    dd[k] / sqrt(max(variance.Data[i] , sEPSILON)) +
@@ -8068,22 +8646,22 @@ begin
 end;
 
 procedure dMeanAndVarianceDelta(const delta, x, mean, variance: TTensor<double>;
-  const mean_delta, variance_delta: TTensor<double>; const offset :SizeInt=0);
+  const mean_delta, variance_delta: TTensor<double>; const offset: SizeInt = 0;
+  N: SizeInt = 0);
 var
-  i, j, k, N, nDst, blockSize, index: SizeInt;
+  i, j, k, nDst, blockSize, index: SizeInt;
   m, v: double;
 begin
   {$ifdef USE_TELEMETRY}
   if benchmark then tensorMetrics.start(opMeansVarsDelta);
   {$endif}
-  N := Delta.Size();
+  if N = 0 then N := Delta.Size();
   nDst := mean.Size();
   blockSize := N div (nDst * Delta.groups);
 
   Assert((N = nDst * Delta.Groups * blockSize) and (x.Size() = N) and
-    (mean.Size = nDst) and (variance.Size = nDst) and
-    (mean_delta.size = nDst) and (variance_delta.size() = nDst),
-    '[MeanAndVarDelta] Tensor sizes must be aligned.');
+    (variance.Size = nDst) and (mean_delta.size = nDst) and
+    (variance_delta.size() = nDst), '[MeanAndVarDelta] Tensor sizes must be aligned.');
 
   for i := 0 to nDst - 1 do
   begin
@@ -8096,8 +8674,8 @@ begin
         m := m + Delta.Data[index + offset];
         v := v + Delta.Data[index + offset] * (x.Data[index + offset] - mean.Data[i]);
       end;
-    mean_delta.Data[i] := m * (-1. / sqrt(variance.Data[i] + 0.00001));
-    variance_delta.Data[i] := v * -0.5 * Power(variance.Data[i] + 0.00001, -3.0 / 2.0);
+    mean_delta.Data[i] := m * (-1. / sqrt(variance.Data[i] + dEPSILON));
+    variance_delta.Data[i] := v * -0.5 * Power(variance.Data[i] + dEPSILON, -3.0 / 2.0);
   end;
 
   {$ifdef USE_TELEMETRY}
@@ -8106,7 +8684,8 @@ begin
 end;
 
 procedure dNormalizeDelta(const x, mean, variance, mean_delta,
-  variance_delta: TTensor<double>; const Delta: TTensor<double>; const offset :SizeInt =0);
+  variance_delta: TTensor<double>; const Delta: TTensor<double>;
+  const offset: SizeInt = 0; aSize: SizeInt = 0);
 var
   i, j, k, N, nDst, blockSize, batchSize, index: SizeInt;
 begin
@@ -8114,11 +8693,11 @@ begin
   if benchmark then tensorMetrics.start(opNormalizeDelta);
   {$endif}
   N := mean.Size();
-  nDst := Delta.Size();
-  blockSize := nDst div (N * Delta.groups);
-  Assert((N = nDst * Delta.Groups * blockSize) and (x.Size() = N) and
-    (mean.Size = N) and (variance.Size = N) and (mean_delta.size = N) and
-    (variance_delta.size() = N), '[normalizeDelta] Tensor sizes must be aligned.');
+  if aSize = 0 then aSize := Delta.Size();
+  blockSize := aSize div (N * Delta.groups);
+  Assert((N = aSize * Delta.Groups * blockSize) and (x.Size() = N) and
+    (variance.Size = N) and (mean_delta.size = N) and (variance_delta.size() = N),
+    '[normalizeDelta] Tensor sizes must be aligned.');
   batchSize := blockSize * Delta.groups;
   for j := 0 to Delta.groups - 1 do
     for i := 0 to N - 1 do
@@ -8126,9 +8705,9 @@ begin
       begin
         index := (i + j * N) * blockSize + k + offset;
         Delta.Data[index] :=
-          Delta.Data[index] * 1 / (sqrt(variance.Data[i] + 0.00001)) + 2 *
-          (variance_delta.Data[i] * (x.Data[index] - mean.Data[i]) + mean_delta.Data[i]) /
-          batchSize;
+          Delta.Data[index] * 1 / (sqrt(variance.Data[i] + dEPSILON)) + 2 *
+          (variance_delta.Data[i] * (x.Data[index] - mean.Data[i]) +
+          mean_delta.Data[i]) / batchSize;
       end;
   {$ifdef USE_TELEMETRY}
   if benchmark then tensorMetrics.finish(opNormalizeDelta)
@@ -8150,11 +8729,12 @@ begin
 end;
 
 function TTensor<T>.Area(): SizeInt;
-var i:SizeInt;
+var
+  i: SizeInt;
 begin
   i := high(FShape);
-  if i<0 then exit(0);
-  case i+1 of
+  if i < 0 then exit(0);
+  case i + 1 of
     1: Result := FShape[i];
     else
       Result := FShape[i - 1] * FShape[i]
@@ -8162,15 +8742,16 @@ begin
 end;
 
 function TTensor<T>.Volume(): SizeInt;
-var i:SizeInt;
+var
+  i: SizeInt;
 begin
   i := high(FShape);
-  if i<0 then exit(0);
-  case i+1 of
+  if i < 0 then exit(0);
+  case i + 1 of
     1: Result := FShape[i];
-    2: Result := FShape[i-1] * FShape[i];
-  else
-    Result := FShape[i-2] * FShape[i-1] * FShape[i];
+    2: Result := FShape[i - 1] * FShape[i];
+    else
+      Result := FShape[i - 2] * FShape[i - 1] * FShape[i];
   end;
 end;
 
@@ -8190,13 +8771,14 @@ begin
   end;
 end;
 
-function TTensor<T>.Sum(const stride: SizeInt; N: SizeInt): T;
+// todo check strides calculation if N=0 : do we autocalc "size() div stride" or "N div stride" for all ops?
+function TTensor<T>.Sum(const stride: SizeInt; N: SizeInt; const offset: SizeInt): T;
 var
   i: SizeInt;
 begin
   if not assigned(sumv) then sumv := TTensor<T>.Sum;
-  if N=0 then N := Size();
-  Result := sumv(N div stride, Data, stride);
+  if N = 0 then N := Size() div stride;
+  Result := sumv(N, Data + offset, stride);
 end;
 
 procedure TTensor<T>.Sums(const dst: PT; groups: SizeInt;
@@ -8206,10 +8788,10 @@ begin
   Sums(Size(), Data, groups, dst, activation, _data);
 end;
 
-function TTensor<T>.mean(const stride: SizeInt; N: SizeInt): T;
+function TTensor<T>.mean(const stride: SizeInt; N: SizeInt; const offset: SizeInt): T;
 begin
-  if N=0 then N:=Size();
-  Result := Division(self.sum(stride, N), CastI(N div stride));
+  if N = 0 then N := Size() div stride;
+  Result := Division(self.sum(stride, N, offset), CastI(N));
 end;
 
 procedure TTensor<T>.MeansAndVars(aMeans, aVars: TTensor<T>;
@@ -8225,12 +8807,18 @@ begin
   N := aMeans.Size();
   Assert(N = aVars.Size(),
     '[MeanAndVar]: Mean and Variance tensors must have the same size');
-  if aSize=0 then
+  if aSize = 0 then
     aSize := Size();
-  assert(offset + aSize <= Size());
+  assert(offset + aSize <= Size(), '[MeansAndVars] offset out of bounds!');
 
   blockSize := aSize div (N * Groups);
-  assert(aSize = N * Groups * blockSize, 'Tensor sizes doesn''t align');
+  assert((blockSize > 0) and (aSize = N * Groups * blockSize),
+    'Tensor sizes doesn''t align');
+  //if Groups * blockSize=1 then
+  begin
+    aMeans.Data[0] := Data[0];
+    aVars.Data[0] := 0;
+  end;
   if not assigned(sumv) then
     sumv := TTensor<T>.sum;
   if not assigned(rssv) then
@@ -8268,7 +8856,7 @@ var
   i: SizeInt;
 begin
   if not assigned(varv) then varv := TTensor<T>.Variance;
-  if N= 0 then N := Size();
+  if N = 0 then N := Size();
   mea := Mean(stride);
   Result := varv(N div stride, mea, Data, stride);
 end;
@@ -8280,16 +8868,17 @@ begin
 end;
 
 procedure TTensor<T>.MeanAndVar(var aMean, aVar: T; const stride: SizeInt;
-  N: SizeInt);
+  N: SizeInt; const offset: SizeInt);
 var
   mea: T;
   i: SizeInt;
 begin
   if not assigned(varv) then
     varv := TTensor<T>.Variance;
-  if N=0 then N:=Size();
-  aMean := Mean(stride, N);
-  aVar := varv(N, aMean, Data, stride);
+  if N = 0 then N := Size();
+  assert(N + offset <= size());
+  aMean := division(sumv(N, Data + offset, stride), casti(N));
+  aVar := varv(N, aMean, Data + offset, stride);
 end;
 
 class function TTensor<T>.subPrint(const src: TTensor<T>; const Indecies: TSizes;
@@ -8335,19 +8924,19 @@ end;
 class procedure TTensor<T>.Sums(const N: SizeInt; const src: PT;
   const groups: SizeInt; const dst: PT; const func: TUnaryPFunc; const Data: PT);
 var
-  i, j, step: SizeInt;
+  i, j, stepSize: SizeInt;
   D: PT;
 begin
   assert(assigned(addvv), '[Sums] operation not supported for this type.');
-  step := N div groups;
+  stepSize := N div groups;
   D := dst;
   if assigned(func) then
     for i := 0 to groups - 1 do
-      for j := 0 to step - 1 do
-        D[j] := plus(dst[j], func(src[i * step + j], j, Data))
+      for j := 0 to stepSize - 1 do
+        D[j] := plus(dst[j], func(src[i * stepSize + j], j, Data))
   else
     for i := 0 to groups - 1 do
-      addvv(step, src + i * step, 1, dst, 1, dst, 1);
+      addvv(stepSize, src + i * stepSize, 1, dst, 1, dst, 1);
 end;
 
 class function TTensor<T>.Dot(N: SizeInt; src1: PT; stride1: SizeInt;
@@ -8404,10 +8993,11 @@ class function TTensor<T>.Variance(const N: SizeInt; const mean: T;
   const src: PT; const stride: SizeInt): T;
 var
   i: SizeInt;
-  v : T;
+  v: T;
 begin
   Result := Default(T);
-  for i := 0 to N - 1 do begin
+  for i := 0 to N - 1 do
+  begin
     v := Minus(src[i * stride], mean);
     Result := Plus(Result, times(v, v));
   end;
@@ -8546,23 +9136,23 @@ end;
 class procedure TTensor<T>.__maxs(const N: SizeInt; const src: PT;
   const groups: SizeInt; const dst: PT);
 var
-  i, j, step: SizeInt;
+  i, j, stepSize: SizeInt;
 begin
   if not assigned(maxvv) then maxvv := __max;
-  step := N div groups;
+  stepSize := N div groups;
   for i := 0 to groups - 1 do
-    maxvv(step, src + i * step, 1, dst, 1, dst, 1);
+    maxvv(stepSize, src + i * stepSize, 1, dst, 1, dst, 1);
 end;
 
 class procedure TTensor<T>.__mins(const N: SizeInt; const src: PT;
   const groups: SizeInt; const dst: PT);
 var
-  i, j, step: SizeInt;
+  i, j, stepSize: SizeInt;
 begin
   if not assigned(minvv) then minvv := __min;
-  step := N div groups;
+  stepSize := N div groups;
   for i := 0 to groups - 1 do
-    minvv(step, src + i * step, 1, dst, 1, dst, 1);
+    minvv(stepSize, src + i * stepSize, 1, dst, 1, dst, 1);
 end;
 
 class procedure TTensor<T>.minMax(const N: SizeInt; const src: PT;
@@ -8715,7 +9305,7 @@ begin
   end;
 end;
 
-class function TTensor<T>.argMin(const N: SizeInt; const src: PT;
+class function TTensor<T>.argMin32(const N: SizeInt; const src: PT;
   const stride: int32): int32;
 var
   i: int32;
@@ -8732,7 +9322,7 @@ begin
     end;
 end;
 
-class function TTensor<T>.argMax(const N: SizeInt; const src: PT;
+class function TTensor<T>.argMax32(const N: SizeInt; const src: PT;
   const stride: int32): int32;
 var
   i: int32;
@@ -8749,7 +9339,7 @@ begin
     end;
 end;
 
-class function TTensor<T>.argAbsMin(const N: SizeInt; const src: PT;
+class function TTensor<T>.argAbsMin32(const N: SizeInt; const src: PT;
   const stride: int32): int32;
 var
   i: int32;
@@ -8769,7 +9359,7 @@ begin
   end;
 end;
 
-class function TTensor<T>.argAbsMax(const N: SizeInt; const src: PT;
+class function TTensor<T>.argAbsMax32(const N: SizeInt; const src: PT;
   const stride: int32): int32;
 var
   i: int32;
@@ -8875,7 +9465,8 @@ begin
     Result := Result + Ord(compare(src1[i * stride1], src2[i * stride2]) = 0);
 end;
 
-class function TTensor<T>.countNotValue(const N: SizeInt; const val: T;  const src: PT; const stride: SizeInt): SizeInt;
+class function TTensor<T>.countNotValue(const N: SizeInt; const val: T;
+  const src: PT; const stride: SizeInt): SizeInt;
 var
   i: SizeInt;
 begin
@@ -8885,7 +9476,8 @@ begin
       Inc(Result);
 end;
 
-class function TTensor<T>.countValue(const N: SizeInt; const val: T;  const src: PT; const stride: SizeInt): SizeInt;
+class function TTensor<T>.countValue(const N: SizeInt; const val: T;
+  const src: PT; const stride: SizeInt): SizeInt;
 var
   i: SizeInt;
 begin
@@ -8900,6 +9492,7 @@ begin
   Dst.Data := Data;
   Dst.Groups := Groups;
   Dst.FShape := FShape;
+  Dst.FSize := FSize;
   Dst.FDimSizes := FDimSizes;
   Dst.FStrides := FStrides;
   Dst.DynData := DynData;
@@ -8921,7 +9514,7 @@ var
 begin
   if not assigned(e) then exit(0);
   Result := e[0];
-  for i := 1 to N-1 do
+  for i := 1 to N - 1 do
     Result := Result * e[i];
 end;
 
@@ -9041,11 +9634,12 @@ begin
 end;
 
 procedure TTensor<T>.minMax(var outMin, outMax: T; var outArgMin, outArgMax: SizeInt;
-  const stride: SizeInt; N:SizeInt = 0);
+  const stride: SizeInt; N: SizeInt; const offset: SizeInt);
 begin
   if not assigned(minmaxvsi) then minmaxvsi := minMax;
-  if N=0 then N := Size();
-  minmaxvsi(N, Data, stride, outMin, outMax, outArgMin, outArgMax);
+  if N = 0 then N := Size();
+  assert(N + offset <= size());
+  minmaxvsi(N, Data + offset, stride, outMin, outMax, outArgMin, outArgMax);
 end;
 
 procedure TTensor<T>.sin(const dst: PT; const stride: SizeInt; const dstStride: SizeInt);
@@ -9232,44 +9826,44 @@ begin
     dst[i] := argMaxAbsv(N, Data + i * N, 1);
 end;
 
-procedure TTensor<T>.argMin(const dst: PInt32);
+procedure TTensor<T>.argMin32(const dst: PInt32);
 var
   i, N: SizeInt;
 begin
-  if not Assigned(argMinv32) then argMinv32 := argMin;
+  if not Assigned(argMinv32) then argMinv32 := argMin32;
   if size() = 0 then exit;
   N := Size() div Groups;
   for i := 0 to Groups - 1 do
     dst[i] := argMinv32(N, Data + i * N, 1);
 end;
 
-procedure TTensor<T>.argMax(const dst: PInt32);
+procedure TTensor<T>.argMax32(const dst: PInt32);
 var
   i, N: SizeInt;
 begin
-  if not Assigned(argMaxv32) then argMaxv32 := argMax;
+  if not Assigned(argMaxv32) then argMaxv32 := argMax32;
   if size() = 0 then exit;
   N := Size() div Groups;
   for i := 0 to Groups - 1 do
     dst[i] := argMaxv32(N, Data + i * N, 1);
 end;
 
-procedure TTensor<T>.argMinAbs(const dst: PInt32);
+procedure TTensor<T>.argMinAbs32(const dst: PInt32);
 var
   i, N: SizeInt;
 begin
-  if not Assigned(argMinAbsv32) then argMinAbsv32 := argAbsMin;
+  if not Assigned(argMinAbsv32) then argMinAbsv32 := argAbsMin32;
   if size() = 0 then exit;
   N := Size() div Groups;
   for i := 0 to Groups - 1 do
     dst[i] := argMinAbsv32(N, Data + i * N, 1);
 end;
 
-procedure TTensor<T>.argMaxAbs(const dst: PInt32);
+procedure TTensor<T>.argMaxAbs32(const dst: PInt32);
 var
   i, N: SizeInt;
 begin
-  if not Assigned(argMaxAbsv32) then argMaxAbsv32 := argAbsMax;
+  if not Assigned(argMaxAbsv32) then argMaxAbsv32 := argAbsMax32;
   if size() = 0 then exit;
   N := Size() div Groups;
   for i := 0 to Groups - 1 do
@@ -9392,27 +9986,31 @@ function TTensor<T>.countValue(const src: T; const stride: SizeInt): SizeInt;
 var
   i: SizeInt;
 begin
-  Result := countValue(size() div stride, src, Data, stride)
+  Result := countValue(size() div stride, src, Data, stride);
 end;
 
-function TTensor<T>.findValues(const N: SizeInt; const values: PT): TArray<SizeInt>;
-var i, j, k:SizeInt;
+function TTensor<T>.findValues(const N: SizeInt; const values: PT;
+  const inverted: boolean; const tolerance: T): TArray<SizeInt>;
+var
+  i, j, k: SizeInt;
 begin
-  assert(values<>nil);
-  setLength(result, Size());
-  k:=0;
-  for i:=0 to Size()-1 do
-    for j:=0 to N-1 do
-      if Data[i] = values[j] then begin
-        result[k] := i;
-        inc(k)
+  assert(values <> nil);
+  setLength(Result, Size());// worst case;
+  k := 0;
+  for i := 0 to Size() - 1 do
+    for j := 0 to N - 1 do
+      if inverted xor (compare(__abs(minus(Data[i], values[j])), tolerance) <= 0) then
+      begin
+        Result[k] := i;
+        Inc(k);
       end;
-  setLength(result, k)
+  setLength(Result, k);
 end;
 
-function TTensor<T>.findValues(const values: TArray<T>): TArray<SizeInt>;
+function TTensor<T>.findValues(const values: TArray<T>; const inverted: boolean;
+  const tolerance: T): TArray<SizeInt>;
 begin
-  result := findValues(length(values), pointer(values))
+  Result := findValues(length(values), pointer(values), inverted, tolerance);
 end;
 
 procedure TTensor<T>.polynomial(const coef: TArray<T>);
@@ -9435,17 +10033,19 @@ var
 begin
   if assigned(outMin) and assigned(outMax) then
     for i := 0 to groups - 1 do
-      histogram(groupSize(), Data + i*groupSize(), aCount, dst + i*aCount, outMin + i, outMax + i)
+      histogram(groupSize(), Data + i * groupSize(), aCount, dst +
+        i * aCount, outMin + i, outMax + i)
   else
     for i := 0 to groups - 1 do
-      histogram(groupSize(), Data + i*groupSize(), aCount, dst + i*aCount, nil, nil);
+      histogram(groupSize(), Data + i * groupSize(), aCount, dst + i * aCount, nil, nil);
 end;
 
-function TTensor<T>.Histogram(const aCount: SizeInt; outMin: PT; outMax: PT): TArray<integer>;
+function TTensor<T>.Histogram(const aCount: SizeInt; outMin: PT;
+  outMax: PT): TArray<integer>;
 begin
   assert(aCount > 0, 'aCount must be larger than zero');
-  setLength(result, aCount * groups);
-  histogram(aCount, PInteger(result), outMin, outMax);
+  setLength(Result, aCount * groups);
+  histogram(aCount, PInteger(Result), outMin, outMax);
 end;
 
 function ftos(f: double; prec: integer = 0): string;
@@ -9490,7 +10090,6 @@ begin
   end;
 end;
 
-
 function TTensor<T>.plot(const xAxis: TTensor<T>): TArray<SizeInt>;
 const
   xLen: integer = 40;
@@ -9502,22 +10101,38 @@ const
 const
   colors: array[0..4] of longword = ($ffcc00, $0088ff, $ff00ff, $0088ff, $ffff00);
   dots: array[0..255] of string = (
-      ' ', '⠁', '⠂', '⠃', '⠄', '⠅', '⠆', '⠇', '⡀', '⡁', '⡂', '⡃', '⡄', '⡅', '⡆', '⡇'
-    , '⠈', '⠉', '⠊', '⠋', '⠌', '⠍', '⠎', '⠏', '⡈', '⡉', '⡊', '⡋', '⡌', '⡍', '⡎', '⡏'
-    , '⠐', '⠑', '⠒', '⠓', '⠔', '⠕', '⠖', '⠗', '⡐', '⡑', '⡒', '⡓', '⡔', '⡕', '⡖', '⡗'
-    , '⠘', '⠙', '⠚', '⠛', '⠜', '⠝', '⠞', '⠟', '⡘', '⡙', '⡚', '⡛', '⡜', '⡝', '⡞', '⡟'
-    , '⠠', '⠡', '⠢', '⠣', '⠤', '⠥', '⠦', '⠧', '⡠', '⡡', '⡢', '⡣', '⡤', '⡥', '⡦', '⡧'
-    , '⠨', '⠩', '⠪', '⠫', '⠬', '⠭', '⠮', '⠯', '⡨', '⡩', '⡪', '⡫', '⡬', '⡭', '⡮', '⡯'
-    , '⠰', '⠱', '⠲', '⠳', '⠴', '⠵', '⠶', '⠷', '⡰', '⡱', '⡲', '⡳', '⡴', '⡵', '⡶', '⡷'
-    , '⠸', '⠹', '⠺', '⠻', '⠼', '⠽', '⠾', '⠿', '⡸', '⡹', '⡺', '⡻', '⡼', '⡽', '⡾', '⡿'
-    , '⢀', '⢁', '⢂', '⢃', '⢄', '⢅', '⢆', '⢇', '⣀', '⣁', '⣂', '⣃', '⣄', '⣅', '⣆', '⣇'
-    , '⢈', '⢉', '⢊', '⢋', '⢌', '⢍', '⢎', '⢏', '⣈', '⣉', '⣊', '⣋', '⣌', '⣍', '⣎', '⣏'
-    , '⢐', '⢑', '⢒', '⢓', '⢔', '⢕', '⢖', '⢗', '⣐', '⣑', '⣒', '⣓', '⣔', '⣕', '⣖', '⣗'
-    , '⢘', '⢙', '⢚', '⢛', '⢜', '⢝', '⢞', '⢟', '⣘', '⣙', '⣚', '⣛', '⣜', '⣝', '⣞', '⣟'
-    , '⢠', '⢡', '⢢', '⢣', '⢤', '⢥', '⢦', '⢧', '⣠', '⣡', '⣢', '⣣', '⣤', '⣥', '⣦', '⣧'
-    , '⢨', '⢩', '⢪', '⢫', '⢬', '⢭', '⢮', '⢯', '⣨', '⣩', '⣪', '⣫', '⣬', '⣭', '⣮', '⣯'
-    , '⢰', '⢱', '⢲', '⢳', '⢴', '⢵', '⢶', '⢷', '⣰', '⣱', '⣲', '⣳', '⣴', '⣵', '⣶', '⣷'
-    , '⢸', '⢹', '⢺', '⢻', '⢼', '⢽', '⢾', '⢿', '⣸', '⣹', '⣺', '⣻', '⣼', '⣽', '⣾', '⣿');
+    ' ', '⠁', '⠂', '⠃', '⠄', '⠅', '⠆', '⠇', '⡀',
+    '⡁', '⡂', '⡃', '⡄', '⡅', '⡆', '⡇'
+    , '⠈', '⠉', '⠊', '⠋', '⠌', '⠍', '⠎', '⠏', '⡈',
+    '⡉', '⡊', '⡋', '⡌', '⡍', '⡎', '⡏'
+    , '⠐', '⠑', '⠒', '⠓', '⠔', '⠕', '⠖', '⠗', '⡐',
+    '⡑', '⡒', '⡓', '⡔', '⡕', '⡖', '⡗'
+    , '⠘', '⠙', '⠚', '⠛', '⠜', '⠝', '⠞', '⠟', '⡘',
+    '⡙', '⡚', '⡛', '⡜', '⡝', '⡞', '⡟'
+    , '⠠', '⠡', '⠢', '⠣', '⠤', '⠥', '⠦', '⠧', '⡠',
+    '⡡', '⡢', '⡣', '⡤', '⡥', '⡦', '⡧'
+    , '⠨', '⠩', '⠪', '⠫', '⠬', '⠭', '⠮', '⠯', '⡨',
+    '⡩', '⡪', '⡫', '⡬', '⡭', '⡮', '⡯'
+    , '⠰', '⠱', '⠲', '⠳', '⠴', '⠵', '⠶', '⠷', '⡰',
+    '⡱', '⡲', '⡳', '⡴', '⡵', '⡶', '⡷'
+    , '⠸', '⠹', '⠺', '⠻', '⠼', '⠽', '⠾', '⠿', '⡸',
+    '⡹', '⡺', '⡻', '⡼', '⡽', '⡾', '⡿'
+    , '⢀', '⢁', '⢂', '⢃', '⢄', '⢅', '⢆', '⢇', '⣀',
+    '⣁', '⣂', '⣃', '⣄', '⣅', '⣆', '⣇'
+    , '⢈', '⢉', '⢊', '⢋', '⢌', '⢍', '⢎', '⢏', '⣈',
+    '⣉', '⣊', '⣋', '⣌', '⣍', '⣎', '⣏'
+    , '⢐', '⢑', '⢒', '⢓', '⢔', '⢕', '⢖', '⢗', '⣐',
+    '⣑', '⣒', '⣓', '⣔', '⣕', '⣖', '⣗'
+    , '⢘', '⢙', '⢚', '⢛', '⢜', '⢝', '⢞', '⢟', '⣘',
+    '⣙', '⣚', '⣛', '⣜', '⣝', '⣞', '⣟'
+    , '⢠', '⢡', '⢢', '⢣', '⢤', '⢥', '⢦', '⢧', '⣠',
+    '⣡', '⣢', '⣣', '⣤', '⣥', '⣦', '⣧'
+    , '⢨', '⢩', '⢪', '⢫', '⢬', '⢭', '⢮', '⢯', '⣨',
+    '⣩', '⣪', '⣫', '⣬', '⣭', '⣮', '⣯'
+    , '⢰', '⢱', '⢲', '⢳', '⢴', '⢵', '⢶', '⢷', '⣰',
+    '⣱', '⣲', '⣳', '⣴', '⣵', '⣶', '⣷'
+    , '⢸', '⢹', '⢺', '⢻', '⢼', '⢽', '⢾', '⢿', '⣸',
+    '⣹', '⣺', '⣻', '⣼', '⣽', '⣾', '⣿');
 var
   bitpixels: TBitPixels;
 
@@ -9542,7 +10157,8 @@ begin
     Inc(yLen);
   //Write(#$1b'[', yLen + 6, 'S');   // scroll up #lines
   //Write(#$1b'[', yLen + 6, 'A');   // cursor up #lines
-  ow:=0; oh:=0;
+  ow := 0;
+  oh := 0;
   if assigned(xAxis.Data) then
   begin
     minxVal := 0;
@@ -9553,8 +10169,10 @@ begin
       else
         d := d + ' X ' + IntToStr(xAxis.Shape[i]);
     d := d + ')';
-    write(d, #$1B'[',length(d){-9},'D'#$1B'[B'); // note : indent to align under YAxis Titles  ?
-    ow := math.max(ow, length(d)); inc(oh);
+    Write(d, #$1B'[', length(d){-9}, 'D'#$1B'[B');
+    // note : indent to align under YAxis Titles  ?
+    ow := Math.max(ow, length(d));
+    Inc(oh);
     //writeln(d);
     if minxVal = maxxVal then
     begin
@@ -9564,7 +10182,8 @@ begin
       d := format('[min : %s @ %d, max : %s @ %d]',
         [toStr(amin), outArgMin, toStr(amax), outArgMax]);
       Write(d, #$1B'[', length(d), 'D'#$1B'[2B');
-      ow := math.max(ow, length(d)); inc(oh,2);
+      ow := Math.max(ow, length(d));
+      Inc(oh, 2);
       if minxVal = maxxVal then
         exit;
       //writeln(d)
@@ -9584,8 +10203,10 @@ begin
     else
       d := d + ' X ' + IntToStr(Shape[i]);
   d := d + ')';
-  write(d, cursorMove(cmBackward, length(d)), cursorMove(cmDown)); // note :indent to align under YAxis Title  ?
-  ow := math.max(ow, length(d)); inc(oh);
+  Write(d, cursorMove(cmBackward, length(d)), cursorMove(cmDown));
+  // note :indent to align under YAxis Title  ?
+  ow := Math.max(ow, length(d));
+  Inc(oh);
   //writeln(d);
   if minyVal = maxyVal then
   begin
@@ -9595,7 +10216,8 @@ begin
     d := format('[min : %s @ %d, max : %s @ %d]',
       [toStr(amin), outArgMin, toStr(amax), outArgMax]);
     Write(d, cursorMove(cmBackward, length(d)), cursorMove(cmDown, 2));
-    ow := math.max(ow, length(d)); inc(oh,2);
+    ow := Math.max(ow, length(d));
+    Inc(oh, 2);
     if minyVal = maxyVal then
       exit;
     //writeln(d)
@@ -9615,9 +10237,10 @@ begin
     yTickStart := yTickStart / Math.Power(10, yPow);
     yTickInc := yTickInc / Math.Power(10, yPow);
   end;
-  yTickLeg := string.Create('0', system.abs(yPow));
+
+  yTickLeg := string.Create('0', system.abs(yPow) - byte(yPow < -1));
   if yPow > -1 then
-    yTickLeg := 'X1' + ytickleg +'   '
+    yTickLeg := 'X1' + ytickleg + '   '
   else if yPow = -1 then
     yTickLeg := '      '
   else
@@ -9641,17 +10264,19 @@ begin
   end;
   a[i] := ftos(yTickStart + yTick * yTickInc, yPrec);
   Write(yTickLeg, cursorMove(cmBackward, length(yTickLeg) + 1), cursorMove(cmDown));
-  ow := math.max(ow, length(yTickLeg)); inc(oh);
+  ow := Math.max(ow, length(yTickLeg));
+  Inc(oh);
 
   //writeln(yTickLeg);
 
+  xStart := minXVal;
+  xRange := maxxVal - xStart + 1;
+  xTickInc := xRange / xTicks;
   while xLen mod xTicks > 0 do
     Inc(xLen);
 
-  xStart := minXVal;
-  xRange := maxxVal - xStart;
+
   xTickLen := ceil(xLen / xTicks);
-  xTickInc := xRange / xTicks;
   xPow := Math.floor(Math.log10(xTickInc));
   xTickStart := xStart;
   if xPow <> -1 then
@@ -9659,9 +10284,10 @@ begin
     xTickStart := xStart / Math.Power(10, xPow);
     xTickInc := xTickInc / Math.Power(10, xPow);
   end;
-  xTickLeg := string.Create('0', xPow);
+  //if xPow < -1 then dec(xPow);
+  xTickLeg := string.Create('0', xPow - byte(xPow < -1));
   if xPow > -1 then
-    xTickLeg := 'X1' + xtickleg +'   '
+    xTickLeg := 'X1' + xtickleg + '   '
   else if xPow = -1 then
     xTickLeg := '      '
   else
@@ -9749,7 +10375,7 @@ begin
       if (d = ' ') then
       begin
         if (j + 2 > 0) {and (j + 2 < xLen)} and (s[j + 2] = '''') then
-          d := setFaint + setColor4(colorSilver) +'¦' // ¦
+          d := setFaint + setColor4(colorSilver) + '¦' // ¦
         else if (a[i] <> '') and (d = ' ') then
           d := setFaint + setColor4(colorSilver) + 'ˍ';
       end
@@ -9757,11 +10383,13 @@ begin
         d := clearFaint + d;
       //v[i] := v[i] + format(#$1B'[38;2;%d;%d;%dm', [color and $ff,
       //  (color shr $8) and $ff, (col* shr $10) and $ff]) + d;
-      v[i] := v[i] + setColor5(round(5*(color and $ff)/$ff), round(5*((color shr $8) and $ff/$ff)), round(5*((color shr $10) and $ff/$ff))) + d;
+      v[i] := v[i] + setColor5(round(5 * (color and $ff) / $ff),
+        round(5 * ((color shr $8) and $ff / $ff)),
+        round(5 * ((color shr $10) and $ff / $ff))) + d;
       //v[i] := v[i] + setColor(color and $ff, (color shr $8) and $ff, (color shr $10) and $ff) + d;
 
     end;
-    v[i] := v[i] + clearFaint +  resetColor + resetBackColor;
+    v[i] := v[i] + clearFaint + resetColor + resetBackColor;
   end;
 
 
@@ -9778,15 +10406,17 @@ begin
     else
       d := sp + a[i] + '_│' + v[i];
     Write(d, cursorMove(cmBackward, xLen + j + 3), cursorMove(cmDown));
-    ow := math.max(ow, xLen + j + 3); inc(oh);
+    ow := Math.max(ow, xLen + j + 3);
+    Inc(oh);
     //writeln(d);
   end;
 
   d := string.Create(' ', j + 1) + setOverline + S {+ ''''} + clearOverline {+
     ftos(xTickStart + xTick * xTickInc, xPrec)} + ' ' + xTickLeg;
-  Write(d, cursorMove(cmBackward,length(d) - 10), cursorMove(cmDown, 2));
-  ow := math.max(ow, length(d) - length(setOverline) - length(clearOverline)); inc(oh);
-  result := [ow, oh];
+  Write(d, cursorMove(cmBackward, length(d) - 10), cursorMove(cmDown, 2));
+  ow := Math.max(ow, length(d) - length(setOverline) - length(clearOverline));
+  Inc(oh);
+  Result := [ow, oh];
   //writeLn(d)
 end;
 
@@ -9794,20 +10424,21 @@ function TTensor<T>.plot: TArray<SizeInt>;
 var
   x: TTensor<T>;
 begin
-  result := plot(X);
+  Result := plot(X);
 end;
 
-function TTensor<T>.print(const consolePixel: TTensorPrintStyle; tile: SizeInt; minVal: double; maxVal: double): TArray<SizeInt>;
+function TTensor<T>.print(const consolePixel: TTensorPrintStyle;
+  tile: SizeInt; minVal: double; maxVal: double): TArray<SizeInt>;
 const
-      csi =#$1B'[';
-      up =#$1B'[A';
-      dw =#$1B'[B';
-      fw =#$1B'[C';
-      bw =#$1B'[D';
-      sc =#$1B'[s';
-      rc =#$1B'[u';
-      er =#$1B'[0K';
-      cpos=#$1B'[6n';
+  csi = #$1B'[';
+  up = #$1B'[A';
+  dw = #$1B'[B';
+  fw = #$1B'[C';
+  bw = #$1B'[D';
+  sc = #$1B'[s';
+  rc = #$1B'[u';
+  er = #$1B'[0K';
+  cpos = #$1B'[6n';
 var
   amin, amax: T;
   i, j, k, t, _w, _h, _c, _area, index, outArgMin, outArgMax, ow, oh: SizeInt;
@@ -9815,7 +10446,8 @@ var
   range, r, g, b, r2, g2, b2: double;
   S: string;
 const
-  __shade: array[0..4] of string = (' ', '░', '▒', '▓', '█');  // delphi will complain if no string type defined, MacOS will type rubbish if string type is defined!! :(
+  __shade: array[0..4] of string = (' ', '░', '▒', '▓', '█');
+  // delphi will complain if no string type defined, MacOS will type rubbish if string type is defined!! :(
 
   halfChar = '▀';
 begin
@@ -9824,15 +10456,18 @@ begin
   for i := 0 to High(Shape) do
     if i = 0 then
       S := S + IntToStr(Shape[i])
-    else begin
+    else
+    begin
       S := S + ' X ';
-      S := S + IntToStr(Shape[i])
+      S := S + IntToStr(Shape[i]);
     end;
-  S := S +')';
-  ow := length(S); oh :=1;
-  write(S, csi, length(S), 'D', dw);
+  S := S + ')';
+  ow := length(S);
+  oh := 1;
+  Write(S, csi, length(S), 'D', dw);
   //writeln(S);
-  ow:=length(S); oh:=1;
+  ow := length(S);
+  oh := 1;
   if consolePixel <> psValues then
   begin
     if minVal = maxVal then
@@ -9840,11 +10475,12 @@ begin
       minMax(amin, amax, outArgMin, outArgMax);
       vcvtd(1, @amin, @minVal);
       vcvtd(1, @amax, @maxVal);
-      S := '[min : '+ toStr(amin)+ '@'+ intToStr(outArgMin)+ ', max : '+
-        toStr(amax)+ '@'+ intToStr(outArgMax)+ ']';
-      write(S, csi, length(S), 'D', dw);
+      S := '[min : ' + toStr(amin) + '@' + IntToStr(outArgMin) +
+        ', max : ' + toStr(amax) + '@' + IntToStr(outArgMax) + ']';
+      Write(S, csi, length(S), 'D', dw);
       //writeln(S);
-      ow:=math.max(ow, length(S)); inc(oh);
+      ow := Math.max(ow, length(S));
+      Inc(oh);
     end;
     _w := w();
     if length(FShape) > 1 then
@@ -9859,10 +10495,10 @@ begin
     end;
     _c := (1 + 2 * Ord(consolePixel in [psColor8, psColor24]));
     range := maxVal - minVal;
-    result := [ow, oh];
+    Result := [ow, oh];
     if (range < dEPSILON) or (tile < 1) then exit;
     S := '';
-    l:=0;
+    l := 0;
     for i := 0 to size() div (_c * _area * tile) - 1 do
     begin
       for j := 0 to _h div (1 + Ord(consolePixel <> psGray5)) - 1 do
@@ -9884,8 +10520,8 @@ begin
                   vcvtd(1, @Data[index], @r2);
                   r := 232 + 23 * (r - minVal) / range;
                   r2 := 232 + 23 * (r2 - minVal) / range;
-                  S := S + #$1B'[38;5;' + IntToStr(round(r)) + 'm'
-                    + #$1B'[48;5;' + IntToStr(round(r2)) + 'm' + halfChar;
+                  S := S + #$1B'[38;5;' + IntToStr(round(r)) +
+                    'm' + #$1B'[48;5;' + IntToStr(round(r2)) + 'm' + halfChar;
                 end;
                 psGray:
                 begin
@@ -9894,9 +10530,9 @@ begin
                   r := $ff * (r - minVal) / range;
                   r2 := $ff * (r2 - minVal) / range;
                   S := S + #$1B'[38;2;' + IntToStr(round(r)) + ';' +
-                    IntToStr(round(r)) + ';' + IntToStr(round(r)) + 'm' +
-                    #$1B'[48;2;' + IntToStr(round(r2)) + ';' + IntToStr(round(r2)) + ';' + IntToStr(
-                    round(r2)) + 'm' + halfChar;
+                    IntToStr(round(r)) + ';' + IntToStr(round(r)) +
+                    'm' + #$1B'[48;2;' + IntToStr(round(r2)) + ';' +
+                    IntToStr(round(r2)) + ';' + IntToStr(round(r2)) + 'm' + halfChar;
                 end;
                 psColor8:
                 begin
@@ -9918,7 +10554,8 @@ begin
 
                   S := S + #$1B'[38;5;' + IntToStr(16 + round(b) +
                     6 * round(g) + 36 * round(r)) + 'm' + #$1B'[48;5;' +
-                    IntToStr(16 + round(b2) + 6 * round(g2) + 36 * round(r2)) + 'm' + halfChar;
+                    IntToStr(16 + round(b2) + 6 * round(g2) + 36 * round(r2)) +
+                    'm' + halfChar;
                 end;
                 psColor24:
                 begin
@@ -9939,9 +10576,9 @@ begin
                   b2 := $ff * (b2 - minVal) / range;
 
                   S := S + #$1B'[38;2;' + IntToStr(round(r)) + ';' +
-                    IntToStr(round(g)) + ';' + IntToStr(round(b)) + 'm' +
-                    #$1B'[48;2;' + IntToStr(round(r2)) + ';' + IntToStr(round(g2)) + ';' + IntToStr(
-                    round(b2)) + 'm' + halfChar;
+                    IntToStr(round(g)) + ';' + IntToStr(round(b)) +
+                    'm' + #$1B'[48;2;' + IntToStr(round(r2)) + ';' +
+                    IntToStr(round(g2)) + ';' + IntToStr(round(b2)) + 'm' + halfChar;
                 end;
 
               end;
@@ -9950,41 +10587,43 @@ begin
           //if consolePixel<>psGray5 then
           //  S := S + #$1B'[0m '
         end;
-        write(S, csi, _w*tile, 'D' ,dw);
+        Write(S, csi, _w * tile, 'D', dw);
         //writeln(S);
-        ow:=math.max(ow, _w*tile); inc(oh);
-        inc(l);
+        ow := Math.max(ow, _w * tile);
+        Inc(oh);
+        Inc(l);
         S := '';
       end;
     end;
     if consolePixel <> psGray5 then
       S := #$1B'[0m';
-    write(S);
+    Write(S);
     //writeln(S);
-    result := [ow, oh];
+    Result := [ow, oh];
     exit;
   end;
 
   writeln(toString());
 end;
 
-procedure TTensor<T>.printStat(N: SizeInt);
+procedure TTensor<T>.printStat(N: SizeInt; const offset: SizeInt);
 var
   i, outArgMin, outArgMax: SizeInt;
   meanVal, stdVal, minVal, maxVal, magVal: T;
 begin
   if not assigned(Data) then exit;
   if not assigned(sumsqrv) then sumsqrv := sumsqr;
-  if N=0 then N:=Size();
+  if N = 0 then N := Size();
   Write(TypeName(), ' Tensor (');
   for i := 0 to High(Shape) do
     if i = 0 then Write(Shape[i])
     else
       Write(' X ', Shape[i]);
-  writeln(')');
-  minMax(minVal, maxVal, outArgMin, outArgMax, 1, N);
-  MeanAndVar(meanVal, stdVal, 1, N);
-  magVal := self.sqrt(sumSqrv(N, Data, 1));
+  writeln(') size [', N, ']');
+  if not assigned(minmaxvsi) then minmaxvsi := TTensor<T>.minmax;
+  minMaxvsi(N, Data + offset, 1, minVal, maxVal, outArgMin, outArgMax);
+  MeanAndVar(meanVal, stdVal, 1, N, offset);
+  magVal := self.sqrt(sumSqrv(N, Data + offset, 1));
   stdVal := self.Sqrt(stdVal);
   //for i:=0 to Math.min(N,6)-1 do
   //  if i=0 then
@@ -9997,19 +10636,64 @@ begin
     toStr(stdVal), ', magnitude : ', toStr(magVal), ']');
 end;
 
-function TTensor<T>.print(const scale: single; const gray: boolean; const tile: SizeInt): TArray<SizeInt>;
+{$ifdef USE_OPENCL}
+procedure TTensor<T>.printGpuStat(N: SizeInt; const offset: SizeInt);
+var tmp : TTensor<T>;
+begin
+  pullFromDevice(tmp, N, offset);
+  tmp.printStat()
+end;
+
+procedure TTensor<T>.printGpuSumSqrDiff(N: SizeInt; const offset: SizeInt);
+var tmp : TTensor<T>;
+begin
+  pullFromDevice(tmp, N, offset);
+  writeLn('[Host, Device] sumOfSqrDiff : ', toStr(sumSqrDiff(tmp.data, N, 1, 1, offset)))
+
+end;
+
+procedure TTensor<T>.printGpuDiff(N: SizeInt; const offset: SizeInt; const tolerance: T);
+var delta, temp, temp2:TTensor<T>;
+    ids : TTensor<SizeInt>;
+begin
+  if N=0 then N := Size();
+  assert(N + offset <= size(), '[printGpuDiff][out of bounds] incorrect size or offset');
+  pullFromDevice(temp, N, offset);
+
+// debug temporary,  remove later
+temp2.resize(temp.shape);
+copyTo(temp2, 0, 1, offset, 1, N);
+
+  delta.resize(temp.shape);
+  subvv(N, data + offset, 1, temp.data, 1, delta.Data, 1);
+  ids := delta.findValues([0], true, tolerance);
+  if ids.size()>0 then
+    ids.print()
+end;
+
+function TTensor<T>.GpuSumSqrDiff(N: SizeInt; const offset: SizeInt): T;
+var tmp:TTensor<T>;
+begin
+  pullFromDevice(tmp, N, offset);
+  result := sumSqrDiff(tmp.data, N, 1, 1, offset)
+end;
+{$endif}
+
+
+function TTensor<T>.print(const scale: single; const gray: boolean;
+  const tile: SizeInt): TArray<SizeInt>;
 const
-      csi =#$1B'[';
-      sup =#$1B'[S';
-      sdw =#$1B'[T';
-      up =#$1B'[A';
-      dw =#$1B'[B';
-      fw =#$1B'[C';
-      bw =#$1B'[D';
-      sc =#$1B'[s';
-      rc =#$1B'[u';
-      er =#$1B'[0K';
-      cpos=#$1B'[6n';
+  csi = #$1B'[';
+  sup = #$1B'[S';
+  sdw = #$1B'[T';
+  up = #$1B'[A';
+  dw = #$1B'[B';
+  fw = #$1B'[C';
+  bw = #$1B'[D';
+  sc = #$1B'[s';
+  rc = #$1B'[u';
+  er = #$1B'[0K';
+  cpos = #$1B'[6n';
 var
   amin, amax: T;
   maxVal, minVal: double;
@@ -10024,19 +10708,23 @@ begin
   for i := 0 to High(Shape) do
     if i = 0 then
       S := S + IntToStr(Shape[i])
-    else begin
+    else
+    begin
       S := S + ' X ';
-      S := S + IntToStr(Shape[i])
+      S := S + IntToStr(Shape[i]);
     end;
-  S := S +')';
-  write(sup, sLineBreak{S, csi, length(S), 'D', dw});
-  ow:=length(S); oh := 1;
+  S := S + ')';
+  Write(sup, sLineBreak{S, csi, length(S), 'D', dw});
+  ow := length(S);
+  oh := 1;
   minMax(amin, amax, outArgMin, outArgMax);
   vcvtd(1, @amin, @minVal);
   vcvtd(1, @amax, @maxVal);
-  S := '[min : '+ toStr(amin)+ '@'+ intToStr(outArgMin)+ ', max : '+ toStr(amax)+  '@'+ intToStr(outArgMax)+ ']';
-  write(sup, sLinebreak{S, csi, length(S), 'D', dw});
-  ow:=math.max(ow, length(S)); inc(oh);
+  S := '[min : ' + toStr(amin) + '@' + IntToStr(outArgMin) + ', max : ' +
+    toStr(amax) + '@' + IntToStr(outArgMax) + ']';
+  Write(sup, sLinebreak{S, csi, length(S), 'D', dw});
+  ow := Math.max(ow, length(S));
+  Inc(oh);
   _w := w();
   if length(FShape) > 1 then
   begin
@@ -10050,7 +10738,7 @@ begin
   end;
   _c := (1 + 2 * Ord(not gray));
   range := maxVal - minVal;
-  result := [ow, oh];
+  Result := [ow, oh];
   if (range < dEPSILON) or (tile < 1) then exit;
   S := '';
   for i := 0 to size() div (_c * _area * tile) - 1 do
@@ -10061,28 +10749,30 @@ begin
       begin
         for k := 0 to trunc(_w * scale) - 1 do
         begin
-          index := i * _c * tile * _area + round(t * _c * _h + j * 2 / scale) * _w + round(k / scale);
+          index := i * _c * tile * _area + round(t * _c * _h + j * 2 / scale) *
+            _w + round(k / scale);
           if index < size() then
           begin
             vcvtd(1, @Data[index], @r);
             if gray then
             begin
-              index := i * _c * tile * _area + round(t * _c * _h + (j * 2 + 1) / scale) * _w +
-                round(k / scale);
+              index := i * _c * tile * _area + round(t * _c * _h + (j * 2 + 1) / scale) *
+                _w + round(k / scale);
               vcvtd(1, @Data[index], @r2);
               r := $ff * (r - minVal) / range;
               r2 := $ff * (r2 - minVal) / range;
-              S := S + #$1B'[38;2;' + IntToStr(round(r)) + ';' + IntToStr(
-                round(r)) + ';' + IntToStr(round(r)) + 'm' +
-                #$1B'[48;2;' + IntToStr(round(r2)) + ';' + IntToStr(round(r2)) + ';' + IntToStr(
-                round(r2)) + 'm' + halfChar;
+              S := S + #$1B'[38;2;' + IntToStr(round(r)) + ';' +
+                IntToStr(round(r)) + ';' + IntToStr(round(r)) + 'm' +
+                #$1B'[48;2;' + IntToStr(round(r2)) + ';' + IntToStr(round(r2)) +
+                ';' + IntToStr(round(r2)) + 'm' + halfChar;
             end
             else
             begin
               vcvtd(1, @Data[index + _area], @g);
               vcvtd(1, @Data[index + _area * 2], @b);
               // nex line
-              index := i * _c * tile * _area + round(t * _c * _h + (j * 2 + 1) / scale) * _w + round(k / scale);
+              index := i * _c * tile * _area + round(t * _c * _h + (j * 2 + 1) / scale) *
+                _w + round(k / scale);
               vcvtd(1, @Data[index], @r2);
               vcvtd(1, @Data[index + _area], @g2);
               vcvtd(1, @Data[index + _area * 2], @b2);
@@ -10095,35 +10785,37 @@ begin
               g2 := $ff * (g2 - minVal) / range;
               b2 := $ff * (b2 - minVal) / range;
 
-              S := S + #$1B'[38;2;' + IntToStr(round(r)) + ';' + IntToStr(
-                round(g)) + ';' + IntToStr(round(b)) + 'm' +
-                #$1B'[48;2;' + IntToStr(round(r2)) + ';' + IntToStr(round(g2)) + ';' + IntToStr(round(b2)) + 'm' + halfChar;
+              S := S + #$1B'[38;2;' + IntToStr(round(r)) + ';' +
+                IntToStr(round(g)) + ';' + IntToStr(round(b)) + 'm' +
+                #$1B'[48;2;' + IntToStr(round(r2)) + ';' + IntToStr(round(g2)) +
+                ';' + IntToStr(round(b2)) + 'm' + halfChar;
             end;
           end;
         end;
       end;
-      write(S, sLineBreak{csi, trunc(scale*_w*tile), 'D' ,dw});
-      ow:=math.max(ow, trunc(scale*_w*tile)); inc(oh);
+      Write(S, sLineBreak{csi, trunc(scale*_w*tile), 'D' ,dw});
+      ow := Math.max(ow, trunc(scale * _w * tile));
+      Inc(oh);
       S := '';
     end;
   end;
   S := #$1B'[0m';
-  write(S, sLineBreak);
-  result := [ow, oh]
+  Write(S, sLineBreak);
+  Result := [ow, oh];
 
 end;
 
 function TTensor<T>.print(const scale: single; const idx: SizeInt): TArray<SizeInt>;
 const
-      csi =#$1B'[';
-      up =#$1B'[A';
-      dw =#$1B'[B';
-      fw =#$1B'[C';
-      bw =#$1B'[D';
-      sc =#$1B'[s';
-      rc =#$1B'[u';
-      er =#$1B'[0K';
-      cpos=#$1B'[6n';
+  csi = #$1B'[';
+  up = #$1B'[A';
+  dw = #$1B'[B';
+  fw = #$1B'[C';
+  bw = #$1B'[D';
+  sc = #$1B'[s';
+  rc = #$1B'[u';
+  er = #$1B'[0K';
+  cpos = #$1B'[6n';
 var
   amin, amax: T;
   maxVal, minVal: double;
@@ -10135,21 +10827,24 @@ const
   halfChar = '▀';
 begin
   if not assigned(Data) then exit;
-  S := TypeName()+ ' Tensor (';
+  S := TypeName() + ' Tensor (';
   for i := 0 to High(Shape) do
     if i = 0 then
       S := S + IntToStr(Shape[i])
     else
-      S:= S + ' X '+ intToStr(Shape[i]);
-  S := S +')';
-  write(S, csi, length(S), 'D', dw);
-  ow:=length(S); oh := 1;
+      S := S + ' X ' + IntToStr(Shape[i]);
+  S := S + ')';
+  Write(S, csi, length(S), 'D', dw);
+  ow := length(S);
+  oh := 1;
   minMax(amin, amax, outArgMin, outArgMax);
   vcvtd(1, @amin, @minVal);
   vcvtd(1, @amax, @maxVal);
-  S := '[min : '+ toStr(amin)+ '@'+ IntToStr(outArgMin)+ ', max : '+ toStr(amax)+ '@'+ intToStr(outArgMax)+ ']';
-  write(S, csi, length(S), 'D', dw);
-  ow:=math.max(ow, length(S)); inc(oh);
+  S := '[min : ' + toStr(amin) + '@' + IntToStr(outArgMin) + ', max : ' +
+    toStr(amax) + '@' + IntToStr(outArgMax) + ']';
+  Write(S, csi, length(S), 'D', dw);
+  ow := Math.max(ow, length(S));
+  Inc(oh);
   _w := w();
   if length(FShape) > 1 then
   begin
@@ -10178,16 +10873,18 @@ begin
         r2 := $ff * (r2 - minVal) / range;
         S := S + #$1B'[38;2;' + IntToStr(round(r)) + ';' + IntToStr(round(r)) +
           ';' + IntToStr(round(r)) + 'm' + #$1B'[48;2;' + IntToStr(
-          round(r2)) + ';' + IntToStr(round(r2)) + ';' + IntToStr(round(r2)) + 'm' + halfChar;
+          round(r2)) + ';' + IntToStr(round(r2)) + ';' + IntToStr(round(r2)) +
+          'm' + halfChar;
       end;
     end;
-    write(S, csi, trunc(_w * scale), 'D', dw);
-    ow:=math.max(ow, trunc(_w * scale)); inc(oh);
+    Write(S, csi, trunc(_w * scale), 'D', dw);
+    ow := Math.max(ow, trunc(_w * scale));
+    Inc(oh);
     S := '';
   end;
   S := #$1B'[0m';
-  write(S);
-  result := [ow, oh]
+  Write(S);
+  Result := [ow, oh];
 
 end;
 
@@ -10196,116 +10893,120 @@ begin
   Result := PTypeInfo(TypeInfo(T)).Name;
 end;
 
-procedure si2c2(idx:IntPtr; ptr:Pointer);
+procedure si2c2(idx: IntPtr; ptr: Pointer);
 var
   k, i, j, b, outWidth, outHeight, kernelSize, inSize, outSize,
-  kernelCol, kernelRow, outCol, outRow, sizeX,
-  kernelWidth, kernelHeight, aChannels, aWidth, dilationX, dilationY,
-  strideX, strideY, padWidth, padHeight, batch, chan: SizeInt;
+  kernelCol, kernelRow, outCol, outRow, sizeX, kernelWidth, kernelHeight,
+  aChannels, aWidth, dilationX, dilationY, strideX, strideY, padWidth,
+  padHeight, batch, chan: SizeInt;
   im, col, im1, col1: PSingle;
-  MT :PMPParams absolute ptr;
+  MT: PMPParams absolute ptr;
 begin
-  outHeight     := PSizeInt(mt.a)^;
-  outWidth      := PSizeInt(mt.b)^;
-  kernelHeight  := PSizeInt(mt.c)^;
-  kernelWidth   := PSizeInt(mt.d)^;
-  padHeight     := PSizeInt(mt.e)^;
-  padWidth      := PSizeInt(mt.f)^;
-  strideY       := PSizeInt(mt.g)^;
-  strideX       := PSizeInt(mt.h)^;
-  dilationY     := PSizeInt(mt.i)^;
-  dilationX     := PSizeInt(mt.j)^;
-  batch         := PSizeInt(mt.k)^;
-  aChannels     := PSizeInt(mt.l)^;
-  inSize        := PSizeInt(mt.m)^;
-  outSize       := PSizeInt(mt.n)^;
-  sizeX         := PSizeInt(mt.o)^;
-  kernelSize    := PSizeInt(mt.p)^;
-  aWidth        := PSizeInt(mt.q)^;
-  im            := mt.r;
-  col           := mt.s;
+  outHeight := PSizeInt(mt.a)^;
+  outWidth := PSizeInt(mt.b)^;
+  kernelHeight := PSizeInt(mt.c)^;
+  kernelWidth := PSizeInt(mt.d)^;
+  padHeight := PSizeInt(mt.e)^;
+  padWidth := PSizeInt(mt.f)^;
+  strideY := PSizeInt(mt.g)^;
+  strideX := PSizeInt(mt.h)^;
+  dilationY := PSizeInt(mt.i)^;
+  dilationX := PSizeInt(mt.j)^;
+  batch := PSizeInt(mt.k)^;
+  aChannels := PSizeInt(mt.l)^;
+  inSize := PSizeInt(mt.m)^;
+  outSize := PSizeInt(mt.n)^;
+  sizeX := PSizeInt(mt.o)^;
+  kernelSize := PSizeInt(mt.p)^;
+  aWidth := PSizeInt(mt.q)^;
+  im := mt.r;
+  col := mt.s;
   //for kernelRow := 0 to kernelHeight - 1 do
   //begin
-    chan := idx div kernelSize;
-    k    := idx mod kernelSize;
-    //for k := 0 to kernelWidth*kernelHeight - 1 do
+  chan := idx div kernelSize;
+  k := idx mod kernelSize;
+  //for k := 0 to kernelWidth*kernelHeight - 1 do
+  begin
+    kernelRow := k div kernelWidth;
+    kernelCol := k mod kernelWidth;
+    for b := 0 to batch - 1 do
     begin
-      kernelRow := k div kernelWidth;
-      kernelCol := k mod kernelWidth;
-      for b := 0 to batch - 1 do
+      i := (b * aChannels + chan) * inSize + aWidth *
+        (kernelRow * dilationY - padHeight) + kernelCol * dilationX - padWidth;
+      im1 := im + i;
+      col1 := col + padWidth * outWidth + outSize * kernelSize *
+        (chan + b * aChannels) + outSize * (kernelRow * kernelWidth + kernelCol);
+      for outRow := padHeight to outHeight - padHeight - 1 do
       begin
-        i := (b * aChannels+ chan) * inSize + aWidth * (kernelRow*dilationY - padHeight) + kernelCol * dilationX - padWidth;
-        im1 := im + i;
-        col1 := col + padWidth * outWidth + outSize*kernelSize*(chan + b*aChannels) + outSize*(kernelRow * kernelWidth + kernelCol) ;
-        for outRow := padHeight to outHeight - padHeight - 1 do
-        begin
-          j := outRow * aWidth * strideY + padWidth * strideX ;
-          if strideX = 1 then
-            move(im1[j], col1[padWidth], sizeX * SizeOf(single))
-          else
-            for outCol := padWidth to outWidth - padWidth - 1 do
-            begin
-              //j := outRow * aWidth * strideY + outCol * strideX;
-              col1[outCol] := im1[j];
-              inc(j, strideX);
-            end;
-          Inc(col1, outWidth);
-        end;
+        j := outRow * aWidth * strideY + padWidth * strideX;
+        if strideX = 1 then
+          move(im1[j], col1[padWidth], sizeX * SizeOf(single))
+        else
+          for outCol := padWidth to outWidth - padWidth - 1 do
+          begin
+            //j := outRow * aWidth * strideY + outCol * strideX;
+            col1[outCol] := im1[j];
+            Inc(j, strideX);
+          end;
+        Inc(col1, outWidth);
       end;
     end;
+  end;
   //end;
 end;
 
 procedure sim2col2(const aChannels, aHeight, aWidth: Sizeint;
-  const kernelHeight, kernelWidth, padHeight, padWidth,
-  strideY, strideX, dilationY, dilationX: SizeInt;
-  const im: PSingle; const imOffset: SizeInt; const col: PSingle;
-  const colOffset: SizeInt; const batch: SizeInt = 1; const multithread: boolean = False);
+  const kernelHeight, kernelWidth, padHeight, padWidth, strideY,
+  strideX, dilationY, dilationX: SizeInt; const im: PSingle;
+  const imOffset: SizeInt; const col: PSingle; const colOffset: SizeInt;
+  const batch: SizeInt = 1; const multithread: boolean = False);
 var
-  outWidth, outHeight, kernelSize, inSize, outSize, chan, sizeX :SizeInt;
+  outWidth, outHeight, kernelSize, inSize, outSize, chan, sizeX: SizeInt;
   //i, j, b, kernelCol, kernelRow, outCol, outRow: SizeInt;
   //im1, col1: PSingle;
-  mt :TMPParams;
+  mt: TMPParams;
 begin
-  outWidth := (aWidth + 2 * padWidth - (dilationX * (kernelWidth - 1) + 1)) div strideX + 1;
-  outHeight := (aHeight + 2 * padHeight - (dilationY * (kernelHeight - 1) + 1)) div strideY + 1;
+  outWidth := (aWidth + 2 * padWidth - (dilationX * (kernelWidth - 1) + 1)) div
+    strideX + 1;
+  outHeight := (aHeight + 2 * padHeight - (dilationY * (kernelHeight - 1) + 1)) div
+    strideY + 1;
   outSize := outWidth * outHeight;
   inSize := aWidth * aHeight;
   kernelSize := kernelWidth * kernelHeight;
   sizeX := outWidth - 2 * padWidth;
 
-  mt.a :=  @outHeight      ;
-  mt.b :=  @outWidth       ;
-  mt.c :=  @kernelHeight   ;
-  mt.d :=  @kernelWidth    ;
-  mt.e :=  @padHeight      ;
-  mt.f :=  @padWidth       ;
-  mt.g :=  @strideY        ;
-  mt.h :=  @strideX        ;
-  mt.i :=  @dilationY      ;
-  mt.j :=  @dilationX      ;
-  mt.k :=  @batch          ;
-  mt.l :=  @aChannels      ;
-  mt.m :=  @inSize         ;
-  mt.n :=  @outSize        ;
-  mt.o :=  @sizeX          ;
-  mt.p :=  @kernelSize     ;
-  mt.q :=  @aWidth         ;
-  mt.r :=  im + imOffset   ;
-  mt.s :=  col + colOffset ;
+  mt.a := @outHeight;
+  mt.b := @outWidth;
+  mt.c := @kernelHeight;
+  mt.d := @kernelWidth;
+  mt.e := @padHeight;
+  mt.f := @padWidth;
+  mt.g := @strideY;
+  mt.h := @strideX;
+  mt.i := @dilationY;
+  mt.j := @dilationX;
+  mt.k := @batch;
+  mt.l := @aChannels;
+  mt.m := @inSize;
+  mt.n := @outSize;
+  mt.o := @sizeX;
+  mt.p := @kernelSize;
+  mt.q := @aWidth;
+  mt.r := im + imOffset;
+  mt.s := col + colOffset;
 
-{$ifdef USE_MULTITHREADING}
+  {$ifdef USE_MULTITHREADING}
   if multithread then
     mp2.&for(si2c2, 0, AChannels*kernelSize, @mt)
   else
-{$endif}
-  for chan := 0 to aChannels*kernelSize - 1 do
-    si2c2(chan, @mt)
+  {$endif}
+  for chan := 0 to aChannels * kernelSize - 1 do
+    si2c2(chan, @mt);
 end;
 
 procedure sim2Col(const aChannels, aHeight, aWidth: Sizeint;
-  const kernelHeight, kernelWidth, padHeight, padWidth,
-  strideY, strideX, dilationY, dilationX: SizeInt; const im: PSingle;
+  const kernelHeight, kernelWidth, padHeight, padWidth, strideY,
+  strideX, dilationY, dilationX: SizeInt; const im: PSingle;
   const imOffset: SizeInt; const col: PSingle; const colOffset: SizeInt;
   const batch: SizeInt = 1; const MultiThread: boolean = False);
 var
@@ -10324,8 +11025,7 @@ begin
   begin
     d_im := im + imOffset + channel_size * idx;
     d_col := col + colOffset + kernel_size * out_channel_size * idx;
-    for kernel_row := 0 to kernelHeight - 1 do for kernel_col :=
-      0 to kernelWidth - 1 do
+    for kernel_row := 0 to kernelHeight - 1 do for kernel_col := 0 to kernelWidth - 1 do
       begin
         input_row := -padHeight + kernel_row * dilationY;
         for output_rows := 0 to output_h - 1 do
@@ -10362,8 +11062,10 @@ begin
   //{$ifdef USE_TELEMETRY} if benchmark then metrics.ops.start(opIm2colExt);{$endif}
   {$else}
   {$endif}
-  output_w := (aWidth + 2 * padWidth - (dilationX * (kernelWidth - 1) + 1)) div strideX + 1;
-  output_h := (aHeight + 2 * padHeight - (dilationY * (kernelHeight - 1) + 1)) div strideY + 1;
+  output_w := (aWidth + 2 * padWidth - (dilationX * (kernelWidth - 1) + 1)) div
+    strideX + 1;
+  output_h := (aHeight + 2 * padHeight - (dilationY * (kernelHeight - 1) + 1)) div
+    strideY + 1;
   channel_size := aHeight * aWidth;
   out_channel_size := output_w * output_h;
   kernel_size := kernelWidth * kernelHeight;
@@ -10381,8 +11083,8 @@ begin
 end;
 
 procedure dim2Col(const aChannels, aHeight, aWidth: Sizeint;
-  const kernelHeight, kernelWidth, padHeight, padWidth,
-  strideY, strideX, dilationY, dilationX: SizeInt; const im: PDouble;
+  const kernelHeight, kernelWidth, padHeight, padWidth, strideY,
+  strideX, dilationY, dilationX: SizeInt; const im: PDouble;
   const imOffset: SizeInt; const col: PDouble; const colOffset: SizeInt;
   const batch: SizeInt = 1; const MultiThread: boolean = False);
 var
@@ -10401,8 +11103,7 @@ begin
   begin
     d_im := im + imOffset + channel_size * idx;
     d_col := col + colOffset + kernel_size * out_channel_size * idx;
-    for kernel_row := 0 to kernelHeight - 1 do for kernel_col :=
-      0 to kernelWidth - 1 do
+    for kernel_row := 0 to kernelHeight - 1 do for kernel_col := 0 to kernelWidth - 1 do
       begin
         input_row := -padHeight + kernel_row * dilationY;
         for output_rows := 0 to output_h - 1 do
@@ -10413,8 +11114,7 @@ begin
             for output_col := 0 to output_w - 1 do
             begin
               if {(input_col>=0) and} (SizeUInt(input_col) < SizeUInt(aWidth)) then
-                d_col[output_col] :=
-                d_im[input_row * aWidth + input_col]
+                d_col[output_col] := d_im[input_row * aWidth + input_col]
               else
                 d_col[output_col] := 0;
               Inc(input_col, strideX);
@@ -10438,8 +11138,10 @@ begin
     //{$ifdef USE_TELEMETRY} if benchmark then metrics.ops.start(opIm2colExt);{$endif}
   {$else}
   {$endif}
-  output_w := (aWidth + 2 * padWidth - (dilationX * (kernelWidth - 1) + 1)) div strideX + 1;
-  output_h := (aHeight + 2 * padHeight - (dilationY * (kernelHeight - 1) + 1)) div strideY + 1;
+  output_w := (aWidth + 2 * padWidth - (dilationX * (kernelWidth - 1) + 1)) div
+    strideX + 1;
+  output_h := (aHeight + 2 * padHeight - (dilationY * (kernelHeight - 1) + 1)) div
+    strideY + 1;
   channel_size := aHeight * aWidth;
   out_channel_size := output_w * output_h;
   kernel_size := kernelWidth * kernelHeight;
@@ -10461,37 +11163,36 @@ end;
 procedure c2i(i: IntPtr; ptr: Pointer);
 var
   kernel_row, kernel_col, output_rows, output_col, input_row, input_col: SizeInt;
-  Height, Width, kernel_h, kernel_w, pad_h, pad_w, stride_h, stride_w
-  , dilation_h, dilation_w, colOffset, imOffset, batch,
-  output_h, output_w, channel_size, kernel_size, out_channel_size,
-  index, chan :SizeInt;
+  Height, Width, kernel_h, kernel_w, pad_h, pad_w, stride_h, stride_w,
+  dilation_h, dilation_w, colOffset, imOffset, batch, output_h, output_w,
+  channel_size, kernel_size, out_channel_size, index, chan: SizeInt;
   col, im, data_im, data_col: PSingle;
-  p : PMPParams absolute ptr;
+  p: PMPParams absolute ptr;
 begin
 
-  Height            := PSizeInt(p.A)^;
-  Width             := PSizeInt(p.B)^;
-  kernel_h          := PSizeInt(p.C)^;
-  kernel_w          := PSizeInt(p.D)^;
-  pad_h             := PSizeInt(p.E)^;
-  pad_w             := PSizeInt(p.F)^;
-  stride_h          := PSizeInt(p.G)^;
-  stride_w          := PSizeInt(p.H)^;
-  dilation_h        := PSizeInt(p.I)^;
-  dilation_w        := PSizeInt(p.J)^;
-  colOffset         := PSizeInt(p.K)^;
-  imOffset          := PSizeInt(p.L)^;
-  batch             := PSizeInt(p.M)^;
-  output_h          := PSizeInt(p.N)^;
-  output_w          := PSizeInt(p.O)^;
-  out_channel_size  := PSizeInt(p.P)^;
-  col               := p.Q ;
-  im                := p.R ;
-  channel_size      := height*width ;
-  kernel_size       := kernel_h * kernel_w;
+  Height := PSizeInt(p.A)^;
+  Width := PSizeInt(p.B)^;
+  kernel_h := PSizeInt(p.C)^;
+  kernel_w := PSizeInt(p.D)^;
+  pad_h := PSizeInt(p.E)^;
+  pad_w := PSizeInt(p.F)^;
+  stride_h := PSizeInt(p.G)^;
+  stride_w := PSizeInt(p.H)^;
+  dilation_h := PSizeInt(p.I)^;
+  dilation_w := PSizeInt(p.J)^;
+  colOffset := PSizeInt(p.K)^;
+  imOffset := PSizeInt(p.L)^;
+  batch := PSizeInt(p.M)^;
+  output_h := PSizeInt(p.N)^;
+  output_w := PSizeInt(p.O)^;
+  out_channel_size := PSizeInt(p.P)^;
+  col := p.Q;
+  im := p.R;
+  channel_size := Height * Width;
+  kernel_size := kernel_h * kernel_w;
 
-  chan  := i div (kernel_size);
-  data_col := col + colOffset + i*out_channel_size;
+  chan := i div (kernel_size);
+  data_col := col + colOffset + i * out_channel_size;
   //data_col := col + colOffset + kernel_size*out_channel_size * chan;
   data_im := im + imOffset + channel_size * chan;
   index := (i mod kernel_size);
@@ -10501,63 +11202,65 @@ begin
   //FillDWord(data_im[0], Height * Width, 0);
   //for kernel_row :=0 to kernel_h  - 1 do
   //  for kernel_col :=0 to kernel_w  - 1 do
+  begin
+    input_row := (kernel_row - pad_h) * dilation_h;
+    for output_rows := 0 to output_h - 1 do
     begin
-      input_row := (kernel_row - pad_h) * dilation_h;
-      for output_rows := 0 to output_h - 1 do
+      if SizeUInt(input_row) >= SizeUInt(Height) then
+        Inc(data_col, output_w)
+      else
       begin
-        if SizeUInt(input_row) >= SizeUInt(Height) then
-          inc(data_col, output_w)
-        else
+        input_col := (kernel_col - pad_w) * dilation_w;
+        for output_col := 0 to output_w - 1 do
         begin
-          input_col := (kernel_col - pad_w) * dilation_w;
-          for output_col := 0 to output_w - 1 do
+          if SizeUInt(input_col) < SizeUInt(Width) then
           begin
-            if SizeUInt(input_col) < SizeUInt(Width) then begin
-              index := input_row * Width + input_col;
-              data_im[index] := data_im[index] + data_col[0];
-            end;
-            inc(data_col);
-            inc(input_col, stride_w);
+            index := input_row * Width + input_col;
+            data_im[index] := data_im[index] + data_col[0];
           end;
+          Inc(data_col);
+          Inc(input_col, stride_w);
         end;
-        inc(input_row, stride_h);
       end;
+      Inc(input_row, stride_h);
     end;
+  end;
 end;
 
 procedure scol2im(const channels, Height, Width, kernel_h, kernel_w,
   pad_h, pad_w, stride_h, stride_w, dilation_h, dilation_w: SizeInt;
-  const col: PSingle; const colOffset: SizeInt;
-  const im: PSingle; const imOffset: SizeInt; const batch: SizeInt = 1;
-  const multiThread: boolean = False);
+  const col: PSingle; const colOffset: SizeInt; const im: PSingle;
+  const imOffset: SizeInt; const batch: SizeInt = 1; const multiThread: boolean = False);
 var
   channel, output_h, output_w, channel_size, out_channel_size, kernel_size: SizeInt;
-  p : TMPParams;
+  p: TMPParams;
 begin
- //{$ifdef USE_TELEMETRY} if benchmark then metrics.ops.start(opCol2imExt);{$endif}
-  output_h         := (Height + 2 * pad_h - (dilation_h * (kernel_h - 1) + 1)) div stride_h + 1;
-  output_w         := (Width + 2 * pad_w - (dilation_w * (kernel_w - 1) + 1)) div stride_w + 1;
+  //{$ifdef USE_TELEMETRY} if benchmark then metrics.ops.start(opCol2imExt);{$endif}
+  output_h := (Height + 2 * pad_h - (dilation_h * (kernel_h - 1) + 1)) div
+    stride_h + 1;
+  output_w := (Width + 2 * pad_w - (dilation_w * (kernel_w - 1) + 1)) div
+    stride_w + 1;
   out_channel_size := output_h * output_w;
-  channel_size     := Height * Width;
-  kernel_size      := kernel_h * kernel_w;
-  p.A  := @Height           ;
-  p.B  := @Width            ;
-  p.C  := @kernel_h         ;
-  p.D  := @kernel_w         ;
-  p.E  := @pad_h            ;
-  p.F  := @pad_w            ;
-  p.G  := @stride_h         ;
-  p.H  := @stride_w         ;
-  p.I  := @dilation_h       ;
-  p.J  := @dilation_w       ;
-  p.K  := @colOffset        ;
-  p.L  := @imOffset         ;
-  p.M  := @batch            ;
-  p.N  := @output_h         ;
-  p.O  := @output_w         ;
-  p.P  := @out_channel_size ;
-  p.Q  := col               ;
-  p.R  := im                ;
+  channel_size := Height * Width;
+  kernel_size := kernel_h * kernel_w;
+  p.A := @Height;
+  p.B := @Width;
+  p.C := @kernel_h;
+  p.D := @kernel_w;
+  p.E := @pad_h;
+  p.F := @pad_w;
+  p.G := @stride_h;
+  p.H := @stride_w;
+  p.I := @dilation_h;
+  p.J := @dilation_w;
+  p.K := @colOffset;
+  p.L := @imOffset;
+  p.M := @batch;
+  p.N := @output_h;
+  p.O := @output_w;
+  p.P := @out_channel_size;
+  p.Q := col;
+  p.R := im;
 
   {$ifdef USE_MULTITHREADING}
   if MultiThread then
@@ -10566,17 +11269,16 @@ begin
   for channel:=0 to Channels*kernel_size-1 do
     c2i(channel, @p);
   {$else}
-  for channel := 0 to Channels*kernel_size - 1 do
-    c2i(channel,@p);
+  for channel := 0 to Channels * kernel_size - 1 do
+    c2i(channel, @p);
   {$endif}
   //{$ifdef USE_TELEMETRY} if benchmark then metrics.ops.finish(opCol2imExt);{$endif}
 end;
 
 procedure dcol2im(const channels, Height, Width, kernel_h, kernel_w,
   pad_h, pad_w, stride_h, stride_w, dilation_h, dilation_w: SizeInt;
-  const col: PDouble; const colOffset: SizeInt;
-  const im: PDouble; const imOffset: SizeInt; const batch: SizeInt = 1;
-  const multiThread: boolean = False);
+  const col: PDouble; const colOffset: SizeInt; const im: PDouble;
+  const imOffset: SizeInt; const batch: SizeInt = 1; const multiThread: boolean = False);
 var
   channel, output_h, output_w, channel_size, out_channel_size, kernel_size: SizeInt;
   {$ifdef FPC}
@@ -10600,8 +11302,7 @@ begin
         input_row := kernel_row * dilation_h;
         for output_rows := 0 to output_h - 1 do
         begin
-          if not (SizeUInt(input_row) < SizeUInt(Height)) then
-            Inc(data_col, output_w)
+          if not (SizeUInt(input_row) < SizeUInt(Height)) then  Inc(data_col, output_w)
           else
           begin
             input_col := kernel_col * dilation_w;
@@ -10644,7 +11345,8 @@ end;
 
 
 procedure TTensor<T>.im2Col(const kernelWidth, kernelHeight, padWidth,
-  padHeight, strideX, strideY, dilationX, dilationY: SizeInt; var dst: TTensor<T>; const AGroups: SizeInt);
+  padHeight, strideX, strideY, dilationX, dilationY: SizeInt;
+  var dst: TTensor<T>; const AGroups: SizeInt);
 var
   _w, _h, _c, b, ow, oh, colSize, _vol: SizeInt;
 
@@ -10672,37 +11374,44 @@ begin
   ow := (_w + 2 * padWidth - (dilationX * (kernelWidth - 1) + 1)) div strideX + 1;
   oh := (_h + 2 * padHeight - (dilationy * (kernelHeight - 1) + 1)) div stridey + 1;
   colSize := _c * oh * ow * kernelWidth * kernelHeight;
-  if not assigned(dst.data) then
-    dst.resize([groups, _c, kernelHeight*kernelWidth, oh, ow], groups);
-  assert(colSize <= dst.Size(),'[im2col], Invalid destination tensor size.');
+  if not assigned(dst.Data) then
+    dst.resize([groups, _c, kernelHeight * kernelWidth, oh, ow], groups);
+  assert(colSize <= dst.Size(), '[im2col], Invalid destination tensor size.');
 
   _vol := volume();
   {$if not defined(FPC) and not defined(USE_OPENCL)}
-  ds := dst.data;
+  ds := dst.Data;
   da := Data;
   i2c := procedure(idx: IntPtr; ptr: pointer)
   var
     pmt: PBoolean absolute ptr;
   begin
     im2colvv(_c, _h, _w, kernelHeight, kernelWidth, padHeight, padWidth,
-    strideY, strideX, dilationY, dilationX, da, idx * _vol, ds, idx * colSize, 1{groups}, pmt^);
+    strideY, strideX, dilationY, dilationX, da, idx * _vol, ds, idx *
+    colSize, 1{groups}, pmt^);
   end;
   {$endif}
 
-{$if defined(_USE_OPENCL)}
-  if computingDevice =cdOpenCL then begin
+  {$if defined(_USE_OPENCL)}
+  if computingDevice = cdOpenCL then
+  begin
     if not wasGPU() then
       pushToDevice;
     dst.setOCL;
-    for b:=0 to Groups-1 do begin
-      ocl.FErr := longint(CLBlastSim2col(CLBlastKernelModeCrossCorrelation, _c, _h, _w, kernelHeight, kernelWidth, padHeight, padWidth,
-        strideY, strideX, dilationY, dilationX, devData , b*_vol, dst.devData, b*colSize, @ocl.ActiveQueue, @ocl.events[0])); ocl.CheckError;
+    for b := 0 to Groups - 1 do
+    begin
+      ocl.FErr := longint(CLBlastSim2col(CLBlastKernelModeCrossCorrelation,
+        _c, _h, _w, kernelHeight, kernelWidth, padHeight, padWidth,
+        strideY, strideX, dilationY, dilationX, devData, b * _vol,
+        dst.devData, b * colSize, @ocl.ActiveQueue, @ocl.events[0]));
+      ocl.CheckError;
       //ocl.finish
     end;
-  end else
-{$endif}
+  end
+  else
+    {$endif}
   begin
-  {$ifdef USE_MULTITHREADING}
+    {$ifdef USE_MULTITHREADING}
     mt := groups=1;
     //mt := false;
     if mt then
@@ -10710,11 +11419,11 @@ begin
         i2c(b, @mt)
     else
       mp.&for(i2c, 0, groups, @mt)
-  {$else}
+    {$else}
     mt := False;
     for b := 0 to groups - 1 do
       i2c(b, @mt);
-  {$endif}
+    {$endif}
   end;
   {$ifdef USE_TELEMETRY}
   if benchmark then tensorMetrics.finish(opIm2col);
@@ -10723,7 +11432,8 @@ end;
 
 
 procedure TTensor<T>.col2Im(const kernelWidth, kernelHeight, padWidth,
-  padHeight, strideX, strideY, dilationX, dilationY: SizeInt; var src: TTensor<T>; const AGroups: SizeInt);
+  padHeight, strideX, strideY, dilationX, dilationY: SizeInt;
+  var src: TTensor<T>; const AGroups: SizeInt);
 var
   _w, _h, _c, b, oh, ow, imSize, colSize: SizeInt;
 
@@ -10744,11 +11454,12 @@ begin
   if benchmark then tensorMetrics.start(opCol2im);
   {$endif}
   assert(assigned(col2imvv), '[Col2Im] not implementd!');
-  if (not assigned(data)) and (src.dimensions>3) then begin
+  if (not assigned(Data)) and (src.dimensions > 3) then
+  begin
     ow := src.w;
     oh := src.h;
-    _w := (ow - 1) * strideX - 2*padWidth + (dilationX*(kernelWidth-1) + 1);
-    _h := (oh - 1) * strideY - 2*padHeight + (dilationX*(kernelHeight-1) + 1);
+    _w := (ow - 1) * strideX - 2 * padWidth + (dilationX * (kernelWidth - 1) + 1);
+    _h := (oh - 1) * strideY - 2 * padHeight + (dilationX * (kernelHeight - 1) + 1);
     _c := src.n();
     resize([src.groups, _c, _h, _w], src.groups);
   end;
@@ -10768,43 +11479,50 @@ begin
   imSize := _c * _h * _w;
   assert(colSize <= src.Size(), '[col2im] Invalide source tensor size.');
   {$if not defined(FPC) and not defined(_USE_OPENCL)}
-  ds := src.data;
+  ds := src.Data;
   da := Data;
   c2i := procedure(idx: IntPtr; ptr: Pointer)
   var
     pmt: PBoolean absolute ptr;
   begin
     col2imvv(_c, _h, _w, kernelHeight, kernelWidth, padHeight, padWidth,
-    strideY, strideX, dilationY, dilationX, ds, idx * colSize, da, idx * imSize, 1{groups}, pmt^);
+    strideY, strideX, dilationY, dilationX, ds, idx * colSize, da,
+    idx * imSize, 1{groups}, pmt^);
   end;
   {$endif}
   {$if defined(_USE_OPENCL)}
-  if computingDevice=cdOpenCL then begin
+  if computingDevice = cdOpenCL then
+  begin
     if not wasGPU then
       pushToDevice;
     if not src.wasGPU then
       src.pushToDevice;
-    for b := 0 to Groups-1 do begin
-      ocl.FErr := longint(CLBlastScol2im(CLBlastKernelModeCrossCorrelation, _c, _h, _w, kernelHeight, kernelWidth, padHeight, padWidth
-              , strideY, strideX, dilationY, dilationX, src.devData, b*colSize, devData, b*imSize, @ocl.ActiveQueue, @ocl.events[0])); ocl.CheckError;
+    for b := 0 to Groups - 1 do
+    begin
+      ocl.FErr := longint(CLBlastScol2im(CLBlastKernelModeCrossCorrelation,
+        _c, _h, _w, kernelHeight, kernelWidth, padHeight, padWidth,
+        strideY, strideX, dilationY, dilationX, src.devData, b *
+        colSize, devData, b * imSize, @ocl.ActiveQueue, @ocl.events[0]));
+      ocl.CheckError;
     end;
     //ocl.finish;
-  end else
-  {$endif}
+  end
+  else
+    {$endif}
   begin
 
-  {$ifdef USE_MULTITHREADING}
+    {$ifdef USE_MULTITHREADING}
     mt := groups=1;
     if mt then
       for b:=0 to groups-1 do
         c2i(b, @mt)
     else
       mp.&for(c2i, 0, groups, @mt) ;
-  {$else}
+    {$else}
     mt := False;
     for b := 0 to groups - 1 do
       c2i(b, @mt);
-  {$endif}
+    {$endif}
   end;
   {$ifdef USE_TELEMETRY}
   if benchmark then tensorMetrics.finish(opCol2im);
@@ -11054,7 +11772,7 @@ begin
   {$ifdef USE_TELEMETRY}
   if benchmark then tensorMetrics.start(opInit);
   {$endif}
-  dst.steps := 0;
+  //dst.steps := 0;
   dst.Data := nil;
   dst.DynData := nil;
   {$if defined(USE_OPENCL)}
@@ -11066,7 +11784,8 @@ begin
 
   P := TypeInfo(T);
   D := getTypeData(P);
-  dst.computingDevice := defaultDevice;;
+  dst.computingDevice := defaultDevice;
+  ;
   case P.kind of
     tkInteger:
       case D.OrdType of
@@ -11282,6 +12001,7 @@ var
   i: SizeInt;
   cMode: longword;
   hConsole: THandle;
+
 initialization
   SetPrecisionMode(TFPUPrecisionMode.pmSingle);
   {$ifdef USE_MULTITHREADiNG}
@@ -11360,95 +12080,101 @@ initialization
   //  TTensor<byte>.toStr             := _ToStr;
   //  TTensor<shortint>.toStr         := _ToStr;
 
-  TTensor<single>.Sqr                       := _Sqr;
-  TTensor<double>.Sqr                       := _Sqr;
-  TTensor<int32>.Sqr                        := _Sqr;
-  TTensor<int64>.Sqr                        := _Sqr;
-  TTensor<byte>.Sqr                         := _Sqr;
-  TTensor<shortint>.Sqr                     := _Sqr;
+  TTensor<single>.Sqr := _Sqr;
+  TTensor<double>.Sqr := _Sqr;
+  TTensor<int32>.Sqr := _Sqr;
+  TTensor<int64>.Sqr := _Sqr;
+  TTensor<byte>.Sqr := _Sqr;
+  TTensor<shortint>.Sqr := _Sqr;
 
-  TTensor<single>.Sqrt                      := _Sqrt;
-  TTensor<double>.Sqrt                      := _Sqrt;
-  TTensor<int32>.Sqrt                       := _Sqrt;
-  TTensor<int64>.Sqrt                       := _Sqrt;
-  TTensor<byte>.Sqrt                        := _Sqrt;
-  TTensor<shortint>.Sqrt                    := _Sqrt;
+  TTensor<single>.Sqrt := _Sqrt;
+  TTensor<double>.Sqrt := _Sqrt;
+  TTensor<int32>.Sqrt := _Sqrt;
+  TTensor<int64>.Sqrt := _Sqrt;
+  TTensor<byte>.Sqrt := _Sqrt;
+  TTensor<shortint>.Sqrt := _Sqrt;
 
-  TTensor<single>.Compare                   := _cmp;
-  TTensor<double>.Compare                   := _cmp;
-  TTensor<int32>.Compare                    := _cmp;
-  TTensor<int64>.Compare                    := _cmp;
-  TTensor<byte>.Compare                     := _cmp;
-  TTensor<shortint>.Compare                 := _cmp;
+  TTensor<single>.Compare := _cmp;
+  TTensor<double>.Compare := _cmp;
+  TTensor<int32>.Compare := _cmp;
+  TTensor<int64>.Compare := _cmp;
+  TTensor<byte>.Compare := _cmp;
+  TTensor<shortint>.Compare := _cmp;
 
-  TTensor<single>.rand                      := _rand;
-  TTensor<double>.rand                      := _rand;
-  TTensor<int32>.rand                       := _rand;
-  TTensor<int64>.rand                       := _rand;
-  TTensor<byte>.rand                        := _rand;
-  TTensor<shortint>.rand                    := _rand;
+  TTensor<single>.rand := _rand;
+  TTensor<double>.rand := _rand;
+  TTensor<int32>.rand := _rand;
+  TTensor<int64>.rand := _rand;
+  TTensor<byte>.rand := _rand;
+  TTensor<shortint>.rand := _rand;
 
-  TTensor<single>.randG                     := _randG;
-  TTensor<double>.randG                     := _randG;
-  TTensor<int32>.randG                      := _randG;
-  TTensor<int64>.randG                      := _randG;
-  TTensor<byte>.randG                       := _randG;
-  TTensor<shortint>.randG                   := _randG;
+  TTensor<single>.randG := _randG;
+  TTensor<double>.randG := _randG;
+  TTensor<int32>.randG := _randG;
+  TTensor<int64>.randG := _randG;
+  TTensor<byte>.randG := _randG;
+  TTensor<shortint>.randG := _randG;
 
-  TTensor<single>.exp                       := _exp;
-  TTensor<double>.exp                       := _exp;
-  TTensor<int32>.exp                        := _exp;
-  TTensor<int64>.exp                        := _exp;
-  TTensor<byte>.exp                         := _exp;
-  TTensor<shortint>.exp                     := _exp;
+  TTensor<single>.exp := _exp;
+  TTensor<double>.exp := _exp;
+  TTensor<int32>.exp := _exp;
+  TTensor<int64>.exp := _exp;
+  TTensor<byte>.exp := _exp;
+  TTensor<shortint>.exp := _exp;
 
-  TTensor<single>.log                       := _ln;
-  TTensor<double>.log                       := _ln;
-  TTensor<int32>.log                        := _ln;
-  TTensor<int64>.log                        := _ln;
-  TTensor<byte>.log                         := _ln;
-  TTensor<shortint>.log                     := _ln;
+  TTensor<single>.log := _ln;
+  TTensor<double>.log := _ln;
+  TTensor<int32>.log := _ln;
+  TTensor<int64>.log := _ln;
+  TTensor<byte>.log := _ln;
+  TTensor<shortint>.log := _ln;
 
-  TTensor<single>.__abs                     := _abs;
-  TTensor<double>.__abs                     := _abs;
-  TTensor<int32>.__abs                      := _abs;
-  TTensor<int64>.__abs                      := _abs;
-  TTensor<byte>.__abs                       := _abs;
-  TTensor<shortint>.__abs                   := _abs;
+  TTensor<single>.__abs := _abs;
+  TTensor<double>.__abs := _abs;
+  TTensor<int32>.__abs := _abs;
+  TTensor<int64>.__abs := _abs;
+  TTensor<byte>.__abs := _abs;
+  TTensor<shortint>.__abs := _abs;
 
-  TTensor<single>.Division                  := _Division;
-  TTensor<double>.Division                  := _Division;
-  TTensor<int32>.Division                   := _Division;
-  TTensor<int64>.Division                   := _Division;
-  TTensor<byte>.Division                    := _Division;
-  TTensor<shortint>.Division                := _Division;
+  TTensor<single>.Division := _Division;
+  TTensor<double>.Division := _Division;
+  TTensor<int32>.Division := _Division;
+  TTensor<int64>.Division := _Division;
+  TTensor<byte>.Division := _Division;
+  TTensor<shortint>.Division := _Division;
 
 
-  TTensor<single>.absv                      := @vAbsI;
-  TTensor<double>.absv                      := @vAbsI;
-  TTensor<int32>.absv                       := @vAbsI;
-  TTensor<int64>.absv                       := @vAbsI;
+  TTensor<single>.absv := @vAbsI;
+  TTensor<double>.absv := @vAbsI;
+  TTensor<int32>.absv := @vAbsI;
+  TTensor<int64>.absv := @vAbsI;
 
-  TTensor<single>.sqrv                      := @vSqrI;
-  TTensor<double>.sqrv                      := @vSqrI;
-  TTensor<int32>.sqrv                       := @vSqrI;
-  TTensor<int64>.sqrv                       := @vSqrI;
-  TTensor<byte>.sqrv                        := @vSqrI;
+  TTensor<single>.sqrv := @vSqrI;
+  TTensor<double>.sqrv := @vSqrI;
+  TTensor<int32>.sqrv := @vSqrI;
+  TTensor<int64>.sqrv := @vSqrI;
+  TTensor<byte>.sqrv := @vSqrI;
 
-  TTensor<single>.sqrtv                     := @vSqrtI;
-  TTensor<double>.sqrtv                     := @vSqrtI;
+  TTensor<single>.sqrtv := @vSqrtI;
+  TTensor<double>.sqrtv := @vSqrtI;
 
-  TTensor<single>.absdiffv                  := @vAbsDiffI;
-  TTensor<double>.absdiffv                  := @vAbsDiffI;
-  TTensor<int32>.absdiffv                   := @vAbsDiffI;
-  TTensor<int64>.absdiffv                   := @vAbsDiffI;
-  TTensor<byte>.absdiffv                    := @vAbsDiffI;
+  TTensor<single>.absdiffv := @vAbsDiffI;
+  TTensor<double>.absdiffv := @vAbsDiffI;
+  TTensor<int32>.absdiffv := @vAbsDiffI;
+  TTensor<int64>.absdiffv := @vAbsDiffI;
+  TTensor<byte>.absdiffv := @vAbsDiffI;
 
-  TTensor<single>.sumv                      := @vsSumI;
-  TTensor<double>.sumv                      := @vdSumI;
+  TTensor<single>.sumv := @vsSumI;
+  TTensor<double>.sumv := @vdSumI;
 
-  TTensor<single>.rssv                      := @vsRSS;
-  TTensor<double>.rssv                      := @vdRSS;
+  TTensor<single>.rssv := @vsRSS;
+  TTensor<double>.rssv := @vdRSS;
+
+  TTensor<single>.sumSqrDiffv := @vsRSS;
+  TTensor<double>.sumSqrDiffv := @vdRSS;
+
+  TTensor<single>.sumSqrDiffvv := @vsSumSqrDiff;
+  TTensor<double>.sumSqrDiffvv := @vdSumSqrDiff;
 
   {$ifdef USE_MKL}
   TTensor<Single>.addvv                     := @mkl_vml.vsAddI;
@@ -11464,115 +12190,115 @@ initialization
   TTensor<Double>.divvv                     := @mkl_vml.vdDivI;
 
   {$else}
-  TTensor<single>.addvv                     := @vsAddI;
-  TTensor<double>.addvv                     := @vdAddI;
+  TTensor<single>.addvv := @vsAddI;
+  TTensor<double>.addvv := @vdAddI;
 
-  TTensor<single>.subvv                     := @vsSubI;
-  TTensor<double>.subvv                     := @vdSubI;
+  TTensor<single>.subvv := @vsSubI;
+  TTensor<double>.subvv := @vdSubI;
 
-  TTensor<single>.mulvv                     := @vsMulI;
-  TTensor<double>.mulvv                     := @vdMulI;
+  TTensor<single>.mulvv := @vsMulI;
+  TTensor<double>.mulvv := @vdMulI;
 
-  TTensor<single>.divvv                     := @vsDivI;
-  TTensor<double>.divvv                     := @vdDivI;
+  TTensor<single>.divvv := @vsDivI;
+  TTensor<double>.divvv := @vdDivI;
 
   {$endif}
-  TTensor<single>.addblkvv                  := @vsAddB;
-  TTensor<double>.addblkvv                  := @vdAddB;
+  TTensor<single>.addblkvv := @vsAddB;
+  TTensor<double>.addblkvv := @vdAddB;
 
-  TTensor<single>.subblkvv                  := @vsSubB;
-  TTensor<double>.subblkvv                  := @vdSubB;
+  TTensor<single>.subblkvv := @vsSubB;
+  TTensor<double>.subblkvv := @vdSubB;
 
-  TTensor<single>.mulblkvv                  := @vsMulB;
-  TTensor<double>.mulblkvv                  := @vdMulB;
+  TTensor<single>.mulblkvv := @vsMulB;
+  TTensor<double>.mulblkvv := @vdMulB;
 
-  TTensor<single>.divblkvv                  := @vsDivB;
-  TTensor<double>.divblkvv                  := @vdDivB;
+  TTensor<single>.divblkvv := @vsDivB;
+  TTensor<double>.divblkvv := @vdDivB;
 
-  TTensor<single>.addvs                     := @vssAddI;
-  TTensor<double>.addvs                     := @vdsAddI;
+  TTensor<single>.addvs := @vssAddI;
+  TTensor<double>.addvs := @vdsAddI;
 
-  TTensor<single>.subvs                     := @vssSubI;
-  TTensor<double>.subvs                     := @vdsSubI;
+  TTensor<single>.subvs := @vssSubI;
+  TTensor<double>.subvs := @vdsSubI;
 
-  TTensor<single>.divvs                     := @vssDivI;
-  TTensor<double>.divvs                     := @vdsDivI;
+  TTensor<single>.divvs := @vssDivI;
+  TTensor<double>.divvs := @vdsDivI;
 
-  TTensor<single>.mulAddBlkvv               := @vsMulAddB;
-  TTensor<double>.mulAddBlkvv               := @vdMulAddB;
+  TTensor<single>.mulAddBlkvv := @vsMulAddB;
+  TTensor<double>.mulAddBlkvv := @vdMulAddB;
 
-  TTensor<single>.matTra                    := @matsTranspose;
-  TTensor<double>.matTra                    := @matdTranspose;
+  TTensor<single>.matTra := @matsTranspose;
+  TTensor<double>.matTra := @matdTranspose;
 
-  TTensor<single>.matDeg                    := @matsDegrade;
-  TTensor<double>.matDeg                    := @matdDegrade;
+  TTensor<single>.matDeg := @matsDegrade;
+  TTensor<double>.matDeg := @matdDegrade;
 
-  TTensor<single>.matDet                    := @matsDeterminant;
-  TTensor<double>.matDet                    := @matdDeterminant;
+  TTensor<single>.matDet := @matsDeterminant;
+  TTensor<double>.matDet := @matdDeterminant;
 
-  TTensor<single>.matCof                    := @matsCofactors;
-  TTensor<double>.matCof                    := @matdCofactors;
+  TTensor<single>.matCof := @matsCofactors;
+  TTensor<double>.matCof := @matdCofactors;
 
-  TTensor<single>.matInv                    := @matsInverse;
-  TTensor<double>.matInv                    := @matdInverse;
+  TTensor<single>.matInv := @matsInverse;
+  TTensor<double>.matInv := @matdInverse;
 
 
-  TTensor<int32>.andvv                      := @_and;
-  TTensor<int64>.andvv                      := @_and;
-  TTensor<byte>.andvv                       := @_and;
-  TTensor<shortint>.andvv                   := @_and;
+  TTensor<int32>.andvv := @_and;
+  TTensor<int64>.andvv := @_and;
+  TTensor<byte>.andvv := @_and;
+  TTensor<shortint>.andvv := @_and;
 
-  TTensor<int32>.andvs                      := @_and;
-  TTensor<int64>.andvs                      := @_and;
-  TTensor<byte>.andvs                       := @_and;
-  TTensor<shortint>.andvs                   := @_and;
+  TTensor<int32>.andvs := @_and;
+  TTensor<int64>.andvs := @_and;
+  TTensor<byte>.andvs := @_and;
+  TTensor<shortint>.andvs := @_and;
 
-  TTensor<int32>.orvv                       := @_or;
-  TTensor<int64>.orvv                       := @_or;
-  TTensor<byte>.orvv                        := @_or;
-  TTensor<shortint>.orvv                    := @_or;
+  TTensor<int32>.orvv := @_or;
+  TTensor<int64>.orvv := @_or;
+  TTensor<byte>.orvv := @_or;
+  TTensor<shortint>.orvv := @_or;
 
-  TTensor<int32>.orvs                       := @_or;
-  TTensor<int64>.orvs                       := @_or;
-  TTensor<byte>.orvs                        := @_or;
-  TTensor<shortint>.orvs                    := @_or;
+  TTensor<int32>.orvs := @_or;
+  TTensor<int64>.orvs := @_or;
+  TTensor<byte>.orvs := @_or;
+  TTensor<shortint>.orvs := @_or;
 
-  TTensor<int32>.xorvv                      := @_xor;
-  TTensor<int64>.xorvv                      := @_xor;
-  TTensor<byte>.xorvv                       := @_xor;
-  TTensor<shortint>.xorvv                   := @_xor;
+  TTensor<int32>.xorvv := @_xor;
+  TTensor<int64>.xorvv := @_xor;
+  TTensor<byte>.xorvv := @_xor;
+  TTensor<shortint>.xorvv := @_xor;
 
-  TTensor<int32>.xorvs                      := @_xor;
-  TTensor<int64>.xorvs                      := @_xor;
-  TTensor<byte>.xorvs                       := @_xor;
-  TTensor<shortint>.xorvs                   := @_xor;
+  TTensor<int32>.xorvs := @_xor;
+  TTensor<int64>.xorvs := @_xor;
+  TTensor<byte>.xorvs := @_xor;
+  TTensor<shortint>.xorvs := @_xor;
 
-  TTensor<int32>.notv                       := @_not;
-  TTensor<int64>.notv                       := @_not;
-  TTensor<byte>.notv                        := @_not;
-  TTensor<shortint>.notv                    := @_not;
+  TTensor<int32>.notv := @_not;
+  TTensor<int64>.notv := @_not;
+  TTensor<byte>.notv := @_not;
+  TTensor<shortint>.notv := @_not;
 
-  TTensor<int32>.shrvs                      := @_shr;
-  TTensor<int64>.shrvs                      := @_shr;
-  TTensor<byte>.shrvs                       := @_shr;
-  TTensor<shortint>.shrvs                   := @_shr;
+  TTensor<int32>.shrvs := @_shr;
+  TTensor<int64>.shrvs := @_shr;
+  TTensor<byte>.shrvs := @_shr;
+  TTensor<shortint>.shrvs := @_shr;
 
-  TTensor<int32>.shlvs                      := @_shl;
-  TTensor<int64>.shlvs                      := @_shl;
-  TTensor<byte>.shlvs                       := @_shl;
-  TTensor<shortint>.shlvs                   := @_shl;
+  TTensor<int32>.shlvs := @_shl;
+  TTensor<int64>.shlvs := @_shl;
+  TTensor<byte>.shlvs := @_shl;
+  TTensor<shortint>.shlvs := @_shl;
 
   {$if defined(USE_OPENBLAS)}
-  TTensor<single>.gemm                      := @openblas.cblas_sgemm;
-  TTensor<double>.gemm                      := @openblas.cblas_dgemm;
-  TTensor<single>.axpysvv                   := @openblas.cblas_saxpy;
-  TTensor<double>.axpysvv                   := @openblas.cblas_daxpy;
-  TTensor<single>.asumv                     := @openblas.cblas_sasum;
-  TTensor<double>.asumv                     := @openblas.cblas_dasum;
-  TTensor<single>.mulvs                     := @openblas.cblas_sscal;
-  TTensor<double>.mulvs                     := @openblas.cblas_dscal;
-  TTensor<single>.dotvv                     := @openblas.cblas_sdot;
-  TTensor<double>.dotvv                     := @openblas.cblas_ddot;
+  TTensor<single>.gemm := @openblas.cblas_sgemm;
+  TTensor<double>.gemm := @openblas.cblas_dgemm;
+  TTensor<single>.axpysvv := @openblas.cblas_saxpy;
+  TTensor<double>.axpysvv := @openblas.cblas_daxpy;
+  TTensor<single>.asumv := @openblas.cblas_sasum;
+  TTensor<double>.asumv := @openblas.cblas_dasum;
+  TTensor<single>.mulvs := @openblas.cblas_sscal;
+  TTensor<double>.mulvs := @openblas.cblas_dscal;
+  TTensor<single>.dotvv := @openblas.cblas_sdot;
+  TTensor<double>.dotvv := @openblas.cblas_ddot;
 
   //TTensor<Single>.argmaxAbsv      := @openblas.cblas_isamax;
   //TTensor<Double>.argmaxAbsv      := @openblas.cblas_idamax;
@@ -11610,65 +12336,65 @@ initialization
 
   {$endif}
   //TTensor<single>.im2colvv                  := @sim2Col2;
-  TTensor<single>.im2colvv                  := @sim2Col;
-  TTensor<double>.im2colvv                  := @dim2Col;
-  TTensor<single>.col2imvv                  := @scol2im;
-  TTensor<double>.col2imvv                  := @dcol2im;
+  TTensor<single>.im2colvv := @sim2Col;
+  TTensor<double>.im2colvv := @dim2Col;
+  TTensor<single>.col2imvv := @scol2im;
+  TTensor<double>.col2imvv := @dcol2im;
 
-  TTensor<single>.fmavss                    := @sfmavss;
-  TTensor<double>.fmavss                    := @dfmavss;
+  TTensor<single>.fmavss := @sfmavss;
+  TTensor<double>.fmavss := @dfmavss;
 
-  TTensor<single>.normvss                   := @snormvss;
-  TTensor<double>.normvss                   := @dnormvss;
+  TTensor<single>.normvss := @snormvss;
+  TTensor<double>.normvss := @dnormvss;
   {$if defined(CPUX64)}
   if AVX2Support then
-    TTensor<Single>.normvss                 := @snormvss_avx;
+    TTensor<Single>.normvss := @snormvss_avx;
   {$endif}
 
-  TTensor<single>.normvv                    := @_snormvv;
-  TTensor<double>.normvv                    := @_dnormvv;
+  TTensor<single>.normvv := @_snormvv;
+  TTensor<double>.normvv := @_dnormvv;
 
-  TTensor<single>.normblkvv                 := @_snormblkvv;
-  TTensor<double>.normblkvv                 := @_dnormblkvv;
+  TTensor<single>.normblkvv := @_snormblkvv;
+  TTensor<double>.normblkvv := @_dnormblkvv;
 
-  TTensor<single>.MeansAndVarsDelta         := sMeanAndVarianceDelta;
-  TTensor<double>.MeansAndVarsDelta         := dMeanAndVarianceDelta;
+  TTensor<single>.MeansAndVarsDelta := sMeanAndVarianceDelta;
+  TTensor<double>.MeansAndVarsDelta := dMeanAndVarianceDelta;
 
-  TTensor<single>.normalizeDelta            := sNormalizeDelta;
-  TTensor<double>.normalizeDelta            := dNormalizeDelta;
+  TTensor<single>.normalizeDelta := sNormalizeDelta;
+  TTensor<double>.normalizeDelta := dNormalizeDelta;
 
-  TTensor<single>.sinv                      := @vsin;
-  TTensor<single>.cosv                      := @vcos;
-  TTensor<single>.tanv                      := @vtan;
-  TTensor<single>.cotanv                    := @vcotan;
-  TTensor<single>.tanHv                     := @vtanH;
-  TTensor<single>.arcsinv                   := @varcsin;
-  TTensor<single>.arcCosv                   := @varcCos;
-  TTensor<single>.arcTanv                   := @varcTan;
-  TTensor<single>.ArcSinHv                  := @vArcSinH;
-  TTensor<single>.arcCosHv                  := @varcCosH;
-  TTensor<single>.arcTanHv                  := @varcTanH;
-  TTensor<single>.log10v                    := @vlog10;
-  TTensor<single>.log2v                     := @vlog2;
-  TTensor<single>.powv                      := @vPow;
-  TTensor<single>.logv                      := @vlog;
+  TTensor<single>.sinv := @vsin;
+  TTensor<single>.cosv := @vcos;
+  TTensor<single>.tanv := @vtan;
+  TTensor<single>.cotanv := @vcotan;
+  TTensor<single>.tanHv := @vtanH;
+  TTensor<single>.arcsinv := @varcsin;
+  TTensor<single>.arcCosv := @varcCos;
+  TTensor<single>.arcTanv := @varcTan;
+  TTensor<single>.ArcSinHv := @vArcSinH;
+  TTensor<single>.arcCosHv := @varcCosH;
+  TTensor<single>.arcTanHv := @varcTanH;
+  TTensor<single>.log10v := @vlog10;
+  TTensor<single>.log2v := @vlog2;
+  TTensor<single>.powv := @vPow;
+  TTensor<single>.logv := @vlog;
 
 
-  TTensor<double>.sinv                      := @vsin;
-  TTensor<double>.cosv                      := @vcos;
-  TTensor<double>.tanv                      := @vtan;
-  TTensor<double>.cotanv                    := @vcotan;
-  TTensor<double>.tanHv                     := @vtanH;
-  TTensor<double>.arcsinv                   := @varcsin;
-  TTensor<double>.arcCosv                   := @varcCos;
-  TTensor<double>.arcTanv                   := @varcTan;
-  TTensor<double>.ArcSinHv                  := @vArcSinH;
-  TTensor<double>.arcCosHv                  := @varcCosH;
-  TTensor<double>.arcTanHv                  := @varcTanH;
-  TTensor<double>.log10v                    := @vlog10;
-  TTensor<double>.log2v                     := @vlog2;
-  TTensor<double>.powv                      := @vPow;
-  TTensor<double>.logv                      := @vlog;
+  TTensor<double>.sinv := @vsin;
+  TTensor<double>.cosv := @vcos;
+  TTensor<double>.tanv := @vtan;
+  TTensor<double>.cotanv := @vcotan;
+  TTensor<double>.tanHv := @vtanH;
+  TTensor<double>.arcsinv := @varcsin;
+  TTensor<double>.arcCosv := @varcCos;
+  TTensor<double>.arcTanv := @varcTan;
+  TTensor<double>.ArcSinHv := @vArcSinH;
+  TTensor<double>.arcCosHv := @varcCosH;
+  TTensor<double>.arcTanHv := @varcTanH;
+  TTensor<double>.log10v := @vlog10;
+  TTensor<double>.log2v := @vlog2;
+  TTensor<double>.powv := @vPow;
+  TTensor<double>.logv := @vlog;
 
   saxpy := @saxpy_pas;
   sdot := @sdot_pas;
@@ -11685,7 +12411,7 @@ initialization
   {$endif}
 
   Randomize;
-  srnd(randseed);
+  srnd(uint32(randseed));
 
   _mutex := TCriticalSection.Create;
 

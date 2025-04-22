@@ -19,13 +19,15 @@ type
   { TNNet }
 
   TNNet = class(TInterfacedObject)
-    OnForward, OnBackward: procedure(var state: TNNetState);
+    OnForward, OnBackward, OnAfterPropagation: procedure(var state: TNNetState);
+    OnAfterUpdate: procedure(const args:TUpdateArgs; const batchId: SizeInt);
+    OnAfterNetOptimization: procedure(const net:TNNet; const batchId: SizeInt);
     FBatch: SizeInt;
     subDivisions: SizeInt;
     timeSteps : SizeInt;
     maxBatches: SizeInt;
     EMA_Alpha: single;
-    input: TSingleTensor;
+    input, truth: TSingleTensor;
     layers: TArray<TBaseLayer>;
     seen: SizeInt;
     numBoxes : SizeInt;
@@ -44,7 +46,7 @@ type
 
     policy: TLearningRatePolicy;
     burnIn: SizeInt;
-    step: SizeInt;
+    step: SizeInt;  // for STEP type learning rate
     steps: TArray<SizeInt>;
     Scales: TArray<single>;
     seq_scales : TArray<single>;
@@ -65,7 +67,6 @@ type
     totalBBox: SizeInt;
     rewrittenBBox: SizeInt;
 
-    truth: TArray<single>;
     //outTensor             : TSingleTensor;
 
     //TrainablesX, TrainablesY : TArray<single>;
@@ -84,7 +85,7 @@ type
     procedure backward(var state: TNNetState); overload;
     procedure update(); overload;
     function predict(const tensor: TSingleTensor): PSingleTensor;
-    function Propagate( AInput, ATruth: PSingle): single;
+    function Propagate(): single;
     function trainEpoch(const Data: TData;  const randomSample: boolean = False ; batchCount: SizeInt = 0): single;
     function output(): PSingleTensor;
     function cost(): single;
@@ -117,7 +118,7 @@ begin
   learningRateMin := 0.00001;
   momentum := DEFAULT_MOMENTUM;
   decay := DEFAULT_DECAY;
-  timeSteps := 0;
+  timeSteps := 1;
   //outTensor.reSize(output.Shape, output.Groups);
   setLayers(aLayers);
   if assigned(Layers) then
@@ -137,7 +138,8 @@ begin
       wsSize := lSize;
   end;
   Layers := ALayers;
-  workSpace.resize([wsSize]);
+  if wsSize>0 then
+    workSpace.resize([wsSize]);
 end;
 
 procedure TNNet.setTraining(const training: boolean);
@@ -166,7 +168,7 @@ begin
   except on E : Exception do
     raise Exception.Create('['+Layers[i].ClassName+'] : ' + E.Message)
   end;
-  workspace.reSize([wsSize]);
+  if wsSize>0 then workspace.reSize([wsSize]);
   FBatch := ABatch;
 end;
 
@@ -226,8 +228,7 @@ begin
       // todo make random thread safe
       exit(learningRate * Math.power(random, power));
     lrpSIG:
-      exit(learningRate * (1.0 / (1.0 + exp(gamma * (
-      +- step)))));
+      exit(learningRate * (1.0 / (1.0 + exp(gamma * (-step)))));
     lrpSGDR:
       begin
         last_iteration_start := 0;
@@ -275,7 +276,7 @@ begin
     if state.isTraining and assigned(currentLayer.delta.Data) and currentLayer.train then begin
       //currentLayer.delta.Multiply(0);
     {$ifdef USE_OPENCL}
-      ocl.fill(currentLayer.delta.size(), currentLayer.delta.devData, 0, 1
+      ocl.fill(currentLayer.delta.size(), currentLayer.delta.devData, 0, 0, 1
       {$IFDEF CL_EVENTS}
       , state.events, nil);
       ocl.waitForEvents(1, pointer(state.events));
@@ -298,6 +299,7 @@ begin
     {$endif}
     // todo temporary OpenCL output workaroundB
     state.input := @currentLayer.output;
+    //writeln(#10, 'Forward ', 100*i/ High(Layers):2:0, '%')
   end;
 end;
 
@@ -316,22 +318,17 @@ begin
   for i := High(Layers) downto 0 do
   begin
     state.index := i;
-    if i = 0 then
-    begin
+    if i = 0 then begin
       state.input := original_input;
       state.delta := original_delta;
-    end
-    else
-    begin
+    end else begin
       prev := Layers[i - 1];
       state.input := @prev.output;
       state.delta := @prev.delta;
     end;
     current := Layers[i];
-    if current.backwardStop then
-      break;
-    if current.forwardOnly then
-      continue;
+    if current.backwardStop then break;
+    if current.forwardOnly then continue;
     {$ifdef USE_OPENCL}
     current.events := state.events;
     current.ev     := state.ev;
@@ -342,7 +339,11 @@ begin
     {$endif}
     if assigned(OnBackward) then
       OnBackward(state);
+    {$ifdef DEBUG}
+    //writeLn(#10, 'Backward ', 100*i/ High(Layers):2:0, '%')
+    {$endif}
   end;
+  Inc(seen, batch);
 
 end;
 
@@ -373,11 +374,12 @@ begin
       {$else}
       current.update(arg);
       {$endif}
+      if assigned(OnAfterUpdate) then OnAfterUpdate(arg, i);
     end;
   end;
 end;
 
-function TNNet.Propagate(AInput, ATruth: PSingle): single;
+function TNNet.Propagate: single;
 var
   state: TNNetState;
 begin
@@ -407,7 +409,7 @@ begin
   if assigned(state.delta) then
     state.delta.free;
   state.index := 0;
-  state.truth.reShape(output().Shape, batch);
+  state.truth:=truth;
   {$ifdef USE_OPENCL}
   if not assigned(state.truth.devData) then
     state.truth.devData := ocl.createDeviceBuffer(state.truth.byteSize());
@@ -415,8 +417,6 @@ begin
   setLength(state.events, max(batch, 2));
   setLength(state.ev, length(state.events));
   {$endif}
-  state.truth.Data := Pointer(ATruth);
-  Inc(seen, batch);
   forward(state);
   {$ifdef USE_OPENCL}
   //ocl.finish();
@@ -426,6 +426,7 @@ begin
   //ocl.finish();
   {$endif}
   Result := cost();
+  if assigned(OnAfterPropagation) then OnAfterPropagation(state);
 end;
 
 function TNNet.predict(const tensor: TSingleTensor): PSingleTensor;
@@ -455,9 +456,15 @@ var
 
   err: single;
   i: SizeInt;
+
 begin
-  assert(Data.X.h() mod batch =
-    0, 'Please ensure that Dataset rows are multiple of batches!');
+  //assert(Data.X.h() mod batch =
+  //  0, 'Dataset rows must be a multiple of batches!');
+
+  //{$ifdef USE_OPENCL}
+  //Data.X.pushToDevice();
+  //Data.Y.pushToDevice();
+  //{$endif}
 
   if batchCount = 0 then
   begin
@@ -465,23 +472,24 @@ begin
   end;
 
   // todo [trainEpoch], still primitive implementation, revisit trainEpoch later for batch training
-
-  input.reSize(layers[0].inputShape, Batch, timeSteps);
-  if not assigned(self.truth) then
-    setLength(self.Truth, Data.Y.Size());
-
+  if not assigned(input.data) then
+    input.reSize(layers[0].inputShape, batch);
+  if not assigned(truth.data) then
+    truth.resize(self.output().Shape, batch);
   Result := 0;
   for i := 0 to batchCount - 1 do
   begin
     if randomSample then
-      Data.getRandomBatch(batch, pointer(input.Data), pointer(Self.truth))
+      Data.getRandomBatch(1, input, truth)
     else
-      Data.getBatch(batch, i * batch, pointer(input.Data), pointer(Self.truth));
+      Data.getBatch(1, i, input, truth);
+
     {$ifdef USE_OPENCL}
     input.setCPU;
     {$endif}
+
     currentSubDivision := i;
-    Propagate(pointer(input.Data), pointer(Self.truth));
+    Propagate();
     err := cost();
     Result := Result + err;
     //if wait_key then begin
@@ -494,7 +502,14 @@ begin
     {$endif}
     //end;
     //wait_key_cv(5)
-    update();
+
+    Result := seen div (batch * subDivisions);
+
+    if seen mod (batch * subDivisions) = 0 then begin
+      update();
+      if assigned(OnAfterNetOptimization) then OnAfterNetOptimization(Self, i);
+    end;
+
   end;
   Inc(currentIteration);
   Result := Result / (batchCount * batch);

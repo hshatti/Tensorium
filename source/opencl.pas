@@ -61,6 +61,8 @@ const
 {* scalar types  *}
 
 type
+  PSizeInt = ^SizeInt;
+  SizeInt  = nativeint;
   intptr_t    = IntPtr;
   psize_t     = ^size_t;
   size_t      = IntPtr;

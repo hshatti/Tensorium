@@ -22,8 +22,9 @@
 *)
 
 unit termesc;
-
-{$mode Delphi}
+{$ifdef FPC}
+  {$mode Delphi}
+{$endif}
 
 interface
 

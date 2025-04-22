@@ -412,7 +412,7 @@ begin
   if ATrain = FTrain  then exit;
   FTrain := ATrain;
   if ATrain then begin
-      delta := TSingleTensor.Create([batch , filters, outH, outW]);
+      delta := TSingleTensor.Create([batch , filters, outH, outW], batch);
       if not assigned(shareLayer) then begin
           weight_updates := TSingleTensor.Create([c div groups, filters, kernelSize, kernelSize]);
           bias_updates := TSingleTensor.Create([filters]);
@@ -428,8 +428,8 @@ begin
           end;
       end;
       if isBatchNormalized then begin
-          x := TSingleTensor.Create([batch, filters, outH, outW]);
-          x_norm := TSingleTensor.Create([batch, filters, outH, outW])
+          x := TSingleTensor.Create([batch, filters, outH, outW], batch);
+          x_norm := TSingleTensor.Create([batch, filters, outH, outW], batch)
       end;
 
   end else begin
@@ -810,7 +810,7 @@ begin
     batchNormGPU(state)
   else begin
     //output.add(biases);
-    ocl.forwardBias(output.Size(), output.devData, biases.size(), biases.devData,1, Batch
+    ocl.forwardBias(output.Size(), output.devData, 0, biases.size(), biases.devData,1, Batch
     {$IFDEF CL_EVENTS}
     , batch, pointer(state.events), pointer(state.events));
     {$ELSE}
@@ -924,7 +924,7 @@ begin
   if isBatchNormalized then
     batchNormBackGPU(state)
   else
-    ocl.backwardBias(bias_updates.size(), bias_updates.devData, delta.size, delta.devData, 1, batch
+    ocl.backwardBias(bias_updates.size(), bias_updates.devData, delta.size, delta.devData, 0, 1, batch
     {$IFDEF CL_EVENTS}
     , 1, pointer(state.events), pointer(state.events));
     {$ELSE}
@@ -1084,7 +1084,7 @@ begin
 
   learning_rate := args.learningRate * learningRateScale;
 
-  ocl.axpy(biases.size(), learning_rate / args.batch, bias_updates.devData,1, biases.devData, 1
+  ocl.axpy(biases.size(), learning_rate / args.batch, bias_updates.devData, 0, 1, biases.devData, 0, 1
   {$IFDEF CL_EVENTS}
   , batch, pointer(events),  pointer(events));
   {$ELSE}
@@ -1102,7 +1102,7 @@ begin
   //ocl.waitForEvents(batch, pointer(events));
   //ocl.finish();
 
-  ocl.axpy(weight_updates.size(), -args.decay * args.batch, weights.devData, 1, weight_updates.devData, 1
+  ocl.axpy(weight_updates.size(), -args.decay * args.batch, weights.devData, 0, 1, weight_updates.devData, 0, 1
   {$IFDEF CL_EVENTS}
   , 1, @events[1],  @events[1]);
   {$ELSE}
@@ -1111,7 +1111,7 @@ begin
   //ocl.waitForEvents(batch, pointer(events));
   //ocl.finish();
 
-  ocl.axpy(weights.size(), learning_Rate / args.batch, weight_updates.devData, 1, weights.devData, 1
+  ocl.axpy(weights.size(), learning_Rate / args.batch, weight_updates.devData, 0, 1, weights.devData, 0, 1
   {$IFDEF CL_EVENTS}
   , 1, @events[1],  @events[1]);
   {$ELSE}
@@ -1120,7 +1120,7 @@ begin
   //ocl.waitForEvents(batch, pointer(events));
   //ocl.finish();
 
-  ocl.scale(weights.size(), args.momentum, weight_updates.devData, 1
+  ocl.scale(weight_updates.size(), args.momentum, weight_updates.devData, 1
   {$IFDEF CL_EVENTS}
   , 1, @events[1],  @events[1]);
   {$ELSE}
@@ -1132,7 +1132,7 @@ begin
   if assigned(scales.Data) then begin
       //scales.axpy(learning_rate / args.batch, scale_updates);
       //scale_updates.multiply(args.momentum);
-    ocl.axpy(scales.size(), learning_rate / args.batch, scale_updates.devData, 1, scales.devData, 1);
+    ocl.axpy(scales.size(), learning_rate / args.batch, scale_updates.devData, 0, 1, scales.devData, 0, 1);
     ocl.scale(scale_updates.size(), args.momentum, scale_updates.devData, 1);
 
   end;

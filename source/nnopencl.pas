@@ -1,16 +1,22 @@
 unit nnOpenCL;
-
-{$mode Delphi}
+{$ifdef FPC}
+  {$mode Delphi}
+  {$asmmode intel}
+{$endif}
 
 interface
 
 uses
   {$if defined(MACOS) or defined(DARWIN)}
-  CL,
+  CL
   {$else}
-  OpenCL,
+  OpenCL
   {$endif}
-  OpenCLHelper
+  , OpenCLHelper
+  {$ifndef FPC}
+  , windows
+  {$endif}
+
 {$ifdef USE_TELEMETRY}
   , nOpMetrics
 {$endif}
@@ -21,11 +27,12 @@ uses
     CL_LIB_BLAS  = 1;
     CL_LIB_BLAST = 2;
 type
+
   TCLMemAccess = OpenCLHelper.TCLMemAccess;
 
   TCLMemory = OpenCL.cl_mem;
 
-  PCLEvent = ^TCLEvent;
+  PCLEvent = Pcl_event;
   TCLEvent = OpenCL.cl_event;
 
   TCLEvents = TArray<TCLEvent>;
@@ -40,9 +47,9 @@ type
     procedure ActivateArray(const N: SizeInt; const x: cl_mem; const offset: SizeInt; const activation: longint; const events: TCLEvents = nil; event: PCLEvent = nil);
     procedure activateArraySWISH(const N: SizeInt; const x: cl_mem; const offset: SizeInt; const output_sigmoid, output: cl_mem; const events: TCLEvents = nil; event: PCLEvent = nil);
     procedure DeriveArray(const N: SizeInt; const x: cl_mem; const offset:SizeInt; const activation: longint; delta: cl_mem; const events: TCLEvents = nil; event: PCLEvent = nil);
-    procedure forwardBias(const dstSize: SizeInt; const dst: cl_mem; const srcSize: SizeInt; const src: cl_mem; const incb: SizeInt; const batch: SizeInt;
+    procedure forwardBias(const dstSize: SizeInt; const dst: cl_mem; const offset:SizeInt; const srcSize: SizeInt; const src: cl_mem; const incb: SizeInt; const batch: SizeInt;
       const events: TCLEvents = nil; event: PCLEvent = nil);
-    procedure backwardBias(const dstSize: SizeInt; const a: cl_mem; const srcSize: SizeInt; const b: cl_mem; const incb: SizeInt ; const batch: SizeInt;
+    procedure backwardBias(const dstSize: SizeInt; const dst: cl_mem; const srcSize: SizeInt; const src: cl_mem; const srcOffset:SizeInt; const incb: SizeInt ; const batch: SizeInt;
       const events: TCLEvents = nil; event: PCLEvent = nil);
     procedure gemm(const transA, transB :boolean; const M, N, K:SizeInt; const ALPHA:single;
       const A:cl_mem; const aOffset:SizeInt; const lda:SizeInt;
@@ -51,10 +58,19 @@ type
       const events: TCLEvents = nil; event: PCLEvent = nil);
     procedure addvv(const N:SizeInt; const src1:cl_mem; const src1Offset, inca:SizeInt; const src2:cl_mem; const src2Offset, incb:SizeInt; dst:cl_mem; const dstOffset, incc:SizeInt; const events: TCLEvents = nil; event: PCLEvent = nil);
     procedure subvv(const N:SizeInt; const src1:cl_mem; const src1Offset, inca:SizeInt; const src2:cl_mem; const src2Offset, incb:SizeInt; dst:cl_mem; const dstOffset, incc:SizeInt; const events: TCLEvents = nil; event: PCLEvent = nil);
-    procedure axpy(const N:SizeInt; const a:single; const x:cl_mem; const incx:SizeInt; const y:cl_mem; const incy:sizeInt; const events: TCLEvents = nil; event: PCLEvent = nil);
+    procedure mulvv(const N:SizeInt; const src1:cl_mem; const src1Offset, inca:SizeInt; const src2:cl_mem; const src2Offset, incb:SizeInt; dst:cl_mem; const dstOffset, incc:SizeInt; const events: TCLEvents = nil; event: PCLEvent = nil);
+    procedure fmavv(const N: SizeInt;
+      const src1: cl_mem; const src1Offset, inca: SizeInt;
+      const src2: cl_mem; const src2Offset, incb: SizeInt;
+      const src3: cl_mem; const src3Offset, incc: SizeInt;
+      dst: cl_mem; const dstOffset, incd: SizeInt;
+      const events: TCLEvents= nil; event: PCLEvent = nil);
+    procedure axpy(const N:SizeInt; const a:single; const x:cl_mem; const xOffset:SizeInt; const incx:SizeInt; const y:cl_mem; const yOffset:SizeInt; const incy:sizeInt; const events: TCLEvents = nil; event: PCLEvent = nil);
+    procedure power(const N:SizeInt; const x:cl_mem; const xOffset:SizeInt; const incx:SizeInt; const a:single; const y:cl_mem; const yOffset:SizeInt; const incy:sizeInt; const events: TCLEvents = nil; event: PCLEvent = nil);
     procedure scale(const N:SizeInt; const a:Single; const x:cl_mem; const stride:SizeInt; const events: TCLEvents = nil; event: PCLEvent = nil);
     procedure crossEntropyLogistic(const N:SizeInt; const pred, truth: cl_mem; delta, error: cl_mem; const events: TCLEvents = nil; event: PCLEvent = nil);
-    procedure fill(const N:SizeInt; const x: cl_mem; const val:single; const stride :SizeInt; const events: TCLEvents = nil; event: PCLEvent = nil);
+    procedure fill(const N:SizeInt; const x: cl_mem; const offset:SizeInt; const val:single; const stride :SizeInt;
+      const events: TCLEvents = nil; event: PCLEvent = nil);
     procedure copy(const N:SizeInt; const src:cl_mem; const srcOffset, inca:SizeInt; const dst:cl_mem; const dstOffset, incb:SizeInt; const events: TCLEvents = nil; event: PCLEvent = nil);
     procedure softmaxBatch(const N: SizeInt; const input: cl_mem; const iOffset: SizeInt;
       const batch, batch_size, groups, group_size, stride: SizeInt;
@@ -80,23 +96,28 @@ type
     procedure fmavss(const N: SizeInt; const src: cl_mem; const offset: SizeInt; const scalar,
       bias: single; dst : cl_mem;
       const events: TCLEvents = nil; event: PCLEvent = nil);
-    procedure meanAndVars(const srcSize, dstSize, groups:sizeInt; const src:cl_mem; means, vars:cl_mem;
+    procedure meanAndVars(const srcSize, dstSize, groups:sizeInt; const src:cl_mem; const offset:sizeInt; means, vars:cl_mem;
       const events: TCLEvents = nil; event: PCLEvent = nil);
-    procedure normalize(const srcSize, dstSize, groups:SizeInt; means:cl_mem; const meansStride:sizeInt; vars:cl_mem; const varsStride:SizeInt; dst:cl_mem;
+    procedure normalize(const srcSize, dstSize, groups:SizeInt; means:cl_mem; const meansStride:sizeInt; vars:cl_mem; const varsStride:SizeInt; dst:cl_mem; const dstOffset :sizeInt;
       const events: TCLEvents = nil; event: PCLEvent = nil);
-    procedure meansAndVarsDelta(const srcSize, dstSize, groups:SizeInt; delta, x, mean, variance, mean_delta, variance_delta: cl_mem;
+    procedure meansAndVarsDelta(const srcSize, dstSize, groups:SizeInt; delta, x: cl_mem; const offset:SizeInt; mean, variance, mean_delta, variance_delta: cl_mem;
       const events: TCLEvents = nil; event: PCLEvent = nil);
     procedure normalizeDelta(const deltaSize, meanSize, groups: SizeInt;
-      const delta, x, mean, variance, mean_delta, variance_delta: cl_mem;
+      const delta, x: cl_mem; const offset:SizeInt; mean, variance, mean_delta, variance_delta: cl_mem;
       const events: TCLEvents =nil; event: PCLEvent = nil);
-    procedure addDots(const N, nDst, groups:SizeInt; const src1, src2:cl_mem; dst:cl_mem;
+    procedure addDots(const N, nDst, groups:SizeInt; const src1, src2:cl_mem; const srcOffset:SizeInt; dst:cl_mem;
       const events: TCLEvents = nil; event: PCLEvent = nil);
-    procedure forwardScale(const dstSize: SizeInt; const dst: cl_mem; const scaleSize: SizeInt; const scale: cl_mem; const incb: SizeInt ; const batch: SizeInt; const events: TCLEvents = nil; event: PCLEvent = nil);
-    procedure forwardScaleAdd(const N: SizeInt; const dst: cl_mem; const blockSize: SizeInt; const scales, biases: cl_mem; const incb: SizeInt ; const batch: SizeInt; const events: TCLEvents = nil; event: PCLEvent = nil);
+    procedure forwardScale(const dstSize: SizeInt; const dst: cl_mem; const offset :SizeInt; const scaleSize: SizeInt; const scale: cl_mem; const incb: SizeInt ; const batch: SizeInt; const events: TCLEvents = nil; event: PCLEvent = nil);
+    procedure forwardScaleAdd(const dstSize: SizeInt; const dst: cl_mem; const offset :SizeInt; const scaleSize: SizeInt; const scales, biases: cl_mem; const incb: SizeInt ; const batch: SizeInt; const events: TCLEvents = nil; event: PCLEvent = nil);
     procedure forwardDropout(const N: SizeInt; const src: cl_mem;
       const probability, scale: single; rnd: cl_mem; dst: cl_mem; const events: TCLEvents = nil; event: PCLEvent = nil);
     procedure backwardDropout(const N: SizeInt; const src: cl_mem;
       const probability, scale: single; const rnd: cl_mem; dst: cl_mem; const events: TCLEvents = nil; event: PCLEvent = nil);
+    procedure costL2(const N:SizeInt; const pred ,truth, delta, error: cl_mem;
+      const events: TCLEvents = nil; event: PCLEvent = nil);
+    //procedure halfTest(
+    //  const N : SizeInt; a:cl_mem; b:cl_mem ; c:cl_mem;
+    //  const events: TCLEvents = nil; event: PCLEvent = nil);
   end;
 
   TCLblasOrder = (
@@ -170,7 +191,7 @@ procedure TNNOpenCL.ActivateArray(const N: SizeInt; const x: cl_mem;
 const kernelId = 5;
 var NN:SizeInt;
 begin
-
+  if activation= 4{longint(acLINEAR)} then exit;
   SetGlobalWorkGroupSizes(N);
   SetGlobalOffsets(0);
   //NN:=LSize(N);
@@ -212,6 +233,7 @@ procedure TNNOpenCL.DeriveArray(const N: SizeInt; const x: cl_mem;
 const kernelId = 7;
 var NN:SizeInt;
 begin
+  if activation=4{longint(acLINEAR)} then exit;
   SetGlobalWorkGroupSizes(N);
   SetGlobalOffsets(0);
   //NN:=LSize(N);
@@ -229,11 +251,12 @@ begin
 end;
 
 procedure TNNOpenCL.forwardBias(const dstSize: SizeInt; const dst: cl_mem;
-  const srcSize: SizeInt; const src: cl_mem; const incb: SizeInt;
-  const batch: SizeInt; const events: TCLEvents; event: PCLEvent);
+  const offset: SizeInt; const srcSize: SizeInt; const src: cl_mem;
+  const incb: SizeInt; const batch: SizeInt; const events: TCLEvents;
+  event: PCLEvent);
 const kernelId=4;
 var
-    blockSize, NN, MM , i, k, aOffset, bOffset:SizeInt;
+    blockSize, NN, MM , i, k,  bOffset:SizeInt;
     reshape:integer;
 begin
   {$ifdef USE_TELEMETRY}
@@ -252,11 +275,10 @@ begin
   //SetLocalWorkGroupSizes(MM, NN);
   //SetGlobalWorkGroupSizes(N, blockSize);
   //SetLocalWorkGroupSizes(NN, MM);
-  aOffset :=0;
   bOffset :=0;
   FErr := clSetKernelArg(Kernels[kernelId], 0, SizeOf(reshape)  , @reshape);   CheckError();
   FErr := clSetKernelArg(Kernels[kernelId], 1, SizeOf(dst)      , @dst);         CheckError();
-  FErr := clSetKernelArg(Kernels[kernelId], 2, SizeOf(aOffset)  , @aOffset);   CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 2, SizeOf(Offset)   , @Offset);   CheckError();
   FErr := clSetKernelArg(Kernels[kernelId], 3, SizeOf(src)      , @src);         CheckError();
   FErr := clSetKernelArg(Kernels[kernelId], 4, SizeOf(bOffset)  , @bOffset);   CheckError();
   FErr := clSetKernelArg(Kernels[kernelId], 5, SizeOf(incb)     , @incb);      CheckError();
@@ -271,9 +293,10 @@ begin
 
 end;
 
-procedure TNNOpenCL.backwardBias(const dstSize: SizeInt; const a: cl_mem;
-  const srcSize: SizeInt; const b: cl_mem; const incb: SizeInt;
-  const batch: SizeInt; const events: TCLEvents; event: PCLEvent);
+procedure TNNOpenCL.backwardBias(const dstSize: SizeInt; const dst: cl_mem;
+  const srcSize: SizeInt; const src: cl_mem; const srcOffset: SizeInt;
+  const incb: SizeInt; const batch: SizeInt; const events: TCLEvents;
+  event: PCLEvent);
 const kernelId=8;
 var blockSize :SizeInt;
 begin
@@ -286,10 +309,11 @@ begin
   //SetLocalWorkGroupSizes(MM, NN);
   //SetGlobalWorkGroupSizes(N, blockSize);
   //SetLocalWorkGroupSizes(NN, MM);
-  FErr := clSetKernelArg(Kernels[kernelId], 0, SizeOf(a)        , @a);         CheckError();
-  FErr := clSetKernelArg(Kernels[kernelId], 1, SizeOf(blockSize), @blockSize); CheckError();
-  FErr := clSetKernelArg(Kernels[kernelId], 2, SizeOf(b)        , @b);         CheckError();
-  FErr := clSetKernelArg(Kernels[kernelId], 3, SizeOf(batch)    , @batch);     CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 0, SizeOf(dst)        , @dst);         CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 1, SizeOf(blockSize)  , @blockSize); CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 2, SizeOf(src)        , @src);         CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 3, SizeOf(srcOffset)  , @srcOffset);         CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 4, SizeOf(batch)      , @batch);     CheckError();
   FErr := clEnqueueNDRangeKernel(ActiveQueue, Kernels[kernelId]
     , WorkItemDimensions, @GlobalOffsets[0], @GlobalWorkGroupSizes[0], nil{@LocalWorkGroupSizes[0]}
     , length(events), pointer(events), event); CheckError();
@@ -303,10 +327,13 @@ begin
   //FErr := clFinish(ActiveQueue); CheckError();
 end;
 
-var hLib : {$if defined(MSWINDOWS)}TLibHandle {$else}Pointer{$endif};
+var hLib : {$if defined(MSWINDOWS)}HMODULE {$else}Pointer{$endif};
     {$if defined(MSWINDOWS)}
-      getProc : function(Lib : TlibHandle; const ProcName : AnsiString):pointer;
-
+      {$ifdef FPC}
+      getProc : function(Lib : HMODULE; const ProcName : AnsiString):pointer;
+      {$else}
+      getProc : function (hModule: HMODULE; lpProcName: LPCSTR): FARPROC; winapi;
+      {$endif}
     {$else}
       getProc : function(h :pointer; name:PAnsiChar):pointer;
     {$endif}
@@ -434,6 +461,9 @@ procedure TNNOpenCL.addvv(const N: SizeInt; const src1: cl_mem;
 const kernelId = 9;
 var NN:SizeInt;
 begin
+  {$ifdef USE_TELEMETRY}
+  tensorMetrics.start(opAddvv);
+  {$endif}
   SetGlobalWorkGroupSizes(N);
   SetGlobalOffsets(0);
   //NN:=LSize(N);
@@ -452,6 +482,10 @@ begin
      WorkItemDimensions, @GlobalOffsets[0],
      @GlobalWorkGroupSizes[0], nil{@LocalWorkGroupSizes[0]}
      , length(events), pointer(events), event); CheckError();
+  {$ifdef USE_TELEMETRY}
+  finish();
+  tensorMetrics.finish(opAddvv);
+{$endif}
 end;
 
 procedure TNNOpenCL.subvv(const N: SizeInt; const src1: cl_mem;
@@ -461,6 +495,10 @@ procedure TNNOpenCL.subvv(const N: SizeInt; const src1: cl_mem;
 const kernelId = 10;
 var NN:SizeInt;
 begin
+  {$ifdef USE_TELEMETRY}
+  tensorMetrics.start(opSubvv);
+  {$endif}
+
   SetGlobalWorkGroupSizes(N);
   SetGlobalOffsets(0);
   //NN:=LSize(N);
@@ -479,28 +517,152 @@ begin
      WorkItemDimensions, @GlobalOffsets[0],
      @GlobalWorkGroupSizes[0], nil{@LocalWorkGroupSizes[0]}
      , length(events), pointer(events), event); CheckError();
+ {$ifdef USE_TELEMETRY}
+  finish();
+  tensorMetrics.finish(opSubvv);
+ {$endif}
+
+end;
+
+procedure TNNOpenCL.mulvv(const N: SizeInt; const src1: cl_mem;
+  const src1Offset, inca: SizeInt; const src2: cl_mem; const src2Offset,
+  incb: SizeInt; dst: cl_mem; const dstOffset, incc: SizeInt;
+  const events: TCLEvents; event: PCLEvent);
+const kernelId = 39;
+var NN:SizeInt;
+begin
+  {$ifdef USE_TELEMETRY}
+  tensorMetrics.start(opMulvv);
+  {$endif}
+
+  SetGlobalWorkGroupSizes(N);
+  SetGlobalOffsets(0);
+  //NN:=LSize(N);
+  //SetLocalWorkGroupSizes(NN);
+  FErr := clSetKernelArg(Kernels[kernelId], 0, SizeOf(src1) , @src1);               CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 1, SizeOf(src1Offset) , @src1Offset);   CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 2, SizeOf(inca) , @inca);              CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 3, SizeOf(src2) , @src2);               CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 4, SizeOf(src2Offset) , @src2Offset);   CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 5, SizeOf(incb) , @incb);              CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 6, SizeOf(dst)  , @dst);               CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 7, SizeOf(dstOffset) , @dstOffset);    CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 8, SizeOf(incc) , @incc);              CheckError();
+  FErr := clEnqueueNDRangeKernel(
+     ActiveQueue, Kernels[kernelId],
+     WorkItemDimensions, @GlobalOffsets[0],
+     @GlobalWorkGroupSizes[0], nil{@LocalWorkGroupSizes[0]}
+     , length(events), pointer(events), event); CheckError();
+ {$ifdef USE_TELEMETRY}
+  finish();
+  tensorMetrics.finish(opMulvv);
+ {$endif}
+end;
+
+procedure TNNOpenCL.fmavv(const N: SizeInt;
+  const src1: cl_mem; const src1Offset, inca: SizeInt;
+  const src2: cl_mem; const src2Offset, incb: SizeInt;
+  const src3: cl_mem; const src3Offset, incc: SizeInt;
+  dst: cl_mem; const dstOffset, incd: SizeInt;
+  const events: TCLEvents; event: PCLEvent);
+const kernelId = 40;
+var NN:SizeInt;
+begin
+  {$ifdef USE_TELEMETRY}
+  tensorMetrics.start(opFmavv);
+  {$endif}
+
+  SetGlobalWorkGroupSizes(N);
+  SetGlobalOffsets(0);
+  //NN:=LSize(N);
+  //SetLocalWorkGroupSizes(NN);
+  FErr := clSetKernelArg(Kernels[kernelId], 0 , SizeOf(src1)       , @src1);       CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 1 , SizeOf(src1Offset) , @src1Offset); CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 2 , SizeOf(inca)       , @inca);       CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 3 , SizeOf(src2)       , @src2);       CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 4 , SizeOf(src2Offset) , @src2Offset); CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 5 , SizeOf(incb)       , @incb);       CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 6 , SizeOf(src3)       , @src3);       CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 7 , SizeOf(src3Offset) , @src3Offset); CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 8 , SizeOf(incc)       , @incc);       CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 9 , SizeOf(dst)        , @dst);        CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 10, SizeOf(dstOffset)  , @dstOffset);  CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 11, SizeOf(incd)       , @incd);       CheckError();
+  FErr := clEnqueueNDRangeKernel(
+     ActiveQueue, Kernels[kernelId],
+     WorkItemDimensions, @GlobalOffsets[0],
+     @GlobalWorkGroupSizes[0], nil{@LocalWorkGroupSizes[0]}
+     , length(events), pointer(events), event); CheckError();
+ {$ifdef USE_TELEMETRY}
+  finish();
+  tensorMetrics.finish(opFmavv);
+ {$endif}
 end;
 
 procedure TNNOpenCL.axpy(const N: SizeInt; const a: single; const x: cl_mem;
-  const incx: SizeInt; const y: cl_mem; const incy: sizeInt;
-  const events: TCLEvents; event: PCLEvent);
+  const xOffset: SizeInt; const incx: SizeInt; const y: cl_mem;
+  const yOffset: SizeInt; const incy: sizeInt; const events: TCLEvents;
+  event: PCLEvent);
 const kernelId = 11;
 var NN:SizeInt;
 begin
+  {$ifdef USE_TELEMETRY}
+  tensorMetrics.start(opAxpy);
+  {$endif}
+
   SetGlobalWorkGroupSizes(N);
   SetGlobalOffsets(0);
   //NN:=LSize(N);
   //SetLocalWorkGroupSizes(NN);
   FErr := clSetKernelArg(Kernels[kernelId], 0, SizeOf(a)    , @a);    CheckError();
   FErr := clSetKernelArg(Kernels[kernelId], 1, SizeOf(x)    , @x);    CheckError();
-  FErr := clSetKernelArg(Kernels[kernelId], 2, SizeOf(incx) , @incx); CheckError();
-  FErr := clSetKernelArg(Kernels[kernelId], 3, SizeOf(y)    , @y);    CheckError();
-  FErr := clSetKernelArg(Kernels[kernelId], 4, SizeOf(incy) , @incy); CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 2, SizeOf(xOffset)    , @xOffset);    CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 3, SizeOf(incx) , @incx); CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 4, SizeOf(y)    , @y);    CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 5, SizeOf(yOffset)    , @yOffset);    CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 6, SizeOf(incy) , @incy); CheckError();
   FErr := clEnqueueNDRangeKernel(
      ActiveQueue, Kernels[kernelId],
      WorkItemDimensions, @GlobalOffsets[0],
      @GlobalWorkGroupSizes[0], nil{@LocalWorkGroupSizes[0]}
      , length(events), pointer(events), event); CheckError();
+  {$ifdef USE_TELEMETRY}
+  finish();
+  tensorMetrics.finish(opAxpy);
+  {$endif}
+end;
+
+procedure TNNOpenCL.power(const N: SizeInt; const x: cl_mem;
+  const xOffset: SizeInt; const incx: SizeInt; const a: single;
+  const y: cl_mem; const yOffset: SizeInt; const incy: sizeInt;
+  const events: TCLEvents; event: PCLEvent);
+const kernelId = 41;
+var NN:SizeInt;
+begin
+  {$ifdef USE_TELEMETRY}
+  tensorMetrics.start(opPow);
+  {$endif}
+
+  SetGlobalWorkGroupSizes(N);
+  SetGlobalOffsets(0);
+  //NN:=LSize(N);
+  //SetLocalWorkGroupSizes(NN);
+  FErr := clSetKernelArg(Kernels[kernelId], 0, SizeOf(x)       , @x);    CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 1, SizeOf(xOffset) , @xOffset);    CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 2, SizeOf(incx)    , @incx);    CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 3, SizeOf(a)       , @a); CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 4, SizeOf(y)       , @y);    CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 5, SizeOf(yOffset) , @yOffset);    CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 6, SizeOf(incy)    , @incy); CheckError();
+  FErr := clEnqueueNDRangeKernel(
+     ActiveQueue, Kernels[kernelId],
+     WorkItemDimensions, @GlobalOffsets[0],
+     @GlobalWorkGroupSizes[0], nil{@LocalWorkGroupSizes[0]}
+     , length(events), pointer(events), event); CheckError();
+  {$ifdef USE_TELEMETRY}
+  finish();
+  tensorMetrics.finish(opPow);
+  {$endif}
 end;
 
 procedure TNNOpenCL.scale(const N: SizeInt; const a: Single; const x: cl_mem;
@@ -508,6 +670,10 @@ procedure TNNOpenCL.scale(const N: SizeInt; const a: Single; const x: cl_mem;
 const kernelId = 12;
 var NN:SizeInt;
 begin
+  {$ifdef USE_TELEMETRY}
+  tensorMetrics.start(opMulvs);
+  {$endif}
+
   SetGlobalWorkGroupSizes(N);
   SetGlobalOffsets(0);
   //NN:=LSize(N);
@@ -520,6 +686,12 @@ begin
      WorkItemDimensions, @GlobalOffsets[0],
      @GlobalWorkGroupSizes[0], nil{@LocalWorkGroupSizes[0]}
      , length(events), pointer(events), event); CheckError();
+
+  {$ifdef USE_TELEMETRY}
+  finish();
+  tensorMetrics.finish(opMulvs);
+  {$endif}
+
 end;
 
 procedure TNNOpenCL.crossEntropyLogistic(const N: SizeInt; const pred,
@@ -528,6 +700,7 @@ procedure TNNOpenCL.crossEntropyLogistic(const N: SizeInt; const pred,
 const kernelId = 13;
 var NN:SizeInt;
 begin
+
   SetGlobalWorkGroupSizes(N);
   SetGlobalOffsets(0);
   //NN:=LSize(N);
@@ -543,23 +716,33 @@ begin
      , length(events), pointer(events), event); CheckError();
 end;
 
-procedure TNNOpenCL.fill(const N: SizeInt; const x: cl_mem; const val: single;
+procedure TNNOpenCL.fill(const N: SizeInt; const x: cl_mem; const offset:SizeInt; const val: single;
   const stride: SizeInt; const events: TCLEvents; event: PCLEvent);
 const kernelId = 14;
 var NN:SizeInt;
 begin
+  {$ifdef USE_TELEMETRY}
+  tensorMetrics.start(opFill);
+  {$endif}
+
   SetGlobalWorkGroupSizes(N);
   SetGlobalOffsets(0);
   //NN:=LSize(N);
   //SetLocalWorkGroupSizes(NN);
   FErr := clSetKernelArg(Kernels[kernelId], 0, SizeOf(x)     , @x);  CheckError();
-  FErr := clSetKernelArg(Kernels[kernelId], 1, SizeOf(val)   , @val); CheckError();
-  FErr := clSetKernelArg(Kernels[kernelId], 2, SizeOf(stride), @stride); CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 1, SizeOf(offset), @offset);  CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 2, SizeOf(val)   , @val); CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 3, SizeOf(stride), @stride); CheckError();
   FErr := clEnqueueNDRangeKernel(
      ActiveQueue, Kernels[kernelId],
      WorkItemDimensions, @GlobalOffsets[0],
      @GlobalWorkGroupSizes[0], nil{@LocalWorkGroupSizes[0]}
      , length(events), pointer(events), event); CheckError();
+  {$ifdef USE_TELEMETRY}
+  finish();
+  tensorMetrics.finish(opFill);
+  {$endif}
+
 end;
 
 procedure TNNOpenCL.copy(const N: SizeInt; const src: cl_mem; const srcOffset,
@@ -568,9 +751,16 @@ procedure TNNOpenCL.copy(const N: SizeInt; const src: cl_mem; const srcOffset,
 const kernelId = 15;
 var NN:SizeInt; sz : SizeInt;
 begin
+  {$ifdef USE_TELEMETRY}
+  tensorMetrics.start(opCopy);
+  {$endif}
   //sz := sizeof(single);
   //clEnqueueCopyBuffer(ActiveQueue, src, dst, srcOffset*sz, dstOffset*sz, N*sz
   //, length(events), pointer(events), event); CheckError();
+  //{$ifdef USE_TELEMETRY}
+  //finish();
+  //tensorMetrics.finish(opCopy);
+  //{$endif}
   //exit;
 
   SetGlobalWorkGroupSizes(N);
@@ -589,6 +779,10 @@ begin
      WorkItemDimensions, @GlobalOffsets[0],
      @GlobalWorkGroupSizes[0], nil{@LocalWorkGroupSizes[0]}
      , length(events), pointer(events), event); CheckError();
+  {$ifdef USE_TELEMETRY}
+  finish();
+  tensorMetrics.finish(opCopy);
+  {$endif}
 end;
 
 procedure TNNOpenCL.softmaxBatch(const N: SizeInt; const input: cl_mem;
@@ -915,6 +1109,9 @@ const kernelId = 26;
 var
     NN:SizeInt;
 begin
+  {$ifdef USE_TELEMETRY}
+  tensorMetrics.start(opFmavss);
+  {$endif}
   SetGlobalWorkGroupSizes(N);
   SetGlobalOffsets(0);
   //NN:=LSize(N);
@@ -930,11 +1127,15 @@ begin
      WorkItemDimensions, @GlobalOffsets[0],
      @GlobalWorkGroupSizes[0], nil{@LocalWorkGroupSizes[0]}
      , length(events), pointer(events), event); CheckError();
+  {$ifdef USE_TELEMETRY}
+  finish();
+  tensorMetrics.finish(opFmavss);
+  {$endif}
 end;
 
 procedure TNNOpenCL.meanAndVars(const srcSize, dstSize, groups: sizeInt;
-  const src: cl_mem; means, vars: cl_mem; const events: TCLEvents;
-  event: PCLEvent);
+  const src: cl_mem; const offset: sizeInt; means, vars: cl_mem;
+  const events: TCLEvents; event: PCLEvent);
 const kernelId = 27;
 var
   blockSize,  NN:SizeInt;
@@ -952,8 +1153,9 @@ begin
   FErr := clSetKernelarg(kernels[kernelId], 0, sizeOf(blockSize)   , @blockSize); CheckError();
   FErr := clSetKernelarg(kernels[kernelId], 1, sizeOf(groups)      , @groups);    CheckError();
   FErr := clSetKernelarg(kernels[kernelId], 2, sizeOf(src)         , @src);       CheckError();
-  FErr := clSetKernelarg(kernels[kernelId], 3, sizeOf(means)       , @means);     CheckError();
-  FErr := clSetKernelarg(kernels[kernelId], 4, sizeOf(vars)        , @vars);      CheckError();
+  FErr := clSetKernelarg(kernels[kernelId], 3, sizeOf(offset)      , @offset);    CheckError();
+  FErr := clSetKernelarg(kernels[kernelId], 4, sizeOf(means)       , @means);     CheckError();
+  FErr := clSetKernelarg(kernels[kernelId], 5, sizeOf(vars)        , @vars);      CheckError();
   FErr := clEnqueueNDRangeKernel(
      ActiveQueue, Kernels[kernelId],
      WorkItemDimensions, @GlobalOffsets[0],
@@ -969,8 +1171,8 @@ end;
 
 procedure TNNOpenCL.normalize(const srcSize, dstSize, groups: SizeInt;
   means: cl_mem; const meansStride: sizeInt; vars: cl_mem;
-  const varsStride: SizeInt; dst: cl_mem; const events: TCLEvents;
-  event: PCLEvent);
+  const varsStride: SizeInt; dst: cl_mem; const dstOffset: sizeInt;
+  const events: TCLEvents; event: PCLEvent);
 const kernelId = 30;
 var
   blockSize,  NN:SizeInt;
@@ -985,11 +1187,12 @@ begin
   SetGlobalOffsets(0);
   //NN:=LSize(N);
   //SetLocalWorkGroupSizes(NN);
-  FErr := clSetKernelarg(kernels[kernelId], 0, sizeOf(means)       , @means); CheckError();
-  FErr := clSetKernelarg(kernels[kernelId], 1, sizeOf(meansStride) , @meansStride);    CheckError();
-  FErr := clSetKernelarg(kernels[kernelId], 2, sizeOf(vars)        , @vars);       CheckError();
-  FErr := clSetKernelarg(kernels[kernelId], 3, sizeOf(varsStride)  , @varsStride);     CheckError();
-  FErr := clSetKernelarg(kernels[kernelId], 4, sizeOf(dst)         , @dst);      CheckError();
+  FErr := clSetKernelarg(kernels[kernelId], 0, sizeOf(means)       , @means);       CheckError();
+  FErr := clSetKernelarg(kernels[kernelId], 1, sizeOf(meansStride) , @meansStride); CheckError();
+  FErr := clSetKernelarg(kernels[kernelId], 2, sizeOf(vars)        , @vars);        CheckError();
+  FErr := clSetKernelarg(kernels[kernelId], 3, sizeOf(varsStride)  , @varsStride);  CheckError();
+  FErr := clSetKernelarg(kernels[kernelId], 4, sizeOf(dst)         , @dst);         CheckError();
+  FErr := clSetKernelarg(kernels[kernelId], 5, sizeOf(dstOffset)   , @dstOffset);   CheckError();
   FErr := clEnqueueNDRangeKernel(
      ActiveQueue, Kernels[kernelId],
      WorkItemDimensions, @GlobalOffsets[0],
@@ -1004,8 +1207,8 @@ begin
 end;
 
 procedure TNNOpenCL.meansAndVarsDelta(const srcSize, dstSize, groups: SizeInt;
-  delta, x, mean, variance, mean_delta, variance_delta: cl_mem;
-  const events: TCLEvents; event: PCLEvent);
+  delta, x: cl_mem; const offset: SizeInt; mean, variance, mean_delta,
+  variance_delta: cl_mem; const events: TCLEvents; event: PCLEvent);
 const kernelId = 31;
 var
     blockSize, NN:SizeInt;
@@ -1024,10 +1227,11 @@ begin
   FErr := clSetKernelarg(kernels[kernelId], 1, sizeOf(blockSize)      , @blockSize);       CheckError();
   FErr := clSetKernelarg(kernels[kernelId], 2, sizeOf(delta)          , @delta);           CheckError();
   FErr := clSetKernelarg(kernels[kernelId], 3, sizeOf(x)              , @x);               CheckError();
-  FErr := clSetKernelarg(kernels[kernelId], 4, sizeOf(mean)           , @mean);            CheckError();
-  FErr := clSetKernelarg(kernels[kernelId], 5, sizeOf(variance)       , @variance);        CheckError();
-  FErr := clSetKernelarg(kernels[kernelId], 6, sizeOf(mean_delta)     , @mean_delta);      CheckError();
-  FErr := clSetKernelarg(kernels[kernelId], 7, sizeOf(variance_delta) , @variance_delta);  CheckError();
+  FErr := clSetKernelarg(kernels[kernelId], 4, sizeOf(offset)         , @offset);          CheckError();
+  FErr := clSetKernelarg(kernels[kernelId], 5, sizeOf(mean)           , @mean);            CheckError();
+  FErr := clSetKernelarg(kernels[kernelId], 6, sizeOf(variance)       , @variance);        CheckError();
+  FErr := clSetKernelarg(kernels[kernelId], 7, sizeOf(mean_delta)     , @mean_delta);      CheckError();
+  FErr := clSetKernelarg(kernels[kernelId], 8, sizeOf(variance_delta) , @variance_delta);  CheckError();
   FErr := clEnqueueNDRangeKernel(
      ActiveQueue, Kernels[kernelId],
      WorkItemDimensions, @GlobalOffsets[0],
@@ -1041,9 +1245,9 @@ begin
 
 end;
 
-procedure TNNOpenCL.normalizeDelta(const deltaSize, meanSize, groups: SizeInt; const delta,
-  x, mean, variance, mean_delta, variance_delta: cl_mem;
-  const events: TCLEvents; event: PCLEvent);
+procedure TNNOpenCL.normalizeDelta(const deltaSize, meanSize, groups: SizeInt;
+  const delta, x: cl_mem; const offset: SizeInt; mean, variance, mean_delta,
+  variance_delta: cl_mem; const events: TCLEvents; event: PCLEvent);
 const kernelId = 32;
 var
     blockSize, NN:SizeInt;
@@ -1059,11 +1263,12 @@ begin
   //NN:=LSize(deltaSize);
   //SetLocalWorkGroupSizes(NN);
   FErr := clSetKernelarg(kernels[kernelId], 0, sizeOf(x)              , @x);               CheckError();
-  FErr := clSetKernelarg(kernels[kernelId], 1, sizeOf(mean)           , @mean);            CheckError();
-  FErr := clSetKernelarg(kernels[kernelId], 2, sizeOf(variance)       , @variance);        CheckError();
-  FErr := clSetKernelarg(kernels[kernelId], 3, sizeOf(mean_delta)     , @mean_delta);      CheckError();
-  FErr := clSetKernelarg(kernels[kernelId], 4, sizeOf(variance_delta) , @variance_delta);  CheckError();
-  FErr := clSetKernelarg(kernels[kernelId], 5, sizeOf(delta)          , @delta);           CheckError();
+  FErr := clSetKernelarg(kernels[kernelId], 1, sizeOf(offset)         , @offset);          CheckError();
+  FErr := clSetKernelarg(kernels[kernelId], 2, sizeOf(mean)           , @mean);            CheckError();
+  FErr := clSetKernelarg(kernels[kernelId], 3, sizeOf(variance)       , @variance);        CheckError();
+  FErr := clSetKernelarg(kernels[kernelId], 4, sizeOf(mean_delta)     , @mean_delta);      CheckError();
+  FErr := clSetKernelarg(kernels[kernelId], 5, sizeOf(variance_delta) , @variance_delta);  CheckError();
+  FErr := clSetKernelarg(kernels[kernelId], 6, sizeOf(delta)          , @delta);           CheckError();
   FErr := clEnqueueNDRangeKernel(
      ActiveQueue, Kernels[kernelId],
      WorkItemDimensions, @GlobalOffsets[0],
@@ -1078,7 +1283,8 @@ begin
 end;
 
 procedure TNNOpenCL.addDots(const N, nDst, groups: SizeInt; const src1,
-  src2: cl_mem; dst: cl_mem; const events: TCLEvents; event: PCLEvent);
+  src2: cl_mem; const srcOffset: SizeInt; dst: cl_mem; const events: TCLEvents;
+  event: PCLEvent);
 const kernelId = 33;
 var
     blockSize, NN:SizeInt;
@@ -1097,7 +1303,8 @@ begin
   FErr := clSetKernelarg(kernels[kernelId], 1, sizeOf(blocksize)  , @blocksize); CheckError();
   FErr := clSetKernelarg(kernels[kernelId], 2, sizeOf(src1)       , @src1);      CheckError();
   FErr := clSetKernelarg(kernels[kernelId], 3, sizeOf(src2)       , @src2);      CheckError();
-  FErr := clSetKernelarg(kernels[kernelId], 4, sizeOf(dst)        , @dst);       CheckError();
+  FErr := clSetKernelarg(kernels[kernelId], 4, sizeOf(srcOffset)  , @srcOffset); CheckError();
+  FErr := clSetKernelarg(kernels[kernelId], 5, sizeOf(dst)        , @dst);       CheckError();
   FErr := clEnqueueNDRangeKernel(
      ActiveQueue, Kernels[kernelId],
      WorkItemDimensions, @GlobalOffsets[0],
@@ -1112,11 +1319,12 @@ begin
 end;
 
 procedure TNNOpenCL.forwardScale(const dstSize: SizeInt; const dst: cl_mem;
-  const scaleSize: SizeInt; const scale: cl_mem; const incb: SizeInt;
-  const batch: SizeInt; const events: TCLEvents; event: PCLEvent);
+  const offset: SizeInt; const scaleSize: SizeInt; const scale: cl_mem;
+  const incb: SizeInt; const batch: SizeInt; const events: TCLEvents;
+  event: PCLEvent);
 const kernelId=34;
 var
-    blockSize, NN, MM , i, k, aOffset, bOffset:SizeInt;
+    blockSize, NN, MM , i, k, bOffset:SizeInt;
     reshape:integer;
 begin
   {$ifdef USE_TELEMETRY}
@@ -1136,11 +1344,10 @@ begin
   //SetLocalWorkGroupSizes(MM, NN);
   //SetGlobalWorkGroupSizes(N, blockSize);
   //SetLocalWorkGroupSizes(NN, MM);
-  aOffset :=0;
   bOffset :=0;
   FErr := clSetKernelArg(Kernels[kernelId], 0, SizeOf(reshape)  , @reshape);   CheckError();
   FErr := clSetKernelArg(Kernels[kernelId], 1, SizeOf(dst)      , @dst);       CheckError();
-  FErr := clSetKernelArg(Kernels[kernelId], 2, SizeOf(aOffset)  , @aOffset);   CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 2, SizeOf(Offset)   , @Offset);   CheckError();
   FErr := clSetKernelArg(Kernels[kernelId], 3, SizeOf(scale)    , @scale);     CheckError();
   FErr := clSetKernelArg(Kernels[kernelId], 4, SizeOf(bOffset)  , @bOffset);   CheckError();
   FErr := clSetKernelArg(Kernels[kernelId], 5, SizeOf(incb)     , @incb);      CheckError();
@@ -1155,12 +1362,13 @@ begin
 
 end;
 
-procedure TNNOpenCL.forwardScaleAdd(const N: SizeInt; const dst: cl_mem;
-  const blockSize: SizeInt; const scales, biases: cl_mem; const incb: SizeInt;
-  const batch: SizeInt; const events: TCLEvents; event: PCLEvent);
+procedure TNNOpenCL.forwardScaleAdd(const dstSize: SizeInt; const dst: cl_mem;
+  const offset: SizeInt; const scaleSize: SizeInt; const scales,
+  biases: cl_mem; const incb: SizeInt; const batch: SizeInt;
+  const events: TCLEvents; event: PCLEvent);
 const kernelId=35;
 var
-    NN, MM , i, k, aOffset, bOffset:SizeInt;
+    NN, MM , i, k, bOffset, blockSize:SizeInt;
     reshape:integer;
 begin
 
@@ -1171,24 +1379,28 @@ begin
   //NN:=LSize(N);
   //MM:=LSize(blockSize);
   //writeln(N, ' ',batch, ' ', blocksize);
-  reshape := integer(blockSize > N);
+  blockSize := dstSize div (scaleSize*batch);
+  //NN:=LSize(N);
+  //MM:=LSize(blockSize);
+  //writeln(N, ' ',batch, ' ', blocksize);
+  reshape := integer(blockSize > scaleSize);
   if reshape>0 then
-    SetGlobalWorkGroupSizes(blockSize, N, batch)
+    SetGlobalWorkGroupSizes(blockSize, scaleSize, batch)
   else
-    SetGlobalWorkGroupSizes(N, blockSize, batch);
+    SetGlobalWorkGroupSizes(scaleSize, blockSize, batch);
   SetGlobalOffsets(0);
   //SetLocalWorkGroupSizes(MM, NN);
-  //SetGlobalWorkGroupSizes(N, blockSize);
+  //SetGlobalWorkGroupSizes(dstSize, scaleSize);
   //SetLocalWorkGroupSizes(NN, MM);
-  aOffset :=0;
+
   bOffset :=0;
-  FErr := clSetKernelArg(Kernels[kernelId], 0, SizeOf(reshape)  , @reshape);   CheckError();
-  FErr := clSetKernelArg(Kernels[kernelId], 1, SizeOf(dst)      , @dst);         CheckError();
-  FErr := clSetKernelArg(Kernels[kernelId], 2, SizeOf(aOffset)  , @aOffset);   CheckError();
-  FErr := clSetKernelArg(Kernels[kernelId], 3, SizeOf(scales)   , @scales);         CheckError();
-  FErr := clSetKernelArg(Kernels[kernelId], 4, SizeOf(biases)   , @biases);         CheckError();
-  FErr := clSetKernelArg(Kernels[kernelId], 5, SizeOf(bOffset)  , @bOffset);   CheckError();
-  FErr := clSetKernelArg(Kernels[kernelId], 6, SizeOf(incb)     , @incb);      CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 0, SizeOf(reshape)  , @reshape);  CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 1, SizeOf(dst)      , @dst);      CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 2, SizeOf(offset)   , @offset);   CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 3, SizeOf(scales)   , @scales);   CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 4, SizeOf(biases)   , @biases);   CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 5, SizeOf(bOffset)  , @bOffset);  CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 6, SizeOf(incb)     , @incb);     CheckError();
   FErr := clEnqueueNDRangeKernel(ActiveQueue, Kernels[kernelId]
   , WorkItemDimensions, @GlobalOffsets[0], @GlobalWorkGroupSizes[0], nil{@LocalWorkGroupSizes[0]}
   , length(events), pointer(events), event); CheckError();
@@ -1268,5 +1480,59 @@ begin
   {$endif}
 
 end;
+
+procedure TNNOpenCL.costL2(const N: SizeInt; const pred, truth, delta,
+  error: cl_mem; const events: TCLEvents; event: PCLEvent);
+const kernelId=38;
+var
+    NN, MM :SizeInt;
+begin
+
+  {$ifdef USE_TELEMETRY}
+  tensorMetrics.start(opL2);
+  {$endif}
+  //NN:=LSize(N);
+  SetGlobalWorkGroupSizes(N);
+  SetGlobalOffsets(0);
+  //SetLocalWorkGroupSizes(NN);
+  FErr := clSetKernelArg(Kernels[kernelId], 0, SizeOf(pred)  , @pred);   CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 1, SizeOf(truth) , @truth);  CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 2, SizeOf(delta) , @delta);  CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 3, SizeOf(error) , @error);  CheckError();
+
+    FErr := clEnqueueNDRangeKernel(ActiveQueue, Kernels[kernelId]
+  , WorkItemDimensions, @GlobalOffsets[0], @GlobalWorkGroupSizes[0], nil{@LocalWorkGroupSizes[0]}
+  , length(events), pointer(events), event); CheckError();
+
+  {$ifdef USE_TELEMETRY}
+  finish();
+  tensorMetrics.finish(opL2);
+  {$endif}
+
+end;
+
+
+//procedure TNNOpenCL.halfTest(const N: SizeInt; a: cl_mem; b: cl_mem; c: cl_mem;
+//  const events: TCLEvents; event: PCLEvent);
+//const kernelId=41;
+//var
+//    NN, MM :SizeInt;
+//begin
+//
+//  //NN:=LSize(N);
+//  SetGlobalWorkGroupSizes(N);
+//  SetGlobalOffsets(0);
+//  //SetLocalWorkGroupSizes(NN);
+//  FErr := clSetKernelArg(Kernels[kernelId], 0, SizeOf(a) , @a);   CheckError();
+//  FErr := clSetKernelArg(Kernels[kernelId], 1, SizeOf(b) , @b);  CheckError();
+//  FErr := clSetKernelArg(Kernels[kernelId], 2, SizeOf(c) , @c);  CheckError();
+//
+//    FErr := clEnqueueNDRangeKernel(ActiveQueue, Kernels[kernelId]
+//  , WorkItemDimensions, @GlobalOffsets[0], @GlobalWorkGroupSizes[0], nil{@LocalWorkGroupSizes[0]}
+//  , length(events), pointer(events), event); CheckError();
+//  finish()
+//
+//
+//end;
 
 end.

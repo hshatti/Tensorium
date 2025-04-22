@@ -17,6 +17,7 @@ uses
   , nConnectedlayer
   , nConvolutionLayer
   , nRNNLayer
+  , nLSTMLayer
   , nDropOutLayer
   , nAvgPoolLayer
   , nCostLayer
@@ -54,6 +55,7 @@ type
     function parseConcat(const opt:TCFGSection):TConcatLayer;
     function parseAdd(const opt:TCFGSection):TAddLayer;
     function parseRNN(const opt:TCFGSection):TRNNLayer;
+    function parseLSTM(const opt:TCFGSection):TLSTMLayer;
     function parseUpSample(const opt:TCFGSection):TUpSampleLayer;
     function parseBatchNorm(const opt:TCFGSection):TBatchNormLayer;
     function parseYolo(const opt:TCFGSection):TYoloLayer;
@@ -140,7 +142,7 @@ end;
 
 function TDarknetParser.parseConnected(const opt: TCFGSection): TConnectedLayer;
 begin
-  result := TConnectedLayer.Create(params.batch, params.timeSteps, params.inputs,
+  result := TConnectedLayer.Create(params.batch, 1, params.inputs,
          opt.getInt('output', 1),
          TActivationType.fromString(opt.getStr('activation', 'relu')),
          opt.getBool('batch_normalize', false){, params.net.adam});
@@ -499,6 +501,11 @@ begin
   result := TRNNLayer.Create(params.batch, params.inputs, hidden, output, params.timeSteps, act, opt.getBool('batch_normalize', false), logistic);
 end;
 
+function TDarknetParser.parseLSTM(const opt: TCFGSection): TLSTMLayer;
+begin
+  result := TLSTMLayer.Create(params.batch, params.inputs, opt.getInt('output', 1), params.timeSteps, opt.getBool( 'batch_normalize', false, true))
+end;
+
 function TDarknetParser.parseUpSample(const opt: TCFGSection): TUpSampleLayer;
 begin
   result := TUpSampleLayer.Create(params.batch, params.w, params.h, params.c, opt.getInt( 'stride', 2), opt.getFloat( 'scale', 1, true));
@@ -653,7 +660,7 @@ var
   tree_file: String;
 begin
   groups := opt.getInt('groups', 1, true);
-  result :=TSoftmaxLayer.Create(params.batch, params.inputs*params.timeSteps, groups);
+  result :=TSoftmaxLayer.Create(params.batch, params.inputs, groups);
   result.temperature := opt.getFloat( 'temperature', 1, true);
   tree_file := opt.getStr( 'tree', '');
   if tree_file<>'' then
@@ -728,8 +735,8 @@ begin
     neural.batch:= ABatch;
   if ATimeSteps>0 then
     neural.batch:= ATimeSteps;
-  //if neural.batch < neural.timeSteps then
-  //  neural.batch := neural.timeSteps;
+  if neural.batch < neural.timeSteps then
+    neural.batch := neural.timeSteps;
 
 
   params.batch := neural.batch;
@@ -809,6 +816,10 @@ begin
         begin
           layers[count] := parseRNN(CFG.Sections[i]);
         end;
+      ltLSTM :
+        begin
+          layers[count] := parseLSTM(CFG.Sections[i]);
+        end;
       ltCONTRASTIVE :
         begin
           layers[count] := parseContrastive(CFG.Sections[i]);
@@ -886,7 +897,7 @@ begin
   //Neural.try_fix_nan := options.getInt('try_fix_nan', 0, true);
   Neural.batch := Neural.batch div subdivs;
   mini_batch := Neural.batch;
-  Neural.batch := Neural.batch {* Neural.timeSteps};
+  Neural.batch := Neural.batch * Neural.timeSteps;
   Neural.subdivisions := subdivs;
   //Neural.weights_reject_freq := options.getInt('weights_reject_freq', 0, true);
   Neural.equiDistantPoint := options.getInt('equidistant_point', 0, true);
@@ -1034,6 +1045,9 @@ begin
             l.rolling_mean.loadFromFile(fp);
             l.rolling_variance.loadFromFile(fp)
         end;
+
+
+
 end;
 
 procedure TDarknetParser.loadBatchNormWeights(var l: TBatchNormLayer;
@@ -1144,7 +1158,6 @@ begin
       buf.SaveToFile(fp);
   end else
     l.weights.SaveToFile(fp);
-  l.weights.saveToFile(fp);
   if l.isBatchNormalized and (not l.dontLoadScales) then
       begin
           l.scales.saveToFile(fp);
@@ -1254,17 +1267,17 @@ begin
         //      load_connected_weights(l.ur[0], fp, transpose);
         //      load_connected_weights(l.uh[0], fp, transpose)
         //  end;
-        //ltLSTM :
-        //  begin
-        //      load_connected_weights(l.wf[0], fp, transpose);
-        //      load_connected_weights(l.wi[0], fp, transpose);
-        //      load_connected_weights(l.wg[0], fp, transpose);
-        //      load_connected_weights(l.wo[0], fp, transpose);
-        //      load_connected_weights(l.uf[0], fp, transpose);
-        //      load_connected_weights(l.ui[0], fp, transpose);
-        //      load_connected_weights(l.ug[0], fp, transpose);
-        //      load_connected_weights(l.uo[0], fp, transpose)
-        //  end;
+        ltLSTM :
+          begin
+              loadConnectedWeights(TLSTMLayer(l).wf, fp, transpose);
+              loadConnectedWeights(TLSTMLayer(l).wi, fp, transpose);
+              loadConnectedWeights(TLSTMLayer(l).wg, fp, transpose);
+              loadConnectedWeights(TLSTMLayer(l).wo, fp, transpose);
+              loadConnectedWeights(TLSTMLayer(l).uf, fp, transpose);
+              loadConnectedWeights(TLSTMLayer(l).ui, fp, transpose);
+              loadConnectedWeights(TLSTMLayer(l).ug, fp, transpose);
+              loadConnectedWeights(TLSTMLayer(l).uo, fp, transpose)
+          end;
         //ltConvLSTM :
         //  begin
         //      if l.peephole then
@@ -1308,9 +1321,9 @@ var fp:file;
     major, minor, rev: SizeInt;
 begin
   assign(fp, filename);
-  major := 2000;
-  minor := 1;
-  rev   := 1;
+  major := 0;
+  minor := 2;
+  rev   := 5;
   Rewrite(fp, 1);
   Blockwrite(fp, major, sizeof(int32) * 1, o);
   Blockwrite(fp, minor, sizeof(int32) * 1, o);
@@ -1353,17 +1366,17 @@ begin
         //      load_connected_weights(l.ur[0], fp, transpose);
         //      load_connected_weights(l.uh[0], fp, transpose)
         //  end;
-        //ltLSTM :
-        //  begin
-        //      load_connected_weights(l.wf[0], fp, transpose);
-        //      load_connected_weights(l.wi[0], fp, transpose);
-        //      load_connected_weights(l.wg[0], fp, transpose);
-        //      load_connected_weights(l.wo[0], fp, transpose);
-        //      load_connected_weights(l.uf[0], fp, transpose);
-        //      load_connected_weights(l.ui[0], fp, transpose);
-        //      load_connected_weights(l.ug[0], fp, transpose);
-        //      load_connected_weights(l.uo[0], fp, transpose)
-        //  end;
+        ltLSTM :
+          begin
+              SaveConnectedWeights(TLSTMLayer(l).wf, fp, false);
+              SaveConnectedWeights(TLSTMLayer(l).wi, fp, false);
+              SaveConnectedWeights(TLSTMLayer(l).wg, fp, false);
+              SaveConnectedWeights(TLSTMLayer(l).wo, fp, false);
+              SaveConnectedWeights(TLSTMLayer(l).uf, fp, false);
+              SaveConnectedWeights(TLSTMLayer(l).ui, fp, false);
+              SaveConnectedWeights(TLSTMLayer(l).ug, fp, false);
+              SaveConnectedWeights(TLSTMLayer(l).uo, fp, false)
+          end;
         //ltConvLSTM :
         //  begin
         //      if l.peephole then
@@ -1446,7 +1459,7 @@ begin
   if s = 'detection'    then exit(ltDETECTION);
   if s = 'region'       then exit(ltREGION);
   if s = 'yolo'         then exit(ltYOLO);
-  if s = 'Gaussian_yolo' then exit(ltGaussianYOLO);
+  if s = 'gaussian_yolo' then exit(ltGaussianYOLO);
   if s = 'iseg'         then exit(ltISEG);
   if s = 'local'        then exit(ltLOCAL);
   if (s = 'conv') or

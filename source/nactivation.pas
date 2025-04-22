@@ -15,8 +15,8 @@ uses
   {$endif}
   ;
 
-procedure activate_array(const x: PSingle; const n: SizeInt; const a: TActivationType; output:PSingle = nil; output2:PSingle =nil);
-procedure gradient_array(const x: PSingle; const n: SizeInt; const a:TActivationType; const delta:PSingle);
+procedure activate_array(const x: PSingle; const N: SizeInt; const a: TActivationType; output:PSingle = nil; output2:PSingle =nil);
+procedure gradient_array(const x: PSingle; const N: SizeInt; const a:TActivationType; const delta:PSingle);
 
 procedure activate_array_swish(const x: Psingle; const n: SizeInt; output_sigmoid, output: Psingle);
 procedure activate_array_mish(const x: Psingle; const n: SizeInt; const activation_input, output: Psingle);
@@ -129,12 +129,13 @@ asm
   add                  rsp      , 16*2                     // restoring stack
 end;
 
+// AKA SWISH
 procedure SiLU_array(const dst, sigmoid, src:PSingle; const N:SizeInt);
 const
-  l2e :single = 1.442695041;// log2(e);
-  c0  :single = 1.00172476;
-  c1  :single = 0.657636276;
-  c2  :single = 0.3371894346;
+  L2E :single = 1.442695041;// log2(e);
+  C0  :single = 1.00172476;
+  C1  :single = 0.657636276;
+  C2  :single = 0.3371894346;
   //MAX_EXP =  8.8722839052068352E+001;
   //MIN_EXP = -8.7336544750553102E+001;
 
@@ -143,16 +144,16 @@ const
 
   one :array[0..7] of single = (1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0);
   zero:array[0..7] of single = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
-  mx  :array[0..7] of single = (MAX_EXP, MAX_EXP, MAX_EXP, MAX_EXP, MAX_EXP, MAX_EXP, MAX_EXP, MAX_EXP);
-  mn  :array[0..7] of single = (MIN_EXP, MIN_EXP, MIN_EXP, MIN_EXP, MIN_EXP, MIN_EXP, MIN_EXP, MIN_EXP );
+  MX  :array[0..7] of single = (MAX_EXP, MAX_EXP, MAX_EXP, MAX_EXP, MAX_EXP, MAX_EXP, MAX_EXP, MAX_EXP);
+  MN  :array[0..7] of single = (MIN_EXP, MIN_EXP, MIN_EXP, MIN_EXP, MIN_EXP, MIN_EXP, MIN_EXP, MIN_EXP );
 asm
   sub                  rsp      , 16*2                     // making stack space to save one xmm size register
   vmovdqu              [rsp+$00], xmm6
   vmovdqu              [rsp+$10], xmm7
 
-  vpbroadcastd  ymm3  , [rip + l2e]
-  vpbroadcastd  ymm4  , [rip + c1]
-  vpbroadcastd  ymm5  , [rip + c0]
+  vpbroadcastd  ymm3  , [rip + L2E]
+  vpbroadcastd  ymm4  , [rip + C1]
+  vpbroadcastd  ymm5  , [rip + C0]
 
   mov           r11   , N
   shr           r11   , 3
@@ -161,15 +162,15 @@ asm
 @while:
   vxorps        ymm0  , ymm0        , ymm0              // zero
   vsubps        ymm1  , ymm0        , [src]             // -src
-  vcmpgeps      ymm6  , ymm1        , [rip + mx]
-  vcmpleps      ymm7  , ymm1        , [rip + mn]
-  vblendvps     ymm1  , ymm1 , [rip + mx], ymm6
-  vblendvps     ymm1  , ymm1 , [rip + mn], ymm7
+  vcmpgeps      ymm6  , ymm1        , [rip + MX]
+  vcmpleps      ymm7  , ymm1        , [rip + MN]
+  vblendvps     ymm1  , ymm1 , [rip + MX], ymm6
+  vblendvps     ymm1  , ymm1 , [rip + MN], ymm7
   vmulps        ymm1  , ymm3        , ymm1
   vroundps      ymm2  , ymm1        , 1
   vsubps        ymm1  , ymm1        , ymm2
   vcvtps2dq     ymm0  , ymm2
-  vpbroadcastd  ymm2  , [rip + c2]
+  vpbroadcastd  ymm2  , [rip + C2]
   vfmadd213ps   ymm2  , ymm1        , ymm4
   vpslld        ymm0  , ymm0        , 23
   vfmadd213ps   ymm1  , ymm2        , ymm5
@@ -196,15 +197,15 @@ asm
 
   vpxor         xmm0  , xmm0        , xmm0
   vsubss        xmm1  , xmm0        , dword [src]              //-src
-  vcmpgeps      xmm6  , xmm1        , [rip + mx]
-  vcmpleps      xmm7  , xmm1        , [rip + mn]
-  vblendvps     xmm1  , xmm1 , [rip + mx], xmm6
-  vblendvps     xmm1  , xmm1 , [rip + mn], xmm7
+  vcmpgeps      xmm6  , xmm1        , [rip + MX]
+  vcmpleps      xmm7  , xmm1        , [rip + MN]
+  vblendvps     xmm1  , xmm1 , [rip + MX], xmm6
+  vblendvps     xmm1  , xmm1 , [rip + MN], xmm7
   vmulss        xmm1  , xmm3        , xmm1
   roundss       xmm2  , xmm1        , 1
   vsubss        xmm1  , xmm1        , xmm2
   vcvtps2dq     xmm0  , xmm2
-  vmovss        xmm2  , [rip + c2]
+  vmovss        xmm2  , [rip + C2]
   vfmadd213ss   xmm2  , xmm1        , xmm4
   vpslld        xmm0  , xmm0        , 23
   vfmadd213ss   xmm1  , xmm2        , xmm5
@@ -348,9 +349,13 @@ begin
 end;
 
 function tanh_activate(const x:single):single;inline;
+var px, nx:Single;
 begin
+  px := exp(x);
+  nx := exp(-x);
+  result := (px - nx)/(px + nx)
   //result := 2 / (1 + exp(ensureRange(-2 * x, minSingleExp, maxSingleExp))) - 1
-  result := 2 / (1 + exp(-2 * x)) - 1
+  //result := 2 / (1 + exp(-2 * x)) - 1
   //result:= (exp(2*x)-1)/(exp(2*x)+1);
 end;
 
@@ -500,10 +505,11 @@ begin
 
 end;
 
-procedure activate_array(const x: PSingle; const n: SizeInt; const a: TActivationType; output: PSingle; output2: PSingle);
+procedure activate_array(const x: PSingle; const N: SizeInt; const a: TActivationType; output: PSingle; output2: PSingle);
 var i:SizeInt;
 begin
   // todo [Activate Array] SIMDFY & GPU
+    {$ifdef USE_TELEMETRY} if benchmark then metrics.act.start(a);{$endif}
 
       case a of
           acLOGISTIC:
@@ -610,11 +616,12 @@ begin
           else
             assert(false, '[Activation] :'+GetEnumName(TypeInfo(TActivationType), ord(a))+' not Implemented')
       end;
+    {$ifdef USE_TELEMETRY} if benchmark then metrics.act.finish(a);{$endif}
+
 end;
 
 
-procedure gradient_array(const x: PSingle; const n: SizeInt;
-  const a: TActivationType; const delta: PSingle);
+procedure gradient_array(const x: PSingle; const N: SizeInt; const a: TActivationType; const delta: PSingle);
 var i:SizeInt;
 begin
     {$ifdef USE_TELEMETRY} if benchmark then metrics.grad.start(a);{$endif}
@@ -1010,7 +1017,7 @@ begin
     {$ifdef USE_TELEMETRY} if benchmark then metrics.grad.finish(acNORM_CHAN);{$endif}
 end;
 
-procedure gradient_array_normalize_channels_softmax(const x: Psingle; const n,
+procedure gradient_array_normalize_channels_softmax(const x: PSingle; const n,
   batch, channels, wh_step: SizeInt; const delta: Psingle);
 var
     size, i, wh_i, b, k, index: SizeInt;

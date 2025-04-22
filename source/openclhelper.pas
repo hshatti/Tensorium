@@ -84,7 +84,8 @@ type
   class var
     Platforms:array of cl_platform_id;
     PlatformCount:cl_uint;
-    PlatformsName : array of ansistring;
+    PlatformsNames : array of ansistring;
+    ExtensionStrs : array of ansistring;
   private
     FSrc:TStringList;
     FActivePlatformId: integer;
@@ -152,6 +153,7 @@ type
     class function PlatformName(Index: integer): ansistring;static;
     class function getDevices(const platformId: integer):TArray<cl_device_id>;static;
     class function getDeviceName(const device:cl_device_id):ansistring; static;
+    class function getDeviceExtensionStr(const device:cl_device_id):ansistring; static;
     class function getDeviceTypeName(const device:cl_device_id):ansistring;static;
     procedure CheckError(const msg:string=''); inline;
     constructor Create(deviceType:TCLDeviceType=dtGPU);
@@ -211,8 +213,8 @@ type
     property queueInOrder: boolean read getQueueInOrder write SetQueueInOrder;
     function createDeviceBuffer(const aByteSize:size_t; const aAccess:TCLMemAccess = maReadWrite; const fromHostMem:Pointer=nil):cl_mem;
     procedure freeDeviceBuffer(aMem:cl_mem);
-    procedure readBuffer(const clMem:cl_mem; const bufferSize:size_t; const buffer:pointer; aQueue: cl_command_queue=nil );
-    procedure writeBuffer(const clMem: cl_mem; const bufferSize: size_t; const buffer: pointer; aQueue: cl_command_queue=nil);
+    procedure readBuffer(const clMem:cl_mem; const bufferSize:size_t; const buffer:pointer; const offset:SizeInt = 0; aQueue: cl_command_queue=nil );
+    procedure writeBuffer(const clMem: cl_mem; const bufferSize: size_t; const buffer: pointer; const offset:SizeInt = 0; aQueue: cl_command_queue=nil);
     procedure CallKernel(const Index: integer; const GlobalWorkGroups: TArray<size_t> = nil; const params: TArray<Pointer> = nil; const waitEvents:TArray<cl_event> = nil; outEvent:pcl_event = nil);    overload;
     procedure waitForEvents(const N :longword; const events:pcl_event);
     procedure freeEvents(const N :longword; const events:pcl_event);
@@ -373,9 +375,11 @@ end;
 
 procedure TOpenCL.CheckError(const msg: string);
 begin
+  {$ifdef DEBUG}
   if FErr<>CL_SUCCESS then
     //writeln(msg, clErrorText(FErr));
     raise Exception.Create(clErrorText(FErr));
+  {$endif}
 end;
 
 function TOpenCL.getCL_Device_Type(const dt: TClDeviceType): cl_uint;
@@ -431,9 +435,10 @@ begin
     if PlatformCount>0 then begin
       SetLength(Platforms, PlatformCount);
       result := clGetPlatformIDs(PlatformCount, @Platforms[0], nil);
-      SetLength(PlatformsName, PlatformCount);
+      SetLength(PlatformsNames, PlatformCount);
+      setLength(ExtensionStrs, PlatformCount);
       for i:=0 to PlatformCount-1 do
-        PlatformsName[i] := PlatformName(i);
+        PlatformsNames[i] := PlatformName(i);
     end;
 end;
 
@@ -456,8 +461,15 @@ begin
   result := cname;
 end;
 
-class function TOpenCL.getDeviceTypeName(const device: cl_device_id
-  ): ansistring;
+class function TOpenCL.getDeviceExtensionStr(const device: cl_device_id): ansistring;
+var cname : array[0..cInfoSize-1] of ansichar;
+   buffCnt :size_t;
+begin
+  clGetDeviceInfo(device, CL_DEVICE_EXTENSIONS, cInfoSize, @cname, buffCnt);
+  result := cname;
+end;
+
+class function TOpenCL.getDeviceTypeName(const device: cl_device_id): ansistring;
 var
     FErr:cl_int;
     dt :cl_uint;
@@ -639,7 +651,7 @@ begin
 {$ifdef DEBUG}
   par:=PAnsiCHar('-cl-kernel-arg-info -cl-std=CL3.0 -cl-opt-disable -Werror -g '+params);
 {$else}
-  par:=PAnsiCHar('-cl-kernel-arg-info -cl-std=CL3.0 -cl-fast-relaxed-math -cl-mad-enable '+params);
+  par:=PAnsiCHar('-cl-kernel-arg-info -cl-std=CL3.0 -cl-fast-relaxed-math -Werror -cl-mad-enable '+params);
 {$endif}
   FProgram:=clCreateProgramWithSource(FContext, 1, @src, nil, FErr);CheckError();
   FErr:=clBuildProgram(Fprogram, FDeviceCount, @FDevices[0], par, nil, nil);
@@ -650,7 +662,7 @@ begin
   if FBuildStatus= CL_BUILD_SUCCESS then begin
 {$ifdef DEBUG}
    if FBuildlog<>'' then begin
-      writeln(StdErr, FBuildLog);
+      writeln(ErrOutput, FBuildLog);
       readln
     end;
 {$endif}
@@ -691,8 +703,9 @@ begin
 
   if pos('int', typeStr)= 1 then exit(sizeOf(cl_int)*vectorSize);
   if pos('long', typeStr)= 1 then exit(sizeOf(cl_long)*vectorSize);
-  if pos('float', typeStr)= 1 then exit(sizeOf(single)*vectorSize);
-  if pos('double', typeStr)= 1 then exit(sizeOf(double)*vectorSize);
+  if pos('half', typeStr)= 1 then exit(sizeOf(cl_half)*vectorSize);
+  if pos('float', typeStr)= 1 then exit(sizeOf(cl_float)*vectorSize);
+  if pos('double', typeStr)= 1 then exit(sizeOf(cl_double)*vectorSize);
   if pos('char', typeStr)= 1 then exit(sizeOf(cl_char)*vectorSize);
   if pos('short', typeStr)= 1 then exit(sizeOf(cl_short)*vectorSize);
 
@@ -748,17 +761,17 @@ begin
 end;
 
 procedure TOpenCL.readBuffer(const clMem: cl_mem; const bufferSize: size_t;
-  const buffer: pointer; aQueue: cl_command_queue);
+  const buffer: pointer; const offset: SizeInt; aQueue: cl_command_queue);
 begin
   if not assigned(aQueue) then aQueue:=FQueue;
-  FErr := clEnqueueReadBuffer(aQueue, clMem, CL_TRUE, 0, bufferSize, buffer, 0, nil, nil); checkError();
+  FErr := clEnqueueReadBuffer(aQueue, clMem, CL_TRUE, offset, bufferSize, buffer, 0, nil, nil); checkError();
 end;
 
 procedure TOpenCL.writeBuffer(const clMem: cl_mem; const bufferSize: size_t;
-  const buffer: pointer; aQueue: cl_command_queue);
+  const buffer: pointer; const offset: SizeInt; aQueue: cl_command_queue);
 begin
   if not assigned(aQueue) then aQueue:=FQueue;
-  FErr := clEnqueueWriteBuffer(aQueue, clMem, CL_TRUE, 0, bufferSize, buffer, 0, nil, nil); checkError();
+  FErr := clEnqueueWriteBuffer(aQueue, clMem, CL_TRUE, offset, bufferSize, buffer, 0, nil, nil); checkError();
 end;
 
 (*

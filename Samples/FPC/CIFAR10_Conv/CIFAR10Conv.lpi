@@ -50,7 +50,9 @@
           <Other>
             <CustomOptions Value="-CfAVX2
 -OpCOREAVX2
+-dUSE_OPENCL
 -dUSE_AVX2
+-dUSE_MKL
 -dUSE_MULTITHREADING
 -dUSE_TELEMETRY"/>
             <OtherDefines Count="11">
@@ -99,9 +101,8 @@
         <IsPartOfProject Value="True"/>
       </Unit>
       <Unit>
-        <Filename Value="..\..\..\source\nnopencl.pas"/>
+        <Filename Value="..\..\..\source\nnOpenCL.pas"/>
         <IsPartOfProject Value="True"/>
-        <UnitName Value="nnOpenCL"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\nopmetrics.pas"/>
@@ -151,6 +152,7 @@
     <Other>
       <CustomOptions Value="-CfAVX2
 -OpCOREAVX2
+-dUSE_OPENCL
 -dUSE_AVX2
 -dUSE_MULTITHREADING
 -dUSE_TELEMETRY"/>
