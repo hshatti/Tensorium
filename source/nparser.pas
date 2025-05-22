@@ -1030,10 +1030,12 @@ end;
 procedure TDarknetParser.loadConnectedWeights(var l: TConnectedLayer;
   var fp: file; const transpose: boolean);
 var
-  buf: TSingleTensor;
+  buf: TSingleTensor; t:TSizeIntTensor;
 begin
     l.biases.loadFromFile(fp);
+    //l.biases.printStat;
     l.weights.loadFromFile(fp);
+    //l.weights.printStat;
     if transpose then begin
         buf.resize([l.weights.w, l.weights.h()]);
         l.weights.matTranspose(buf);
@@ -1042,8 +1044,11 @@ begin
     if l.isBatchNormalized and (not l.dontLoadScales) then
         begin
             l.scales.loadFromFile(fp);
+            //l.scales.printStat;
             l.rolling_mean.loadFromFile(fp);
-            l.rolling_variance.loadFromFile(fp)
+            //l.rolling_mean.printStat;
+            l.rolling_variance.loadFromFile(fp);
+            //l.rolling_variance.printStat;
         end;
 
 

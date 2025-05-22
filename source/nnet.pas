@@ -9,8 +9,10 @@ uses
   SysUtils, Math, typInfo
   {$ifdef MSWINDOWS}, Windows{$endif}
   , nTensors, nBaseLayer, NTypes, nYoloLayer
-  {$ifdef USE_OPENCL}
+  {$if defined(USE_OPENCL)}
   , opencl, OpenCLHelper
+  {$elseif defined(USE_CUDART)}
+  , nnCuda
   {$endif}
   ;
 
@@ -275,7 +277,7 @@ begin
     currentLayer := layers[i];
     if state.isTraining and assigned(currentLayer.delta.Data) and currentLayer.train then begin
       //currentLayer.delta.Multiply(0);
-    {$ifdef USE_OPENCL}
+    {$if defined(USE_OPENCL)}
       ocl.fill(currentLayer.delta.size(), currentLayer.delta.devData, 0, 0, 1
       {$IFDEF CL_EVENTS}
       , state.events, nil);
@@ -283,17 +285,21 @@ begin
       {$ELSE}
       );
       {$ENDIF}
+    {$elseif defined(USE_CUDART)}
+    cuda.fill(currentLayer.delta.size(), currentLayer.delta.devData, 0, 0, 1);
     {$else}
       currentLayer.delta.fill(0);
     {$endif}
     end;
     if assigned(OnForward) then OnForward(state);
 
-    {$ifdef USE_OPENCL}
+    {$if defined(USE_OPENCL)}
     currentLayer.events := state.events;
     currentLayer.ev     := state.ev;
     currentLayer.forwardGPU(state);
     ocl.finish();
+    {$elseif defined(USE_CUDART)}
+    currentLayer.forwardGPU(state);
     {$else}
     currentLayer.forward(state);
     {$endif}
@@ -329,11 +335,13 @@ begin
     current := Layers[i];
     if current.backwardStop then break;
     if current.forwardOnly then continue;
-    {$ifdef USE_OPENCL}
+    {$if defined(USE_OPENCL)}
     current.events := state.events;
     current.ev     := state.ev;
     current.backwardGPU(state);
     ocl.finish();
+    {$elseif defined(USE_CUDART)}
+    current.backwardGPU(state);
     {$else}
     current.backward(state);
     {$endif}
@@ -368,9 +376,11 @@ begin
       arg.learningRate := rate;
       arg.momentum := momentum;
       arg.decay := decay;
-      {$ifdef USE_OPENCL}
+      {$if defined(USE_OPENCL)}
       current.updateGPU(arg);
       //ocl.finish();
+      {$elseif defined(USE_CUDART)}
+      current.updateGPU(arg);
       {$else}
       current.update(arg);
       {$endif}
@@ -383,10 +393,6 @@ function TNNet.Propagate: single;
 var
   state: TNNetState;
 begin
-  {$ifdef GPU}
-    if gpu_index >= 0 then
-        exit(train_network_datum_gpu(net, x, y));
-  {$endif}
   //state := default(TNetworkState);
   //net.seen[0] :=  net.seen[0] + net.batch;
   //state.index := 0;
@@ -410,21 +416,21 @@ begin
     state.delta.free;
   state.index := 0;
   state.truth:=truth;
-  {$ifdef USE_OPENCL}
+  {$if defined(USE_OPENCL)}
   if not assigned(state.truth.devData) then
     state.truth.devData := ocl.createDeviceBuffer(state.truth.byteSize());
   state.truth.setCPU;
   setLength(state.events, max(batch, 2));
   setLength(state.ev, length(state.events));
+  {$elseif defined(USE_CUDART)}
+  if not assigned(state.truth.devData) then
+    state.truth.devData := cuda.createDeviceBuffer(state.truth.byteSize());
+  state.truth.setCPU;
   {$endif}
+
   forward(state);
-  {$ifdef USE_OPENCL}
-  //ocl.finish();
-  {$endif}
   backward(state);
-  {$ifdef USE_OPENCL}
-  //ocl.finish();
-  {$endif}
+
   Result := cost();
   if assigned(OnAfterPropagation) then OnAfterPropagation(state);
 end;
@@ -439,12 +445,12 @@ begin
   state.input := @tensor;
   //state.delta.free;
   state.index := 0;
-  {$ifdef USE_OPENCL}
+  {$if defined(USE_OPENCL)}
   setLength(state.events, max(batch, 2));
   {$endif}
   forward(state);
   Result := output();
-  {$ifdef USE_OPENCL}
+  {$if defined(USE_OPENCL) or defined(USE_CUDART)}
   //ocl.finish();
   if result.wasGPU() then
     result.pullFromDevice();
@@ -484,7 +490,7 @@ begin
     else
       Data.getBatch(1, i, input, truth);
 
-    {$ifdef USE_OPENCL}
+    {$if defined(USE_OPENCL) or defined(USE_CUDART)}
     input.setCPU;
     {$endif}
 

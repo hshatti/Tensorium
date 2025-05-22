@@ -3,8 +3,7 @@
 {$PACKRECORDS C}
 {$ENDIF}
 
-{$ifdef MSWINDOWS}{$undef MKL_TBB}{$undef MKL_OMP}{$endif}            // Got errors while trying to staticly link libraries in WINDOWS only so
-                                                                    // keeping it dynamic for now, however!, comment this if you know what you are doing
+//{$ifdef MSWINDOWS}{$undef MKL_TBB}{$undef MKL_OMP}{$endif}            // Got errors while trying to staticly link libraries in WINDOWS only so
 
 //{$define UPPERCASE_DECL}                                          // uncomment to use FORTRAN UpperCase blas functions
 
@@ -16,16 +15,25 @@
 {$if defined(MKL_TBB) or defined(MKL_OMP) or defined(MKL_SEQUENTIAL)}
   {$ifdef MSWINDOWS}
       {$if defined(MKL_TBB)}
-        {$linklib tbb12.lib}
-        {$linklib mkl_tbb_thread.lib}
+        //{$linklib mkl_rt}
+        //{$linklib tbb12}
+        {$linklib c}
+        {$linklib tbb12}
+        {$linklib mkl_tbb_thread}
+        {$linklib mkl_intel_ilp64}
+        {$linklib mkl_core}
+        //{$linklib mkl_tbb_thread_dll}
+        //{$linklib mkl_sequential}
+        //{$linklib mkl_intel_ilp64}
+        //{$linklib mkl_tbb_thread}
+        //{$linklib mkl_core}
+        //{$linklib c}
       {$elseif defined(MKL_OMP)}
         {$linklib mkl_intel_thread.lib}
         {$linklib libiomp5md.lib}
       {$else}
         {$linklib mkl_sequential.lib}
       {$endif}
-      {$linklib mkl_intel_lp64.lib}
-      {$linklib mkl_core.lib}
   {$endif}
 
   {$ifdef DARWIN}

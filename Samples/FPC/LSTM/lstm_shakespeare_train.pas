@@ -262,7 +262,7 @@ begin
       end;
       net.OnAfterNetOptimization := AfterOptimization;
       {$ifdef USE_OPENCL}
-      resetRnnStateGPU();
+      //resetRnnStateGPU();
       {$else}
       //resetRnnState();
       {$endif}

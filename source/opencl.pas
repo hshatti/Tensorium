@@ -5,7 +5,7 @@
  * copy of this software and/or associated documentation files (the
  * "Materials"), to deal in the Materials without restriction, including
  * without limitation the rights to use, copy, modify, merge, publish,
- * distribute, sublicense, and/or sell copies of the Materials, and to
+ * distribute, sublicense, and/or sell cOpenCLlibopies of the Materials, and to
  * permit persons to whom the Materials are furnished to do so, subject to
  * the following conditions:
  *
@@ -36,6 +36,7 @@
 unit OpenCL;
 {$ifdef fpc}
   {$mode Delphi}
+  {$PackRecords C}
 {$else}
   {$EXCESSPRECISION off}
 {$endif}

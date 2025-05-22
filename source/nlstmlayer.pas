@@ -76,7 +76,7 @@ begin
   temp2     := TSingleTensor.Create([batch, outputs], batch);
   temp3     := TSingleTensor.Create([batch, outputs], batch);
   dc        := TSingleTensor.Create([batch, outputs], batch);
-  //dh        := TSingleTensor.Create([batch, outputs], batch);
+  //dh                       .reshape([batch, outputs], batch);
 
 end;
 
@@ -114,6 +114,7 @@ begin
   temp2     .reSize([batch, outputs], batch);
   temp3     .reSize([batch, outputs], batch);
   dc        .reSize([batch, outputs], batch);
+  //dh        .reShape([batch, outputs], batch);
 end;
 
 procedure TLSTMLayer.setTrain(ATrain: boolean);
@@ -134,13 +135,395 @@ begin
     delta.free
 end;
 
+procedure increment_layer(var l: TConnectedlayer; const steps: SizeInt);
+var
+    num: SizeInt;
+begin
+    num := l.outputs * l.batch * steps;
+    inc(l.output.data, num);
+    inc(l.delta.data, num);
+    inc(l.x.data, num);
+    inc(l.x_norm.data, num);
+{$ifdef GPU}
+    inc(l.output_gpu, num);
+    inc(l.delta_gpu, num);
+    inc(l.x_gpu, num);
+    inc(l.x_norm_gpu, num);
+{$endif}
+end;
+
+procedure reset_layer(var l: TConnectedlayer);
+var
+    num: SizeInt;
+begin
+    l.output.resetReference;
+    l.delta.resetReference;
+    l.x.resetReference;
+    l.x_norm.resetReference;
+{$ifdef GPU}
+    inc(l.output_gpu, num);
+    inc(l.delta_gpu, num);
+    inc(l.x_gpu, num);
+    inc(l.x_norm_gpu, num);
+{$endif}
+end;
+
+procedure fill_cpu(const N:SizeInt; const val:Single; dst:PSingle; const stride:SizeInt);
+begin
+  FillDWord(dst^, N, longWord(val))
+end;
+
+procedure copy_cpu(const N:SizeInt; const a:PSingle; const inca :SizeInt; b:PSingle; const incb:SizeInt);
+begin
+  move(a^, b^, N*sizeof(single))
+end;
+
+procedure axpy_cpu(const N:sizeInt; const a: single; const x:PSingle; const incx:SizeInt; y:PSingle; const incy:SizeInt);
+var i:sizeInt;
+begin
+  for i:=0 to N-1 do
+      y[i*incy] += a*x[i*incx]
+end;
+
+procedure mul_cpu(const N:SizeInt; const x:PSingle; incx:SizeInt; y:PSingle; const incy:SizeInt);
+var i:SizeInt;
+begin
+  for i:=0 to N-1 do
+      y[i*incy] *= x[i*incx]
+end;
+
+{
+procedure forward_lstm_layer(var l: TLSTMLayer; const state: PNNetState);
+var
+    s: TNNetState;
+    i: sizeInt;
+    wf, wi, wg, wo, uf, ui, ug, uo: TConnectedLayer;
+begin
+
+    s := Default(TNNetState);
+    s.isTraining := state.isTraining;
+    s.workspace := state.workspace;
+
+    wf :=  l.wf;
+    wi :=  l.wi;
+    wg :=  l.wg;
+    wo :=  l.wo;
+
+    uf :=  l.uf;
+    ui :=  l.ui;
+    ug :=  l.ug;
+    uo :=  l.uo;
+
+    wf.reGroup(l.batch);
+    wi.reGroup(l.batch);
+    wg.reGroup(l.batch);
+    wo.reGroup(l.batch);
+    uf.reGroup(l.batch);
+    ui.reGroup(l.batch);
+    ug.reGroup(l.batch);
+    uo.reGroup(l.batch);
+
+    fill_cpu(l.outputs * l.batch * l.steps, 0, wf.delta, 1);
+    fill_cpu(l.outputs * l.batch * l.steps, 0, wi.delta, 1);
+    fill_cpu(l.outputs * l.batch * l.steps, 0, wg.delta, 1);
+    fill_cpu(l.outputs * l.batch * l.steps, 0, wo.delta, 1);
+
+    fill_cpu(l.outputs * l.batch * l.steps, 0, uf.delta, 1);
+    fill_cpu(l.outputs * l.batch * l.steps, 0, ui.delta, 1);
+    fill_cpu(l.outputs * l.batch * l.steps, 0, ug.delta, 1);
+    fill_cpu(l.outputs * l.batch * l.steps, 0, uo.delta, 1);
+    if state.isTraining then
+        fill_cpu(l.outputs * l.batch * l.steps, 0, l.delta, 1);
+
+    for i := 0 to l.steps -1 do
+        begin
+            s.input := @l._h;
+            wf.forward(s);
+            wi.forward(s);
+            wg.forward(s);
+            wo.forward(s);
+
+            s.input := state.input;
+            uf.forward(s);
+            ui.forward(s);
+            ug.forward(s);
+            uo.forward(s);
+
+            copy_cpu(l.outputs * l.batch, wf.output, 1, l._f, 1);
+            axpy_cpu(l.outputs * l.batch, 1, uf.output, 1, l._f, 1);
+
+            copy_cpu(l.outputs * l.batch, wi.output, 1, l._i, 1);
+            axpy_cpu(l.outputs * l.batch, 1, ui.output, 1, l._i, 1);
+
+            copy_cpu(l.outputs * l.batch, wg.output, 1, l._g, 1);
+            axpy_cpu(l.outputs * l.batch, 1, ug.output, 1, l._g, 1);
+
+            copy_cpu(l.outputs * l.batch, wo.output, 1, l._o, 1);
+            axpy_cpu(l.outputs * l.batch, 1, uo.output, 1, l._o, 1);
+
+            activate_array(l._f, l.outputs * l.batch, acLOGISTIC);
+            activate_array(l._i, l.outputs * l.batch, acLOGISTIC);
+            activate_array(l._g, l.outputs * l.batch, acTANH);
+            activate_array(l._o, l.outputs * l.batch, acLOGISTIC);
+
+            copy_cpu(l.outputs * l.batch, l._i, 1, l.temp, 1);
+            mul_cpu(l.outputs * l.batch, l._g, 1, l.temp, 1);
+            mul_cpu(l.outputs * l.batch, l._f, 1, l._c, 1);
+            axpy_cpu(l.outputs * l.batch, 1, l.temp, 1, l._c, 1);
+
+            copy_cpu(l.outputs * l.batch, l._c, 1, l._h, 1);
+            activate_array(l._h, l.outputs * l.batch, acTANH);
+            mul_cpu(l.outputs * l.batch, l._o, 1, l._h, 1);
+
+            copy_cpu(l.outputs * l.batch, l._c, 1, l.cell, 1);
+            copy_cpu(l.outputs * l.batch, l._h, 1, l.output, 1);
+
+            state.input.data := state.input.data + (l.inputs * l.batch);
+            l.output.data := l.output.data + (l.outputs * l.batch);
+            l.cell.data := l.cell.data + (l.outputs * l.batch);
+
+            increment_layer( wf, 1);
+            increment_layer( wi, 1);
+            increment_layer( wg, 1);
+            increment_layer( wo, 1);
+
+            increment_layer( uf, 1);
+            increment_layer( ui, 1);
+            increment_layer( ug, 1);
+            increment_layer( uo, 1);
+            if state.isTraining then
+              write(#13'LSTM FW : layer [', state.index,'], ', 100*i/l.steps:3:1);
+
+        end;
+    state.input.resetReference;
+    l.output.resetReference;
+    l.cell.resetReference;
+    reset_layer(wf);
+    reset_layer(wi);
+    reset_layer(wg);
+    reset_layer(wo);
+
+    reset_layer(uf);
+    reset_layer(ui);
+    reset_layer(ug);
+    reset_layer(uo);
+
+    wf.reGroup(l.steps*l.batch);
+    wi.reGroup(l.steps*l.batch);
+    wg.reGroup(l.steps*l.batch);
+    wo.reGroup(l.steps*l.batch);
+    uf.reGroup(l.steps*l.batch);
+    ui.reGroup(l.steps*l.batch);
+    ug.reGroup(l.steps*l.batch);
+    uo.reGroup(l.steps*l.batch);
+
+end;
+
+procedure backward_lstm_layer(var l: TLSTMLayer; const state: PNNetState);
+var
+    s: TNNetState;
+    i: SizeInt;
+    wf, wi, wg, wo, uf, ui, ug, uo: TConnectedLayer;
+    dh : TSingleTensor;
+begin
+    s := default(TNNetState);
+    s.isTraining := state.isTraining;
+    s.workspace := state.workspace;
+
+    wf :=  l.wf;
+    wi :=  l.wi;
+    wg :=  l.wg;
+    wo :=  l.wo;
+
+    uf :=  l.uf;
+    ui :=  l.ui;
+    ug :=  l.ug;
+    uo :=  l.uo;
+
+    wf.reGroup(l.batch);
+    wi.reGroup(l.batch);
+    wg.reGroup(l.batch);
+    wo.reGroup(l.batch);
+    uf.reGroup(l.batch);
+    ui.reGroup(l.batch);
+    ug.reGroup(l.batch);
+    uo.reGroup(l.batch);
+
+    increment_layer( wf, l.steps-1);
+    increment_layer( wi, l.steps-1);
+    increment_layer( wg, l.steps-1);
+    increment_layer( wo, l.steps-1);
+
+    increment_layer( uf, l.steps-1);
+    increment_layer( ui, l.steps-1);
+    increment_layer( ug, l.steps-1);
+    increment_layer( uo, l.steps-1);
+
+    state.input.data := state.input.data + (l.inputs * l.batch * (l.steps-1));
+    if assigned(state.delta) and assigned(state.delta.data) then
+        state.delta.data := state.delta.data + (l.inputs * l.batch * (l.steps-1));
+
+    l.output.data := l.output.data + (l.outputs * l.batch * (l.steps-1));
+    l.cell.data   := l.cell.data + (l.outputs * l.batch * (l.steps-1));
+    l.delta.data  := l.delta.data + (l.outputs * l.batch * (l.steps-1));
+
+    for i := l.steps-1 downto 0 do begin
+        if i <> 0 then
+            copy_cpu(l.outputs * l.batch, l.cell.data-l.outputs * l.batch, 1, l.prevCell, 1);
+        copy_cpu(l.outputs * l.batch, l.cell, 1, l._c, 1);
+        if i <> 0 then
+            copy_cpu(l.outputs * l.batch, l.output.data-l.outputs * l.batch, 1, l.prevState, 1);
+        copy_cpu(l.outputs * l.batch, l.output, 1, l._h, 1);
+        if (i = 0) then
+          dh.data :=  nil
+        else begin
+          dh := l.delta;
+          dh.data := l.delta.data-l.outputs * l.batch;
+        end;
+
+        copy_cpu(l.outputs * l.batch, wf.output, 1, l._f, 1);
+        axpy_cpu(l.outputs * l.batch, 1, uf.output, 1, l._f, 1);
+
+        copy_cpu(l.outputs * l.batch, wi.output, 1, l._i, 1);
+        axpy_cpu(l.outputs * l.batch, 1, ui.output, 1, l._i, 1);
+
+        copy_cpu(l.outputs * l.batch, wg.output, 1, l._g, 1);
+        axpy_cpu(l.outputs * l.batch, 1, ug.output, 1, l._g, 1);
+
+        copy_cpu(l.outputs * l.batch, wo.output, 1, l._o, 1);
+        axpy_cpu(l.outputs * l.batch, 1, uo.output, 1, l._o, 1);
+
+        activate_array(l._f, l.outputs * l.batch, acLOGISTIC);
+        activate_array(l._i, l.outputs * l.batch, acLOGISTIC);
+        activate_array(l._g, l.outputs * l.batch, acTANH);
+        activate_array(l._o, l.outputs * l.batch, acLOGISTIC);
+
+        copy_cpu(l.outputs * l.batch, l.delta, 1, l.temp3, 1);
+
+        copy_cpu(l.outputs * l.batch, l._c, 1, l.temp, 1);
+        activate_array(l.temp, l.outputs * l.batch, acTANH);
+
+        copy_cpu(l.outputs * l.batch, l.temp3, 1, l.temp2, 1);
+        mul_cpu(l.outputs * l.batch, l._o, 1, l.temp2, 1);
+
+        gradient_array(l.temp, l.outputs * l.batch, acTANH, l.temp2);
+        axpy_cpu(l.outputs * l.batch, 1, l.dc, 1, l.temp2, 1);
+
+        copy_cpu(l.outputs * l.batch, l._c, 1, l.temp, 1);
+        activate_array(l.temp, l.outputs * l.batch, acTANH);
+        mul_cpu(l.outputs * l.batch, l.temp3, 1, l.temp, 1);
+        gradient_array(l._o, l.outputs * l.batch, acLOGISTIC, l.temp);
+        copy_cpu(l.outputs * l.batch, l.temp, 1, wo.delta, 1);
+        s.input := @l.prevState;
+        s.delta := @dh;
+        wo.backward(s);
+
+        copy_cpu(l.outputs * l.batch, l.temp, 1, uo.delta, 1);
+        s.input := state.input;
+        s.delta := state.delta;
+        uo.backward(s);
+
+        copy_cpu(l.outputs * l.batch, l.temp2, 1, l.temp, 1);
+        mul_cpu(l.outputs * l.batch, l._i, 1, l.temp, 1);
+        gradient_array(l._g, l.outputs * l.batch, acTANH, l.temp);
+        copy_cpu(l.outputs * l.batch, l.temp, 1, wg.delta, 1);
+        s.input := @l.prevState;
+        s.delta := @dh;
+        wg.backward(s);
+
+        copy_cpu(l.outputs * l.batch, l.temp, 1, ug.delta, 1);
+        s.input := state.input;
+        s.delta := state.delta;
+        ug.backward(s);
+
+        copy_cpu(l.outputs * l.batch, l.temp2, 1, l.temp, 1);
+        mul_cpu(l.outputs * l.batch, l._g, 1, l.temp, 1);
+        gradient_array(l._i, l.outputs * l.batch, acLOGISTIC, l.temp);
+        copy_cpu(l.outputs * l.batch, l.temp, 1, wi.delta, 1);
+        s.input := @l.prevState;
+        s.delta := @dh;
+        wi.backward(s);
+
+        copy_cpu(l.outputs * l.batch, l.temp, 1, ui.delta, 1);
+        s.input := state.input;
+        s.delta := state.delta;
+        ui.backward(s);
+
+        copy_cpu(l.outputs * l.batch, l.temp2, 1, l.temp, 1);
+        mul_cpu(l.outputs * l.batch, l.prevCell, 1, l.temp, 1);
+        gradient_array(l._f, l.outputs * l.batch, acLOGISTIC, l.temp);
+        copy_cpu(l.outputs * l.batch, l.temp, 1, wf.delta, 1);
+        s.input := @l.prevState;
+        s.delta := @dh;
+        wf.backward(s);
+
+        copy_cpu(l.outputs * l.batch, l.temp, 1, uf.delta, 1);
+        s.input := state.input;
+        s.delta := state.delta;
+        uf.backward(s);
+
+        copy_cpu(l.outputs * l.batch, l.temp2, 1, l.temp, 1);
+        mul_cpu(l.outputs * l.batch, l._f, 1, l.temp, 1);
+        copy_cpu(l.outputs * l.batch, l.temp, 1, l.dc, 1);
+
+        state.input.data := state.input.data - (l.inputs * l.batch);
+        if assigned(state.delta) and assigned(state.delta.data) then
+            state.delta.data := state.delta.data - (l.inputs * l.batch);
+        l.output.data := l.output.data - (l.outputs * l.batch);
+        l.cell.data   := l.cell.data - (l.outputs * l.batch);
+        l.delta.data  := l.delta.data - (l.outputs * l.batch);
+
+        increment_layer( wf, -1);
+        increment_layer( wi, -1);
+        increment_layer( wg, -1);
+        increment_layer( wo, -1);
+
+        increment_layer( uf, -1);
+        increment_layer( ui, -1);
+        increment_layer( ug, -1);
+        increment_layer( uo, -1);
+        if state.isTraining then
+          write(#13'LSTM BW : layer [', state.index,'], ', 100*i/l.steps:3:1);
+    end;
+
+    state.input.resetReference;
+    if assigned(state.delta) and assigned(state.delta.data)then
+      state.delta.resetReference;
+    l.output.resetReference;
+    l.cell.resetReference;
+    l.delta.resetReference;
+
+    reset_layer(wf);
+    reset_layer(wi);
+    reset_layer(wg);
+    reset_layer(wo);
+
+    reset_layer(uf);
+    reset_layer(ui);
+    reset_layer(ug);
+    reset_layer(uo);
+
+    wf.reGroup(l.steps*l.batch);
+    wi.reGroup(l.steps*l.batch);
+    wg.reGroup(l.steps*l.batch);
+    wo.reGroup(l.steps*l.batch);
+    uf.reGroup(l.steps*l.batch);
+    ui.reGroup(l.steps*l.batch);
+    ug.reGroup(l.steps*l.batch);
+    uo.reGroup(l.steps*l.batch);
+
+end;
+}
 procedure TLSTMLayer.forward(var state: TNNetState);
 var s : TNNetState;
   i, outputStep, offset:SizeInt;
+  label done;
 begin
   {$ifdef USE_TELEMETRY}
   if benchmark then metrics.forward.start(layerType);
   {$endif}
+  //forward_lstm_layer(self, @state);
+  //goto done;
 
   s := Default(TNNetState);
   s.isTraining := state.isTraining;
@@ -228,6 +611,7 @@ begin
   ui.reGroup(steps*batch);
   ug.reGroup(steps*batch);
   uo.reGroup(steps*batch);
+done:
   {$ifdef USE_TELEMETRY}
   if benchmark then metrics.forward.finish(layerType);
   {$endif}
@@ -236,10 +620,14 @@ end;
 procedure TLSTMLayer.backward(var state: TNNetState);
 var s : TNNetState;
   i, outputStep, offset:SizeInt;
+  dh : ^TSingleTensor;
+  label done;
 begin
   {$ifdef USE_TELEMETRY}
   if benchmark then metrics.backward.start(layerType);
   {$endif}
+  //backward_lstm_layer(self, @state);
+  //goto done;
 
   s := Default(TNNetState);
   s.isTraining := state.isTraining;
@@ -304,15 +692,17 @@ begin
       temp.copyTo(wo.delta, offset);
 
       if (i = 0) then
-        s.delta :=  nil
+        //s.delta.data :=  nil
+        dh:=nil
       else begin
-        s.delta     := @delta;
-        s.deltaStep := i-1;
-        //dh := l.delta-l.outputs * l.batch;
+        //s.delta     := @delta;
+        //s.deltaStep := i-1;
+        dh := @delta;
       end;
       s.input := @prevState;
-      //s.delta := @dh;
+      s.delta := dh;
       s.inputStep:=0;
+      s.deltaStep:=i-1;
       wo.backward(s);
       //backward_connected_layer(wo, @s);
 
@@ -330,16 +720,17 @@ begin
       temp.copyTo(wg.delta, offset);
       //copy_cpu(l.outputs * l.batch, l.temp_cpu, 1, wg.delta, 1);
 
-      if (i = 0) then
-        s.delta :=  nil
-      else begin
-        s.delta     := @delta;
-        s.deltaStep := i-1;
-        //dh := l.delta-l.outputs * l.batch;
-      end;
+      //if (i = 0) then
+      //  s.delta :=  nil
+      //else begin
+      //  s.delta     := @delta;
+      //  s.deltaStep := i-1;
+      //  //dh := l.delta-l.outputs * l.batch;
+      //end;
       s.input := @prevState;
-      //s.delta := dh_cpu;
+      s.delta := dh;
       s.inputstep :=0;
+      s.deltaStep :=i-1;
       wg.backward(s);
       //backward_connected_layer(wg, @s);
 
@@ -359,16 +750,17 @@ begin
       temp.copyTo(wi.delta, offset);
       //copy_cpu(l.outputs * l.batch, l.temp_cpu, 1, wi.delta, 1);
 
-      if (i = 0) then
-        s.delta :=  nil
-      else begin
-        s.delta     := @delta;
-        s.deltaStep := i-1;
-        //dh := l.delta-l.outputs * l.batch;
-      end;
+      //if (i = 0) then
+      //  s.delta :=  nil
+      //else begin
+      //  s.delta     := @delta;
+      //  s.deltaStep := i-1;
+      //  //dh := l.delta-l.outputs * l.batch;
+      //end;
       s.input := @prevState;
-      //s.delta := l.dh_cpu;
+      s.delta := dh;
       s.inputStep := 0;
+      s.deltaStep := i-1;
       wi.backward(s);
       //backward_connected_layer(wi, @s);
 
@@ -387,15 +779,17 @@ begin
       gradient_array(_f.data, outputStep, acLOGISTIC, temp.Data);
       temp.CopyTo(wf.delta, offset);
       //copy_cpu(l.outputs * l.batch, l.temp_cpu, 1, wf.delta, 1);
+      //if (i = 0) then
+      //  s.delta :=  nil
+      //else begin
+      //  s.delta     := @delta;
+      //  s.deltaStep := i-1;
+      //  //dh := l.delta-l.outputs * l.batch;
+      //end;
       s.input := @prevState;
-      if (i = 0) then
-        s.delta :=  nil
-      else begin
-        s.delta     := @delta;
-        s.deltaStep := i-1;
-        //dh := l.delta-l.outputs * l.batch;
-      end;
+      s.delta := dh;
       s.inputStep := 0;
+      s.deltaStep := i-1;
       wf.backward(s);
 
       temp.CopyTo(uf.delta, offset);
@@ -439,7 +833,7 @@ begin
   ui.reGroup(steps*batch);
   ug.reGroup(steps*batch);
   uo.reGroup(steps*batch);
-
+done:
   {$ifdef USE_TELEMETRY}
   if benchmark then metrics.backward.finish(layerType);
   {$endif}
@@ -602,6 +996,7 @@ end;
 procedure TLSTMLayer.backwardGPU(var state: TNNetState);
 var s : TNNetState;
   i, outputStep, offset:SizeInt;
+  dh:^TSingleTensor;
 begin
   {$ifdef USE_TELEMETRY}
   if benchmark then metrics.backward.start(layerType);
@@ -731,15 +1126,16 @@ begin
       ocl.copy(outputStep, temp.devData, 0, 1, wo.delta.devData, offset, 1);
       //temp.copyTo(wo.delta, offset);
       if (i = 0) then
-        s.delta :=  nil
+        dh :=  nil
       else begin
-        s.delta     := @delta;
-        s.deltaStep := i-1;
+        dh     := @delta;
+        //s.deltaStep := i-1;
         //dh := l.delta-l.outputs * l.batch;
       end;
       s.input := @prevState;
-      //s.delta := @dh;
+      s.delta := dh;
       s.inputStep:=0;
+      s.deltaStep := i-1;
       wo.backwardGPU(s);
 
       ocl.copy(outputStep, temp.devData, 0, 1, uo.delta.devData, offset, 1);
@@ -763,16 +1159,17 @@ begin
       {$endif}
       ocl.copy(outputStep, temp.devData, 0, 1, wg.delta.devData, offset, 1);
       //temp.copyTo(wg.delta, offset);
-      if (i = 0) then
-        s.delta :=  nil
-      else begin
-        s.delta     := @delta;
-        s.deltaStep := i-1;
-        //dh := l.delta-l.outputs * l.batch;
-      end;
+      //if (i = 0) then
+      //  s.delta :=  nil
+      //else begin
+      //  s.delta     := @delta;
+      //  s.deltaStep := i-1;
+      //  //dh := l.delta-l.outputs * l.batch;
+      //end;
       s.input := @prevState;
-      //s.delta := dh_cpu;
+      s.delta := dh;
       s.inputstep :=0;
+      s.deltaStep := i-1;
       wg.backwardGPU(s);
 
       ocl.copy(outputStep, temp.devData, 0, 1, ug.delta.devData, offset, 1);
@@ -796,16 +1193,17 @@ begin
       {$endif}
       ocl.copy(outputStep, temp.devData, 0, 1, wi.delta.devData, offset, 1);
       //temp.copyTo(wi.delta, offset);
-      if (i = 0) then
-        s.delta :=  nil
-      else begin
-        s.delta     := @delta;
-        s.deltaStep := i-1;
-        //dh := l.delta-l.outputs * l.batch;
-      end;
+      //if (i = 0) then
+      //  s.delta :=  nil
+      //else begin
+      //  s.delta     := @delta;
+      //  //s.deltaStep := i-1;
+      //  //dh := l.delta-l.outputs * l.batch;
+      //end;
       s.input := @prevState;
-      //s.delta := l.dh_cpu;
+      s.delta := dh;
       s.inputStep := 0;
+      s.deltaStep := i-1;
       wi.backwardGPU(s);
 
       ocl.copy(outputStep, temp.devData, 0, 1, ui.delta.devData, offset, 1);
@@ -829,15 +1227,17 @@ begin
       {$endif}
       ocl.copy(outputStep, temp.devData, 0, 1, wf.delta.devData, offset, 1);
       //temp.CopyTo(wf.delta, offset);
+      //if (i = 0) then
+      //  s.delta :=  nil
+      //else begin
+      //  s.delta     := @delta;
+      //  s.deltaStep := i-1;
+      //  //dh := l.delta-l.outputs * l.batch;
+      //end;
       s.input := @prevState;
-      if (i = 0) then
-        s.delta :=  nil
-      else begin
-        s.delta     := @delta;
-        s.deltaStep := i-1;
-        //dh := l.delta-l.outputs * l.batch;
-      end;
+      s.delta := dh;
       s.inputStep := 0;
+      s.deltaStep := i-1;
       wf.backwardGPU(s);
 
       ocl.copy(outputStep, temp.devData, 0, 1, uf.delta.devData, offset, 1);
