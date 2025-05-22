@@ -24,7 +24,7 @@
             <Filename Value="CIFAR10Conv"/>
           </Target>
           <SearchPaths>
-            <OtherUnitFiles Value="..\..\..\source;..\..\..\source\3rdparty\cudnn\source;..\..\..\source\3rdparty\clblast\source;..\..\..\source\3rdparty\oneAPI\mkl\source"/>
+            <OtherUnitFiles Value="..\..\..\source;..\..\..\source\3rdparty\cuda\source;..\..\..\source\3rdparty\clblast\source;..\..\..\source\3rdparty\oneAPI\mkl\source"/>
             <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Parsing>
@@ -50,11 +50,11 @@
           <Other>
             <CustomOptions Value="-CfAVX2
 -OpCOREAVX2
--dUSE_OPENCL
 -dUSE_AVX2
 -dUSE_MKL
 -dUSE_MULTITHREADING
--dUSE_TELEMETRY"/>
+-dUSE_TELEMETRY
+-dUSE_CUDART"/>
             <OtherDefines Count="11">
               <Define0 Value="USE_OPENCL"/>
               <Define1 Value="USE_AVX2"/>
@@ -114,6 +114,11 @@
         <IsPartOfProject Value="True"/>
         <UnitName Value="nRNNLayer"/>
       </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\nncuda.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="nnCuda"/>
+      </Unit>
     </Units>
   </ProjectOptions>
   <CompilerOptions>
@@ -123,7 +128,7 @@
       <Filename Value="CIFAR10Conv"/>
     </Target>
     <SearchPaths>
-      <OtherUnitFiles Value="..\..\..\source;..\..\..\source\3rdparty\clblast\source;..\..\..\source\3rdparty\cudnn\source;..\..\..\source\3rdparty\oneAPI\mkl\source"/>
+      <OtherUnitFiles Value="..\..\..\source;..\..\..\source\3rdparty\clblast\source;..\..\..\source\3rdparty\cuda\source;..\..\..\source\3rdparty\oneAPI\mkl\source"/>
       <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
     </SearchPaths>
     <Parsing>
@@ -152,11 +157,11 @@
     <Other>
       <CustomOptions Value="-CfAVX2
 -OpCOREAVX2
--dUSE_OPENCL
 -dUSE_AVX2
 -dUSE_MULTITHREADING
--dUSE_TELEMETRY"/>
-      <OtherDefines Count="11">
+-dUSE_TELEMETRY
+-dUSE_CUDART"/>
+      <OtherDefines Count="12">
         <Define0 Value="USE_OPENCL"/>
         <Define1 Value="USE_AVX2"/>
         <Define2 Value="USE_OPENBLAS"/>
@@ -168,6 +173,7 @@
         <Define8 Value="CL_BLAST"/>
         <Define9 Value="BIG_MATRECIES"/>
         <Define10 Value="USE_CUDNN"/>
+        <Define11 Value="USE_CUDART"/>
       </OtherDefines>
     </Other>
   </CompilerOptions>

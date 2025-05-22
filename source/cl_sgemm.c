@@ -1,6 +1,6 @@
 #pragma OPENCL EXTENSION cl_khr_fp16 : enable
 #define nfloat  float
-#define sEPSILON 0.000001f
+#define sEPSILON 0.0000001f
 
 
 /*

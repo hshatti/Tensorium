@@ -6,7 +6,12 @@ unit nSoftmaxLayer;
 interface
 
 uses
-  SysUtils, Math, nTensors, ntypes, nBaseLayer;
+  SysUtils, Math, nTensors, ntypes, nBaseLayer
+
+  {$if defined(USE_CUDART)}
+  , nnCuda
+  {$endif}
+  ;
 
 type
 
@@ -22,11 +27,13 @@ type
     procedure setTrain(ATrain: boolean); override;
     procedure forward(var state: TNNetState); override;
     procedure backward(var state: TNNetState); override;
-{$ifdef USE_OPENCL}
+{$if defined(USE_OPENCL)}
     procedure forwardGPU(var state: TNNetState); override;
     procedure backwardGPU(var state: TNNetState); override;
+{$elseif defined(USE_CUDART)}
+    procedure forwardGPU(var state: TNNetState);  override;
+    procedure backwardGPU(var state: TNNetState); override;
 {$endif}
-  private
     class procedure softmaxBatch(const input: PSingle; const n:SizeInt; const batch, batch_size, groups, group_size, stride: SizeInt; const temp: single; const output: PSingle); static;
     class procedure softmaxCrossEntropy(const pred, truth: TSingleTensor; var delta, error: TSingleTensor);  static;
 
@@ -171,7 +178,7 @@ begin
   {$endif}
 end;
 
-{$ifdef USE_OPENCL}
+{$if defined(USE_OPENCL)}
 procedure TSoftmaxLayer.forwardGPU(var state: TNNetState);
 var t1, t2, t3 :TSingleTensor;
 var
@@ -255,6 +262,91 @@ begin
     {$ELSE}
     );
     {$ENDIF}
+
+  //backward(state);
+  //state.delta.pullFromDevice(t);
+  //writeln(state.index,' BW SOFTMAX sumSqrDiff state.delta : ', t.sumSqrDiff(delta):1:6);
+  //readln;
+  //ocl.waitForEvents(batch, pointer(events));
+  //ocl.finish();
+  {$ifdef USE_TELEMETRY}
+  if benchmark then metrics.backward.finish(layerType);
+  {$endif}
+end;
+{$elseif defined(USE_CUDART)}
+procedure TSoftmaxLayer.forwardGPU(var state: TNNetState);
+var t1, t2, t3 :TSingleTensor;
+var
+  i, count, group_size: SizeInt;
+  t:TSingleTensor;
+begin
+  {$ifdef USE_TELEMETRY}
+   if benchmark then metrics.forward.start(layerType);
+  {$endif}
+
+  output.setCUDA();
+  loss.setCUDA;
+  delta.setCUDA;
+
+  if assigned(softmaxTree) then begin
+      count := 0;
+      for i := 0 to softmaxTree[0].groups -1 do begin
+          group_size := softmaxTree[0].group_size[i];
+          cuda.softmaxBatch(group_size, state.input.devData, count, batch, inputs, 1, 0, 1, temperature, output.devData, count);
+
+          inc(count , group_size)
+      end
+  end else
+      cuda.softmaxBatch(inputs div groups, state.input.devData, 0, batch, inputs, groups, inputs div groups, 1, temperature, output.devData, 0
+        {$IFDEF CL_EVENTS}
+        , 1, pointer(state.events), pointer(state.events));
+        {$ELSE}
+        );
+        {$ENDIF}
+  //ocl.waitForEvents(batch, pointer(events));
+  //ocl.finish();
+
+  if assigned(state.truth.data) and not noloss then begin
+    if not state.truth.wasGPU() then
+      state.truth.pushToDevice();
+    cuda.crossEntropySoftmax(output.size(), output.devData, state.truth.devData, delta.devData, loss.devData
+      {$IFDEF CL_EVENTS}
+      , 1, pointer(state.events), pointer(state.events));
+      {$ELSE}
+      );
+      {$ENDIF}
+
+    //ocl.finish();
+    //ocl.waitForEvents(batch, pointer(events));
+    //softmaxCrossEntropy(output, state.truth, delta, loss);
+    //delta.pullFromDevice(t);
+    //writeln(state.index,' FW SOFTMAX sumSqrDelta : ', t.sumSqrDiff(delta):1:6);
+    //readln;
+    loss.pullFromDevice();
+    cost[0] := loss.Sum();
+  end;
+
+  //output.pullFromDevice(t1);
+  //forward(state);
+  //t1.printStat();
+  //output.printStat();
+
+  {$ifdef USE_TELEMETRY}
+   if benchmark then metrics.forward.finish(layerType);
+  {$endif}
+end;
+
+procedure TSoftmaxLayer.backwardGPU(var state: TNNetState);
+var t: TSingleTensor;
+begin
+  {$ifdef USE_TELEMETRY}
+   if benchmark then metrics.backward.start(layerType);
+  {$endif}
+
+  //if not state.delta.wasGPU() then state.delta.pushToDevice();
+  if not delta.wasGPU() then delta.pushToDevice();
+
+  cuda.addvv(delta.size(), delta.devData, 0, 1, state.delta.devData, 0, 1, state.delta.devData, 0, 1);
 
   //backward(state);
   //state.delta.pullFromDevice(t);

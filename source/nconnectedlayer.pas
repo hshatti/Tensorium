@@ -8,11 +8,14 @@ interface
 uses
   SysUtils, Math
   ,ntensors, NTypes, nBaseLayer
-{$ifdef USE_OPENCL}
+{$if defined (USE_OPENCL)}
+  , OpenCL
   {$ifdef CL_BLAST} , clblast {$endif}
+{$elseif defined(USE_CUDART)}
+  , cudarttypes, cudart, cublas_api, nnCuda
 {$endif}
   {$ifdef USE_TELEMETRY}
-  , nOpMetrics, OpenCL
+  , nOpMetrics
   {$endif}
   ;
 
@@ -29,7 +32,7 @@ type
     procedure DeNormalize;
     procedure update(const args: TUpdateArgs); override;
     function getWorkspaceShape: TArray<SizeInt>; override;
-    {$ifdef USE_OPENCL}
+    {$if defined(USE_OPENCL) or defined(USE_CUDART)}
     procedure forwardGPU(var state: TNNetState);  override;
     procedure backwardGPU(var state: TNNetState); override;
     procedure updateGPU(const args: TUpdateArgs); override;
@@ -74,6 +77,7 @@ begin
     rolling_mean        := TSingleTensor.Create([outputs]);
     rolling_variance    := TSingleTensor.Create([outputs]);
     scales              := TSingleTensor.Create([outputs]);
+    scales.fill(1.0);
   end;
   //writeln('FC ', steps,' X ', batch, ' X ', inputs);
   //readln
@@ -167,7 +171,6 @@ begin
           //mean_cpu(output.data , batch, outputs, 1, mean.data);
           //variance_cpu(output.data , mean, batch, outputs, 1, variance.data);
           output.MeansAndVars(mean, variance, offset, outputStep);
-
           //scal_cpu(outputs, 0.95, rolling_mean, 1);
           //axpy_cpu(outputs, 0.05, mean, 1, rolling_mean, 1);
           rolling_mean.Multiply(0.95);
@@ -180,10 +183,8 @@ begin
 
           //copy_cpu(l.outputs * l.batch, l.output, 1, l.x, 1);
           output.CopyTo(x, offset, 1, offset, 1, outputStep);
-
           //normalize_cpu(output, mean, variance, batch, outputs, 1);
           output.Normalize(mean, variance, offset, outputStep);
-
           //copy_cpu(l.outputs * l.batch, l.output, 1, l.x_norm, 1)
           output.copyTo(x_norm, offset, 1, offset, 1, outputStep) ;
       end else
@@ -354,7 +355,7 @@ begin
   result := nil
 end;
 
-{$ifdef USE_OPENCL}
+{$if defined(USE_OPENCL)}
 //const clearscr=#$1B'[2J'#$1B'[2;1H';
 procedure TConnectedLayer.forwardGPU(var state: TNNetState);
 var outputStep, inputStep, offset:SizeInt;
@@ -410,7 +411,6 @@ begin
           {$ENDIF}
   {$ENDIF}
 
-
   if isBatchNormalized then begin
       {$ifdef USE_TELEMETRY}
       //ocl.waitForEvents(batch, pointer(events));
@@ -430,9 +430,10 @@ begin
           ocl.normalize(mean.Size(), outputStep, output.groups, mean.devData, 1, variance.devData, 1, output.devData, offset);
           ocl.copy(outputStep, output.devData, offset, 1, x_norm.devData, offset, 1);
       end else begin
-
           ocl.normalize(rolling_mean.Size(), outputStep, output.Groups, rolling_mean.devData, 1, rolling_variance.devData, 1, output.devData, offset);
       end;
+      //ocl.forwardScale(outputStep, output.devData, offset, scales.size(), scales.devData, 1, output.Groups);
+      //ocl.forwardBias(outputStep, output.devData, offset, biases.size(), biases.devData, 1, output.Groups);
       ocl.forwardScaleAdd(outputStep, output.devData, offset, scales.size(), scales.devData, biases.devData, 1, output.Groups);
 
       {$ifdef USE_TELEMETRY}
@@ -672,6 +673,240 @@ begin
 
   {$ifdef USE_TELEMETRY}
   ocl.finish();
+  if benchmark then metrics.update.finish(layerType);
+  {$endif}
+end;
+
+{$elseif defined(USE_CUDART)}
+procedure TConnectedLayer.forwardGPU(var state: TNNetState);
+var outputStep, inputStep, offset:SizeInt;
+begin
+  {$ifdef USE_TELEMETRY}
+  if benchmark
+     //and not metrics.forward.isSubPropagation()
+     then
+     metrics.forward.start(layerType);
+  {$endif}
+
+  inputStep  := batch * inputs;
+  outputStep := batch * outputs;
+  offset   := state.step*outputStep;
+  assert(state.input^.size() >= (state.inputStep+1)*inputStep, '[TConnectedLayer.ForwardGPU] inputStep out of range!');
+  assert(output.size() >= (state.step+1)*outputStep, '[TConnectedLayer.ForwardGPU] step out of range!');
+  assert(weights.Size() = inputs*outputs, '[TConnectedLayer.ForwardGPU] incorrect weights shape!');
+
+  if not state.input.wasGPU() then  begin
+      state.input.pushToDevice;
+  end;
+  if not weights.wasGPU() then  begin
+      weights.pushToDevice;
+  end;
+  if not biases.wasGPU() then  begin
+      biases.pushToDevice;
+  end;
+  output.setCUDA;
+
+  cuda.gemm(false, true
+    , batch, outputs, inputs, 1.0
+    , state.input.devData, state.inputStep*inputStep, inputs
+    , weights.devData    , 0, inputs
+    , 0.0, output.devData  , offset, outputs
+  );
+
+
+  if isBatchNormalized then begin
+      {$ifdef USE_TELEMETRY}
+      if benchmark then metrics.forward.start(ltBATCHNORM);
+      {$endif}
+      if not scales.wasGPU() then scales.pushToDevice;
+      if not rolling_mean.wasGPU() then rolling_mean.pushToDevice;
+      if not rolling_variance.wasGPU() then rolling_variance.pushToDevice;
+
+      if state.isTraining then begin
+          cuda.meanAndVars(outputStep, mean.Size(), output.Groups, output.devData, offset, mean.devData, variance.devData);
+          cuda.scale(rolling_mean.size(), 0.95, rolling_mean.devData, 1);
+          cuda.axpy(rolling_mean.Size(), 0.05, mean.devData, 0, 1, rolling_mean.devData, 0, 1);
+          cuda.scale(rolling_variance.Size(), 0.95, rolling_variance.devData, 1);
+          cuda.axpy(rolling_variance.size(), 0.05, variance.devData, 0, 1, rolling_variance.devData, 0, 1);
+          cuda.copy(outputStep, output.devData, offset, 1, x.devData, offset, 1);
+          cuda.normalize(mean.Size(), outputStep, output.groups, mean.devData, 1, variance.devData, 1, output.devData, offset);
+          cuda.copy(outputStep, output.devData, offset, 1, x_norm.devData, offset, 1);
+      end else begin
+          cuda.normalize(rolling_mean.Size(), outputStep, output.Groups, rolling_mean.devData, 1, rolling_variance.devData, 1, output.devData, offset);
+      end;
+      cuda.forwardScaleAdd(outputStep, output.devData, offset, scales.size(), scales.devData, biases.devData, 1, output.Groups);
+
+      {$ifdef USE_TELEMETRY}
+      cuda.finish();
+      if benchmark then metrics.forward.finish(ltBATCHNORM);
+      {$endif}
+  end else begin
+    cuda.forwardBias(outputStep, output.devData, offset, biases.size(), biases.devData, 1, output.groups);
+  end;
+
+  {$ifdef USE_TELEMETRY}
+  if benchmark then metrics.act.start(ActivationType);
+  {$endif}
+  cuda.ActivateArray(outputStep, output.devData, offset, longint(ActivationType));
+  {$ifdef USE_TELEMETRY}
+  cuda.finish();
+  if benchmark then metrics.act.finish(ActivationType);
+  {$endif}
+
+  {$ifdef USE_TELEMETRY}
+  if benchmark
+     //and not metrics.forward.isSubPropagation()
+     then metrics.forward.finish(layerType);
+  {$endif}
+end;
+
+procedure TConnectedLayer.backwardGPU(var state: TNNetState);
+var// t:TSingleTensor;
+  outStepSize, inStepSize, outOffset: SizeInt;
+  t1, t2 :TSingleTensor;
+  n1 :TSizeIntTensor;
+begin
+  {$ifdef USE_TELEMETRY}
+  if benchmark
+     //and not metrics.forward.isSubPropagation()
+     then
+     metrics.backward.start(layerType);
+  {$endif}
+  outStepSize := batch * outputs;
+  inStepSize  := batch * inputs;
+  outOffset   := state.step * outStepSize;
+
+  assert((state.inputStep>=0) and (state.step>=0), '[TConnectedLayer.backwardGPU] state step values must be positive!');
+  assert(delta.size() >= (state.step + 1) * outStepSize, '[TConnectedLayer.backwardGPU] step out of range!');
+  assert(state.input.size() >= (state.inputStep + 1)*inStepSize, '[TConnectedLayer.backwardGPU] inputStep out of range!');
+
+  if not delta.wasGPU() then delta.pushToDevice;
+  if not state.input.wasGPU() then state.input.pushToDevice;
+  if not output.wasGPU() then output.pushToDevice;
+  if not bias_updates.wasGPU() then bias_updates.pushToDevice;
+  if not weight_updates.wasGPU() then weight_updates.pushToDevice;
+
+
+  {$ifdef USE_TELEMETRY}
+  if benchmark then metrics.grad.start(ActivationType);
+  {$endif}
+  cuda.DeriveArray(outStepSize, output.devData, outOffset, longint(ActivationType), delta.devData
+  {$IFDEF CL_EVENTS}
+  , 1, pointer(state.events), pointer(state.events));
+  {$ELSE}
+  );
+  {$ENDIF}
+  {$ifdef USE_TELEMETRY}
+  cuda.finish();
+  if benchmark then metrics.grad.finish(ActivationType);
+  {$endif}
+  //cuda.waitForEvents(batch, pointer(events));
+  //cuda.finish();
+
+  cuda.backwardBias(bias_updates.size(), bias_updates.devData, outStepSize, delta.devData, outOffset, 1, batch
+  {$IFDEF CL_EVENTS}
+  , 1, pointer(state.events), pointer(state.events));
+  {$ELSE}
+  );
+  {$ENDIF}
+  //cuda.waitForEvents(batch, pointer(events));
+
+  if isBatchNormalized {and (batch > 1)} then begin
+      {$ifdef USE_TELEMETRY}
+      metrics.backward.start(ltBATCHNORM);
+      {$endif}
+      //scale_updates.addDots(x_norm, delta);
+      //delta.add(scales);
+      //TSingleTensor.MeansAndVarsDelta(delta, x, mean, variance, mean_delta, variance_delta);
+      //TSingleTensor.normalizeDelta(x, mean, variance, mean_delta, variance_delta, delta);
+
+      cuda.addDots(outStepSize, scale_updates.Size(), delta.groups, x_norm.devData, delta.devData, outOffset, scale_updates.devData);
+      cuda.forwardScale(outStepSize, delta.devData, outOffset, scales.Size(), scales.devData, 1, delta.groups);
+      cuda.meansAndVarsDelta(outStepSize, mean.size(), delta.groups, delta.devData, x.devData, outOffset, mean.devData, variance.devData, mean_delta.devData, variance_delta.devData);
+      cuda.normalizeDelta(outStepSize, mean.size(), delta.groups, delta.devData, x.devData, outOffset, mean.devData, variance.devData, mean_delta.devData, variance_delta.devData);
+      {$ifdef USE_TELEMETRY}
+      cuda.finish();
+      metrics.backward.finish(ltBATCHNORM);
+      {$endif}
+  end;
+
+//
+  cuda.gemm(true, false
+    , outputs, inputs, batch, 1
+    , delta.devData, outOffset, outputs
+    , state.input.devData, state.inputStep*inStepSize, inputs
+    , 1, weight_updates.devData, 0, inputs
+    );
+
+  if assigned(state.delta) and assigned(state.delta^.devData) then begin
+      assert(state.delta.size() >= (state.deltaStep + 1)*inStepSize, '[TConnectedLayer.backwardGPU] inputStep out of range!');
+
+      if not weights.wasGPU then weights.pushToDevice;
+      //if not state.delta.wasGPU() then state.delta.pushToDevice;
+      cuda.gemm( false, false
+          , batch, inputs, outputs, 1
+          , delta.devData, outOffset, outputs
+          , weights.devData, 0, inputs
+          , 1, state.delta.devData, state.deltaStep*inStepSize, inputs
+          );
+      //cuda.waitForEvents(batch, pointer(events));
+      //cuda.finish();
+
+  end ;
+
+  {$ifdef USE_TELEMETRY}
+  if benchmark
+     //and not metrics.forward.isSubPropagation()
+     then
+     metrics.backward.finish(layerType);
+  {$endif}
+
+end;
+
+procedure TConnectedLayer.updateGPU(const args: TUpdateArgs);
+var t : TSingleTensor;
+begin
+  {$ifdef USE_TELEMETRY}
+  if benchmark then metrics.update.start(layerType);
+  {$endif}
+
+  if not biases.wasGPU() then biases.pushToDevice;
+  if not bias_updates.wasGPU() then bias_updates.pushToDevice;
+  if not weights.wasGPU() then weights.pushToDevice;
+  if not weight_updates.wasGPU() then weight_updates.pushToDevice;
+
+  cuda.axpy(biases.size(), args.learningRate / args.batch, bias_updates.devData, 0, 1, biases.devData, 0, 1);
+  //cuda.waitForEvents(batch, pointer(events));
+  //cuda.finish();
+
+  cuda.scale(bias_updates.size(), args.momentum, bias_updates.devData, 1);
+  //cuda.waitForEvents(batch, pointer(events));
+  //cuda.finish();
+
+  cuda.axpy(weight_updates.size(), -args.decay * args.batch, weights.devData, 0, 1, weight_updates.devData, 0, 1);
+  //cuda.waitForEvents(batch, pointer(events));
+  //cuda.finish();
+
+  cuda.axpy(weights.size(), args.learningRate / args.batch, weight_updates.devData, 0, 1, weights.devData, 0, 1);
+  //cuda.waitForEvents(batch, pointer(events));
+  //cuda.finish();
+
+  cuda.scale(weight_updates.size(), args.momentum, weight_updates.devData, 1);
+  //cuda.waitForEvents(batch, pointer(events));
+  //cuda.finish();
+
+  if isBatchNormalized {and (batch > 1)} then begin
+      //scales.axpy(args.learningRate / args.batch, scale_updates);
+      //scale_updates.Multiply(args.momentum);
+      cuda.axpy(scales.size(), args.learningRate / args.batch, scale_updates.devData, 0, 1, scales.devData, 0, 1);
+      cuda.scale(scale_updates.size(), args.momentum, scale_updates.devData, 1);
+  end;
+
+  //update(args);
+  inherited ;
+
+  {$ifdef USE_TELEMETRY}
+  cuda.finish();
   if benchmark then metrics.update.finish(layerType);
   {$endif}
 end;

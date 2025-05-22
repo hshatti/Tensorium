@@ -24,7 +24,7 @@
             <Filename Value="MNISTConnected"/>
           </Target>
           <SearchPaths>
-            <OtherUnitFiles Value="..\..\..\source;..\..\..\source\3rdparty\oneAPI\mkl\source;..\..\..\source\3rdparty\openblas\source;..\..\..\source\3rdparty\cudnn\source"/>
+            <OtherUnitFiles Value="..\..\..\source;..\..\..\source\3rdparty\oneAPI\mkl\source;..\..\..\source\3rdparty\openblas\source;..\..\..\source\3rdparty\cuda\source"/>
             <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <CodeGeneration>
@@ -46,7 +46,7 @@
             <CustomOptions Value="-dUSE_TELEMETRY
 -dUSE_AVX2
 -dUSE_OPENCL"/>
-            <OtherDefines Count="8">
+            <OtherDefines Count="9">
               <Define0 Value="USE_TELEMETRY"/>
               <Define1 Value="USE_AVX2"/>
               <Define2 Value="USE_MULTITHREADING"/>
@@ -55,6 +55,7 @@
               <Define5 Value="USE_MKL"/>
               <Define6 Value="BIG_MATRECIES"/>
               <Define7 Value="USE_OPENBLAS"/>
+              <Define8 Value="USE_CUDART"/>
             </OtherDefines>
           </Other>
         </CompilerOptions>
@@ -81,7 +82,7 @@
       <Filename Value="MNISTConnected"/>
     </Target>
     <SearchPaths>
-      <OtherUnitFiles Value="..\..\..\source;..\..\..\source\3rdparty\clblast\source;..\..\..\source\3rdparty\openblas\source;..\..\..\source\3rdparty\oneAPI\mkl\source"/>
+      <OtherUnitFiles Value="..\..\..\source;..\..\..\source\3rdparty\clblast\source;..\..\..\source\3rdparty\openblas\source;..\..\..\source\3rdparty\oneAPI\mkl\source;..\..\..\source\3rdparty\cuda\source"/>
       <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
     </SearchPaths>
     <Parsing>
@@ -111,7 +112,7 @@
 -dUSE_AVX2
 -dUSE_MULTITHREADING
 -dUSE_OPENCL"/>
-      <OtherDefines Count="8">
+      <OtherDefines Count="9">
         <Define0 Value="USE_TELEMETRY"/>
         <Define1 Value="USE_AVX2"/>
         <Define2 Value="USE_MULTITHREADING"/>
@@ -120,6 +121,7 @@
         <Define5 Value="USE_MKL"/>
         <Define6 Value="BIG_MATRECIES"/>
         <Define7 Value="USE_OPENBLAS"/>
+        <Define8 Value="USE_CUDART"/>
       </OtherDefines>
     </Other>
   </CompilerOptions>

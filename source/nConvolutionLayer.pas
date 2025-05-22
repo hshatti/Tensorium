@@ -244,7 +244,7 @@ begin
           else
               begin
                   scales := TSingleTensor.Create([filters]);
-                  scales.fill(1);
+                  scales.fill(1.0);
                   if train then
                       begin
                           scales_ema := TSingleTensor.Create([filters]);

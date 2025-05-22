@@ -14,11 +14,21 @@ unit OpenCLHelper;
 interface
 
 uses
-  Classes, SysUtils, {$ifdef DARWIN}CL {$else} OpenCL{$endif} ;
+  Classes, SysUtils,
+  {$if defined(DARWIN) or defined(MACOS)}
+  CL
+  {$else}
+  OpenCL
+  {$endif}
+  ;
 
 const
   cInfoSize=$7fff;
+// missing CL constants
   MAX_EVENTS_COUNT = $100;
+  CL_QUEUE_SIZE    = $1094;
+  CL_KERNEL_PRIVATE_MEM_SIZE                  = $11B4;
+
 
 type
 {$if not declared(size_t)}
@@ -212,7 +222,7 @@ type
     property isBuilt:boolean read FIsBuilt;
     property queueInOrder: boolean read getQueueInOrder write SetQueueInOrder;
     function createDeviceBuffer(const aByteSize:size_t; const aAccess:TCLMemAccess = maReadWrite; const fromHostMem:Pointer=nil):cl_mem;
-    procedure freeDeviceBuffer(aMem:cl_mem);
+    procedure freeDeviceBuffer(var aMem:cl_mem);
     procedure readBuffer(const clMem:cl_mem; const bufferSize:size_t; const buffer:pointer; const offset:SizeInt = 0; aQueue: cl_command_queue=nil );
     procedure writeBuffer(const clMem: cl_mem; const bufferSize: size_t; const buffer: pointer; const offset:SizeInt = 0; aQueue: cl_command_queue=nil);
     procedure CallKernel(const Index: integer; const GlobalWorkGroups: TArray<size_t> = nil; const params: TArray<Pointer> = nil; const waitEvents:TArray<cl_event> = nil; outEvent:pcl_event = nil);    overload;
@@ -222,7 +232,6 @@ type
 
 
   end;
-
 {$if not declared(clGetKernelArgInfo)}
     cl_kernel_arg_info                         = cl_uint;
 
@@ -242,7 +251,14 @@ type
                      param_name:cl_kernel_arg_info;
                      param_value_size:size_t;
                      param_value:pointer;
-                     param_value_size_ret:psize_t):cl_int;winapi;external;
+                     param_value_size_ret:PUintPtr):cl_int;winapi;external OpenCLlib;
+
+  function clCreateKernelsInProgram(
+    _program      : cl_program;
+    num_kernels   : cl_uint;
+    kernels       : Pcl_kernel;
+    var num_ret   : cl_uint
+    ): cl_int; WINAPI; external OpenCLlib name 'clCreateKernelsInProgram';
 {$endif}
 
 implementation
@@ -755,9 +771,14 @@ begin
   result := clCreateBuffer(FContext, cl_mem_flags(aAccess), aByteSize, fromHostMem, FErr);CheckError();
 end;
 
-procedure TOpenCL.freeDeviceBuffer(aMem: cl_mem);
+procedure TOpenCL.freeDeviceBuffer(var aMem: cl_mem);
+var memobj :cl_mem;
 begin
-  clReleaseMemObject(aMem);CheckError();
+  memobj := aMem;
+  aMem := nil;
+  FErr := clReleaseMemObject(memobj);
+  //FErr := clReleaseMemObject(aMem);
+  CheckError();
 end;
 
 procedure TOpenCL.readBuffer(const clMem: cl_mem; const bufferSize: size_t;
@@ -825,7 +846,7 @@ end;
 procedure TOpenCL.waitForEvents(const N: longword; const events: pcl_event);
 begin
   if N= 0 then exit;
-  FErr := clWaitForEvents(N, events); CheckError();
+  FErr := clWaitForEvents(N, pointer(events)); CheckError();
 end;
 
 procedure TOpenCL.freeEvents(const N: longword; const events: pcl_event);

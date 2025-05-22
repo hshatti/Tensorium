@@ -106,7 +106,7 @@ type
     procedure batchNorm(var state: TNNetState);
     procedure batchNormBack(var state :TNNetState);
     procedure batchNormUpdate(const args : TUpdateArgs);
-    {$ifdef USE_OPENCL}
+    {$if defined(USE_OPENCL) or defined(USE_CUDART)}
     procedure forwardGPU(var state : TNNetState); virtual; abstract;
     procedure backwardGPU(var state : TNNetState); virtual; abstract;
     procedure updateGPU(const args : TUpdateArgs); virtual;
@@ -328,14 +328,6 @@ begin
 
 end;
 
-{$ifdef USE_OPENCL}
-procedure TBaseLayer.updateGPU(const args: TUpdateArgs);
-begin
- //
-end;
-{$endif}
-
-
 procedure TBaseLayer.batchNorm(var state: TNNetState);
 begin
 {$ifdef USE_TELEMETRY}
@@ -413,7 +405,12 @@ begin
   {$endif}
 end;
 
-{$ifdef USE_OPENCL}
+{$if defined(USE_OPENCL)}
+procedure TBaseLayer.updateGPU(const args: TUpdateArgs);
+begin
+ //
+end;
+
 procedure TBaseLayer.batchNormGPU(var state: TNNetState);
 var outputStep, offset:SizeInt;
 begin
@@ -539,7 +536,26 @@ begin
   if benchmark then metrics.update.finish(ltBATCHNORM);
   {$endif}
 end;
+{$elseif defined(USE_CUDART)}
+procedure TBaseLayer.updateGPU(const args: TUpdateArgs);
+begin
+ //
+end;
 
+procedure TBaseLayer.batchNormGPU(var state: TNNetState);
+begin
+
+end;
+
+procedure TBaseLayer.batchNormBackGPU(var state: TNNetState);
+begin
+
+end;
+
+procedure TBaseLayer.batchNormUpdateGPU(const args: TUpdateArgs);
+begin
+
+end;
 {$endif}
 
 { TBaseImageLayer }

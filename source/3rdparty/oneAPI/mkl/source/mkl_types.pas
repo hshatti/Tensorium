@@ -78,7 +78,7 @@ uses types;
     PMKL_UINT64 = ^MKL_UINT64;
     MKL_UINT64 = qword;    
 
-{$ifdef MKL_ILP64}
+{$ifndef MKL_LP64}
 
   { oneMKL ILP64 integer types  }
   {$ifndef MKL_INT}

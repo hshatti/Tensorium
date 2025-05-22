@@ -2,6 +2,7 @@
 
 {$ifdef fpc}
   {$mode delphi}
+  {$PackRecords C}
   {$ModeSwitch typehelpers}
   {$ModeSwitch nestedprocvars}
   {$ModeSwitch advancedrecords}
@@ -16,7 +17,11 @@
 {$excessprecision off}
 {$pointermath on}
 {$WRITEABLECONST ON}
+{$if defined(USE_OPENCL) or defined(USE_CUDART)}
+   {$define USE_GPU}
+{$endif}
 {$define USE_FMA}
+
 {$M+}
 
 interface
@@ -49,12 +54,17 @@ uses Classes, SysUtils, TypInfo, Generics.Defaults, syncobjs, Math
   {$if defined(USE_OPENBLAS)}
   , openblas
   {$endif}
-  {$ifdef USE_OPENCL}
+  {$if defined(USE_OPENCL)}
   //, OpenCL
   , nnOpenCL
     {$ifdef CL_BLAST}
     , clblast
     {$endif}
+  {$elseif defined(USE_CUDART)}
+   , cudarttypes
+   , cudart
+   , cublas_api
+   , nnCuda
   {$endif}
 
   {$if defined(MSWINDoWS)}
@@ -208,7 +218,7 @@ type
   private
   class var
     workspace: TArray<T>;
-    {$ifdef USE_OPENCL}
+    {$if defined(USE_OPENCL)}
     devWorkspace : TCLMemory;
     {$endif}
     defaultDevice: TComputingDevice;
@@ -309,7 +319,8 @@ type
     DynData: TArray<T>;
     {$if defined(USE_OPENCL)}
     devData: TCLMemory;
-    {$elseif defined(USE_CUDA)}
+    {$elseif defined(USE_CUDART)}
+    devData : TCUMem;
     {$endif}
     Groups: SizeInt;
     computingDevice: TComputingDevice;
@@ -570,8 +581,10 @@ type
     function wasGPU(): boolean; inline;
     {$if defined(USE_OPENCL)}
     procedure setOCL;
+    {$elseif defined(USE_CUDART)}
+    procedure setCUDA;
     {$endif}
-    {$if defined(USE_OPENCL)}
+    {$if defined(USE_GPU)}
     procedure setCPU;
     {$endif}
     procedure pushToDevice;
@@ -596,8 +609,10 @@ type
     procedure reShape(const newShape: TSizes; const batch: SizeInt = 0);
     function reSize(const newShape: TSizes; const batch: SizeInt = 0): TTensor<T>;
     function Equal(const tensor: TTensor<T>): boolean;
-    procedure replace(const what, aReplace: T);
-    procedure find(const what: T; var indecies: TArray<SizeInt>);
+    procedure replace(const what, aReplace: T);                            overload;
+    procedure replace(const aIndicies: TSizes; const aValues:TArray<T>);   overload;
+    procedure replace(const aIndicies: TSizes; const AValue:T);            overload;
+    procedure find(const what: T; var indicies: TArray<SizeInt>);
     function indexOf(const val: T): SizeInt; overload;
     function indexOf(const val: T; const tolerance: T): SizeInt; overload;
     function Permute(const newArrange: TSizes; dstTensor: Pointer = nil): TTensor<T>;
@@ -761,7 +776,7 @@ type
       N: SizeInt = 0; const offset: SizeInt = 0); overload;
     procedure Normalize(const aMean, aStdDev: T); overload;
     procedure Normalize(); overload;
-    procedure Normalize(const aMean, aStdDev: TTensor<T>;
+    procedure Normalize(const aMean, aVariance: TTensor<T>;
       const offset: SizeInt = 0; aSize: SizeInt = 0); overload;
     procedure maxNormalize(const aScale: T);
 
@@ -861,7 +876,7 @@ type
       const tile: SizeInt = 1): TArray<SizeInt>; overload;
     function print(const scale: single; const idx: SizeInt): TArray<SizeInt>; overload;
     procedure printStat(N: SizeInt = 0; const offset: SizeInt = 0);
-    {$ifdef USE_OPENCL}
+    {$if defined(USE_GPU)}
     procedure printGpuStat(N: SizeInt=0; const offset:SizeInt =0);
     procedure printGpuSumSqrDiff(N: SizeInt=0; const offset:SizeInt =0);
     procedure printGpuDiff(N: SizeInt=0; const offset:SizeInt =0; const tolerance:T = nothing);
@@ -1106,12 +1121,15 @@ function WriteConsole(hConsoleOutput: THandle; const lpBuffer: Pointer;
 procedure srnd(const v: uint32);
 function rnd(): integer;
 
-{$ifdef USE_OPENCL}
-
-procedure initOpenCL(const platformId :SizeInt=0; const deviceId: SizeInt=0);
-
+{$if defined(USE_OPENCL)}
 var
   ocl    : TNNOpenCL;
+procedure initOpenCL(const platformId :SizeInt=0; const deviceId: SizeInt=0);
+
+{$elseif defined(USE_CUDART)}
+var
+  cuda :TNNCuda;
+procedure initCUDART(const deviceIndex: SizeInt);
 {$endif}
 
 {$ifdef USE_TELEMETRY}
@@ -2509,6 +2527,7 @@ procedure cblas_sgemm(const Order: CBLAS_LAYOUT; const TransA, TransB: CBLAS_TRA
   const C: PSingle; const ldc: SizeInt);
 var
   row, col, i, j: SizeInt;
+  label done;
 begin
 
   {$ifdef _USE_TELEMETRY}
@@ -2520,6 +2539,15 @@ begin
   // M [.A.]  X K [.B.] => M [.C.]
   //   [...]      [...]      [...]
 
+  {$ifdef USE_NVBLAS}
+  // NVBLAS does not work so far
+  // there is no straight forward working example or documentation on how NVIDIA nvblas drop in interception functions that works beyond
+  // providing nvblas.conf and libopenblas files which are already there! ( https://docs.nvidia.com/cuda/nvblas/ ),
+  // we tried many combinations with no success.
+  sgemm_(@transa, @transb, @M, @N, @K, @alpha, A, @lda, B, @ldb, @beta, C, @ldc);
+  //sgemm_(@transa, @transb, @M, @N, @K, @alpha, A, @lda, B, @ldb, @beta, C, @ldc);
+
+  {$else}
 
   if beta <> 1 then
     for i := 0 to M - 1 do
@@ -2535,7 +2563,7 @@ begin
     if AVX2Support then
       gemm_nn_fast(M, N, K, ALPHA, A, lda, B, ldb, C, ldc)
     else
-      {$endif}
+    {$endif}
       sgemm_nn(M, N, K, ALPHA, A, lda, B, ldb, C, ldc)
   else if (TransA = CblasNoTrans) and (TransB = CblasTrans) then
     sgemm_nt(M, N, K, ALPHA, A, lda, B, ldb, C, ldc)
@@ -2543,6 +2571,8 @@ begin
     sgemm_tn(M, N, K, ALPHA, A, lda, B, ldb, C, ldc)
   else if (TransA = CblasTrans) and (TransB = CblasTrans) then
     sgemm_tt(M, N, K, ALPHA, A, lda, B, ldb, C, ldc);
+  {$endif}
+done:
   {$ifdef _USE_TELEMETRY}
   if benchmark then metrics.ops.finish(opGemm);
   {$endif}
@@ -6120,6 +6150,9 @@ begin
   //if computingDevice = cdOpenCL then
   if not noDeviceAllocation then
     devData := ocl.createDeviceBuffer(sz * sizeOf(T), TCLMemAccess.maReadWrite, nil);
+  {$elseif defined(USE_CUDART)}
+  if not noDeviceAllocation then
+    devData := cuda.createDeviceBuffer(sz * sizeOf(T));
   {$endif}
 end;
 
@@ -6127,9 +6160,14 @@ procedure TTensor<T>.Free;
 var
   d: PT;
 begin
-  {$ifdef USE_OPENCL}
+  {$if defined(USE_OPENCL)}
   if assigned(devData) then begin
     ocl.freeDeviceBuffer(devData);
+    devData := nil
+  end;
+  {$elseif defined(USE_CUDART)}
+  if assigned(devData) then begin
+    cudaFree(devData);
     devData := nil
   end;
   {$endif}
@@ -6159,25 +6197,42 @@ end;
 
 
 {$if defined(USE_OPENCL)}
-
 {$ASSERTIONS ON}
 procedure initOpenCL(const platformId: SizeInt; const deviceId: SizeInt);
 begin
   if not assigned(ocl) then
   begin
     ocl := TNNOpenCL.Create(TCLDeviceType.dtALL);
-    ocl.LoadFromFile(GetCurrentDir + '/../../../../NN/source/cl_sgemm.c');
+    ocl.LoadFromFile(GetCurrentDir + '/../../../source/cl_sgemm.c');
   end;
   ocl.ActivePlatformId := platformId;
   ocl.ActiveDeviceId := deviceId;
   if not ocl.isBuilt then ocl.build;
 end;
+{$elseif defined(USE_CUDART)}
+procedure initCUDART(const deviceIndex: SizeInt);
+begin
+  if not assigned(cuda) then
+  begin
+    cuda := TNNCuda.Create(deviceIndex);
+    cuda.loadCUBIN(cuda.compileFile(GetCurrentDir + '/../../../source/cuda_sgemm.cuda'));
+  end;
+end;
+{$endif}
 
+{$if defined(USE_OPENCL)}
 procedure TTensor<T>.setOCL;
 begin
   lastOP := cdOpenCL;
 end;
+{$elseif defined(USE_CUDART)}
+procedure TTensor<T>.setCUDA;
+begin
+  lastOp := cdCUDA;
+end;
+{$endif}
 
+{$if defined(USE_GPU)}
 procedure TTensor<T>.setCPU;
 begin
   lastOp := cdCPU;
@@ -6188,17 +6243,25 @@ procedure TTensor<T>.pushToDevice;
 var
   sz: SizeInt;
 begin
-  {$if defined(USE_OPENCL)}
   {$ifdef USE_TELEMETRY}
   if benchmark then tensorMetrics.start(opHostToDevice);
   {$endif}
+
+  {$if defined(USE_OPENCL)}
   sz := byteSize();
   ocl.writeBuffer(devData, sz, Data);
   //ocl.finish();
   lastOP := cdOpenCL;
+  {$elseif defined(USE_CUDART)}
+  sz := byteSize();
+  //cuda.writeBuffer(devData, sz, Data);
+  SAFE_CALL(cudaMemcpy(devData, data, sz, cudaMemcpyHostToDevice));
+  //ocl.finish();
+  lastOP := cdCUDA;
+  {$endif}
+
   {$ifdef USE_TELEMETRY}
   if benchmark then tensorMetrics.finish(opHostToDevice);
-  {$endif}
   {$endif}
 end;
 
@@ -6206,27 +6269,35 @@ procedure TTensor<T>.pullFromDevice;
 var
   sz: SizeInt;
 begin
-  {$if defined(USE_OPENCL)}
   {$ifdef USE_TELEMETRY}
   if benchmark then tensorMetrics.start(opDeviceToHost);
   {$endif}
+
+  {$if defined(USE_OPENCL)}
   sz := byteSize();
   ocl.readBuffer(devData, sz, Data);
   //ocl.finish();
   lastOP := cdCPU;
+  {$elseif defined(USE_CUDART)}
+  sz := byteSize();
+  //cuda.readBuffer(devData, sz, Data);
+  SAFE_CALL(cudaMemcpy(Data, devData, sz, cudaMemcpyHostToDevice));
+  //ocl.finish();
+  lastOP := cdCPU;
+  {$endif}
+
   {$ifdef USE_TELEMETRY}
   if benchmark then tensorMetrics.finish(opDeviceToHost);
   {$endif}
-  {$endif}
 end;
 
-procedure TTensor<T>.pullFromDevice(var dst: TTensor<T>; N: SizeInt;
-  const offset: SizeInt);
+procedure TTensor<T>.pullFromDevice(var dst: TTensor<T>; N: SizeInt; const offset: SizeInt);
 begin
-  {$if defined(USE_OPENCL)}
   {$ifdef USE_TELEMETRY}
   if benchmark then tensorMetrics.start(opDeviceToHost);
   {$endif}
+
+  {$if defined(USE_GPU)}
   if N = 0 then
     N := size()
   else if not assigned(dst.Data) then
@@ -6236,13 +6307,18 @@ begin
     setLength(dst.dynData, N);
     dst.data := pointer(dst.dynData);
   end;
+  {$if defined(USE_OPENCL)}
   ocl.ReadBuffer(devData, sizeOf(T) * N, dst.Data, sizeOf(T) * offset);
   ocl.CheckError();
+  {$elseif defined(USE_CUDART)}
+  cuda.ReadBuffer(devData + sizeOf(T)*offset, sizeOf(T) * N, dst.Data);
+  {$endif}
   //ocl.finish();
   dst.lastOP := cdCPU;
+  {$endif}
+
   {$ifdef USE_TELEMETRY}
   if benchmark then tensorMetrics.finish(opDeviceToHost);
-  {$endif}
   {$endif}
 end;
 
@@ -6480,6 +6556,12 @@ begin
     if assigned(devData) then ocl.freeDeviceBuffer(devData);
     devData := ocl.createDeviceBuffer(SN * SizeOf(T));
   end;
+  {$elseif defined(USE_CUDART)}
+  //if computingDevice = cdCUDA then
+  if not noDeviceAllocation then begin
+    if assigned(devData) then cuda.freeDeviceBuffer(devData);
+    devData := cuda.createDeviceBuffer(SN * SizeOf(T));
+  end;
   {$endif}
 
   Result := self;
@@ -6510,20 +6592,35 @@ begin
       Data[i] := aReplace;
 end;
 
-procedure TTensor<T>.find(const what: T; var indecies: TArray<SizeInt>);
+procedure TTensor<T>.replace(const aIndicies: TSizes; const aValues: TArray<T>);
+var i:SizeInt;
+begin
+   assert(length(aIndicies)=length(aValues),'[replace] indicies <> values!');
+   for i:=0 to Length(aIndicies)-1 do
+     dyndata[aIndicies[i]] := aValues[i]
+end;
+
+procedure TTensor<T>.replace(const aIndicies: TSizes; const AValue: T);
+var i : sizeInt;
+begin
+  for i:=0 to length(aIndicies)-1 do
+    dyndata[aIndicies[i]] := aValue
+end;
+
+procedure TTensor<T>.find(const what: T; var indicies: TArray<SizeInt>);
 var
   i, p: SizeInt;
 begin
   //if not assigned(compare) then compare := _compare;
-  if not assigned(indecies) then setLength(indecies, Size);
+  if not assigned(indicies) then setLength(indicies, Size);
   p := 0;
   for i := 0 to Size() - 1 do
     if compare(Data[i], what) = 0 then
     begin
-      indecies[p] := i;
+      indicies[p] := i;
       Inc(p);
     end;
-  setLength(indecies, p);
+  setLength(indicies, p);
 end;
 
 function TTensor<T>.indexOf(const val: T): SizeInt;
@@ -7808,29 +7905,21 @@ begin
   if benchmark then tensorMetrics.start(opGemm);
   {$endif}
 
+  M := dstMat.h;
+  K := w;
+  N := mat.w;
+  ldc := dstMat.w;
+
   if transA = CblasTrans then
-  begin
-    M := w;
-    K := h;
-    lda := M;  // h;
-  end
+    lda := M  // h;
   else
-  begin
-    M := h;
-    K := w;
     lda := K;   // w;
-  end;
+
   if transB = CblasTrans then
-  begin
-    N := mat.h;
-    ldb := K;     // mat.h;
-  end
+    ldb := K     // mat.h;
   else
-  begin
-    N := mat.w;
     ldb := N;// mat.w
-  end;
-  ldc := N;
+
 
   case mat.Dimensions of
     1:
@@ -7893,29 +7982,20 @@ begin
   //{$endif}
 
   assert(mat.dimensions <= 2, '[matMul] matrix [b] must have one or two dimensions.');
-  if transA = CblasTrans then
-  begin
-    M := w;
-    K := h;
-    lda := M;  // h;
-  end
-  else
-  begin
-    M := h;
-    K := w;
-    lda := K;   // w;
-  end;
-  if transB = CblasTrans then
-  begin
-    N := mat.h;
-    ldb := K;     // mat.h;
-  end
-  else
-  begin
-    N := mat.w;
-    ldb := N;// mat.w
-  end;
+  M := h;
+  K := w;
+  N := mat.w;
   ldc := N;
+
+  if transA = CblasTrans then
+    lda := M  // h;
+  else
+    lda := K;   // w;
+
+  if transB = CblasTrans then
+    ldb := K     // mat.h;
+  else
+    ldb := N;// mat.w
   if mat.dimensions = 1 then
     Result.resize([M])
   else
@@ -8012,7 +8092,7 @@ var
   mt: boolean;
   aOffset, bOffset: SizeInt;
   t: TSingleTensor;
-  {$ifdef USE_OPENCL}
+  {$if defined(_USE_OPENCL)}
   _A, _B, _C: TCLMemory;
   {$endif}
 begin
@@ -8402,7 +8482,7 @@ begin
   end;
 end;
 
-procedure TTensor<T>.Normalize(const aMean, aStdDev: TTensor<T>;
+procedure TTensor<T>.Normalize(const aMean, aVariance: TTensor<T>;
   const offset: SizeInt; aSize: SizeInt);
 var
   i, blockSize, N: SizeInt;
@@ -8412,7 +8492,7 @@ begin
   if benchmark then tensorMetrics.start(opNormalize);
   {$endif}
   N := aMean.Size();
-  assert(aMean.Size() = aStdDev.Size(),
+  assert(aMean.Size() = aVariance.Size(),
     'NORMALIZE : [Mean] and [StdDev] Tensor sizes do not match.');
   if aSize = 0 then aSize := Size();
   blockSize := aSize div (Groups * N);
@@ -8421,10 +8501,10 @@ begin
   D := Data + offset;
   if blockSize = 1 then
     for i := 0 to Groups - 1 do
-      normvv(N, aMean.Data, 1, aStdDev.Data, 1, D + i * N, 1)
+      normvv(N, aMean.Data, 1, aVariance.Data, 1, D + i * N, 1)
   else
     for i := 0 to Groups - 1 do
-      normblkvv(N, aMean.Data, 1, aStdDev.Data, 1, D + i * blockSize * N, blockSize);
+      normblkvv(N, aMean.Data, 1, aVariance.Data, 1, D + i * blockSize * N, blockSize);
   {$ifdef USE_TELEMETRY}
   if benchmark then tensorMetrics.finish(opNormalize)
   {$endif}
@@ -10636,7 +10716,7 @@ begin
     toStr(stdVal), ', magnitude : ', toStr(magVal), ']');
 end;
 
-{$ifdef USE_OPENCL}
+{$if defined(USE_GPU)}
 procedure TTensor<T>.printGpuStat(N: SizeInt; const offset: SizeInt);
 var tmp : TTensor<T>;
 begin
@@ -10653,7 +10733,9 @@ begin
 end;
 
 procedure TTensor<T>.printGpuDiff(N: SizeInt; const offset: SizeInt; const tolerance: T);
-var delta, temp, temp2:TTensor<T>;
+var delta, temp
+    //, temp2
+    :TTensor<T>;
     ids : TTensor<SizeInt>;
 begin
   if N=0 then N := Size();
@@ -10661,8 +10743,8 @@ begin
   pullFromDevice(temp, N, offset);
 
 // debug temporary,  remove later
-temp2.resize(temp.shape);
-copyTo(temp2, 0, 1, offset, 1, N);
+//temp2.resize(temp.shape);
+//copyTo(temp2, 0, 1, offset, 1, N);
 
   delta.resize(temp.shape);
   subvv(N, data + offset, 1, temp.data, 1, delta.Data, 1);
@@ -11775,11 +11857,15 @@ begin
   //dst.steps := 0;
   dst.Data := nil;
   dst.DynData := nil;
-  {$if defined(USE_OPENCL)}
+  dst.FShape := nil;
+  dst.FDimSizes := nil;
+  dst.FStrides := nil;
+  {$if defined(USE_GPU)}
   dst.devData := nil;
   dst.lastOp := cdCPU;
   {$endif}
   dst.groups := 0;
+  dst.FSize := 0;
   //if assigned(plus) then exit;
 
   P := TypeInfo(T);
@@ -11939,11 +12025,16 @@ begin
   //if assigned(dst.data) then
   //  dst.Data := nil;
 
-  {$if defined(USE_OPENCL)}
+  {$if defined(USE_GPU)}
   if assigned(dst.devData) then
   begin
+    // uncomenting below may cause an exception and some
+    // weird behavious while resizing
+    {$if defined(USE_OPENCL)}
     //ocl.freeDeviceBuffer(dst.devData);
-    //dst.devData := nil;
+    {$elseif defined(USE_CUDART)}
+    //cuda.freeDeviceBuffer(dst.devData);
+    {$endif}
   end;
   {$endif}
 

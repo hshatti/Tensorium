@@ -10,10 +10,16 @@ uses
   , nLogisticLayer, nSoftmaxLayer, nCostLayer, nnet, nChrono, nConvolutionLayer, nUpSampleLayer
   , nModels, Keyboard, nNormalizationLayer, nParser, termesc, steroids
   {$if defined(MSWINDOWS)}
-  , ShellApi, cudnn_graph, cudnn_adv, cudnn_ops, cudnn_cnn
+  , ShellApi
+  //, cudnn_graph
+  //, cudnn_adv
+  //, cudnn_ops
+  //, cudnn_cnn
   {$endif}
   {$if defined(USE_OPENCL)}
   , OpenCLHelper, OpenCL, nnOpenCL, nOpMetrics//
+  {$elseif defined(USE_CUDART)}
+  , nnCuda
   {$endif}
   { you can add units after this };
 
@@ -79,7 +85,7 @@ var
   {$endif}
 begin
   //write(#$1B'[1J');
-{$ifdef USE_OPENCL}
+{$if defined(USE_OPENCL)}
   i:=0;
   j:=0;
   //initOpenCL(i, j);
@@ -123,6 +129,11 @@ begin
   ocl.useBLAS := 2;
   //ocl.queueInOrder:=true;
   writeln('  - out of Order mode : ', not ocl.queueInOrder);
+
+{$elseif defined(USE_CUDART)}
+  initCUDART(0);
+  writeln(cuda.properties.name);
+  cuda.useBLAS := 0;
 
 {$endif}
   sDigits := 6;

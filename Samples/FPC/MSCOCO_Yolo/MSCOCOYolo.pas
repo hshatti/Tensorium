@@ -363,7 +363,7 @@ var
 begin
   //write(#$1B'[1J'#$1B'[1H');
   l := TNNet(state.net).layers[state.index];
-  writeln(state.index:3, ' : ', 100*state.index/darknet.Neural.layerCount():1:1,'%', ' ', l.LayerName);
+  writeln(state.index:3, ' : ', 100*state.index/darknet.Neural.layerCount():1:1,'%', ' ', l.LayerTypeStr);
   //l.output.printStat();
   //repeat
   //  writeln('Enter index to Interrogate Output, or [Enter] for next layer:');

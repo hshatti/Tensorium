@@ -33,9 +33,9 @@ begin
   write(#$1B'[1J'#$1B'[0H');
   writeln('Press [ESC] when the accuracy is enough to test.');
   sleep(500);
-  sDigits := 2;
+  sDigits := 6;
 
-{$ifdef USE_OPENCL}
+{$if defined(USE_OPENCL)}
   TSingleTensor.defaultDevice:=cdOpenCL;
   initOpenCL(0, 0);
   ocl.useBLAS:=0;
@@ -44,14 +44,16 @@ begin
   //ocl.queueInOrder:=true;
   writeln('   - InOrder : ', ocl.queueInOrder);
   sleep(3000);
+{$elseif defined(USE_CUDART)}
+  initCUDART(0);
 {$endif}
   MNIST := TMNISTData.Create('');
   Neural:=TNNet.Create(
     //leNetMNIST
     simpleDenseMNIST
   );
-  Neural.batch:= READ_BATCH;
   Neural.setTraining(true);
+  Neural.batch:= READ_BATCH;
   Neural.learningRate:=0.001;
   Neural.momentum:=0.9;
   neural.decay:=0.0001;
@@ -105,8 +107,10 @@ begin
 
     if j mod READ_MEASURE = READ_MEASURE-1 then begin
       cost := cost / READ_MEASURE ;
-      {$ifdef USE_OPENCL}
+      {$if defined(USE_OPENCL)}
       ocl.finish();
+      output.pullFromDevice();
+      {$elseif defined(USE_CUDART)}
       output.pullFromDevice();
       {$endif}
       output.argMax(Predicted.data);

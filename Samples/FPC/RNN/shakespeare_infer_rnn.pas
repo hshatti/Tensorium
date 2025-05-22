@@ -145,9 +145,13 @@ begin
     input.free;
     parser.free;
 end;
-
+var lastCost :single =0;
+   deltaCost:single =0;
 procedure AfterOptimization(const net:TNNet; const batchId:SizeInt);
+const ROTATION = 16;
 var currBatch : SizeInt;
+  cost : Single;
+
 begin
   {$ifdef USE_TELEMETRY}
   cursorClearScreen();
@@ -161,9 +165,24 @@ begin
   history.DynData[history.Size()-1] := net.cost() / net.batch;
   history.plot();
   currBatch := net.getTrainedBatchs();
+  cost := net.cost()/(net.batch*net.subDivisions);
+  if (deltaCost>0) then begin
+    if (cost-lastCost) / deltaCost >2 then begin
+      writeLn('something wen wrong!');
+      readLn
+    end;
+    writeln('last deltaCost :', deltaCost:2:3, ' current deltaCost :', cost-lastCost:2:3);
+    deltaCost := cost - lastCost;
+    lastCost := cost
+  end else begin
+    deltaCost := cost-deltaCost;
+    lastCost := cost
+  end;
+  lastCost:= cost-lastCost ;
   if (currBatch>0) and (currBatch mod 8=0) then
   begin
-    writeln('batch [', currBatch,'] saving ', SAVE_FILE);
+    writeln('batch [', currBatch,'] saving ', SAVE_FILE, '.', batchId mod ROTATION);
+    parser.saveWeights(SAVE_FILE+'.' + intToStr(batchId mod ROTATION));
     parser.saveWeights(SAVE_FILE);
   end else begin
     curserDown();

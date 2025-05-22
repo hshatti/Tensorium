@@ -30,10 +30,10 @@ type
 
   TCLMemAccess = OpenCLHelper.TCLMemAccess;
 
-  TCLMemory = OpenCL.cl_mem;
+  TCLMemory = cl_mem;
 
   PCLEvent = Pcl_event;
-  TCLEvent = OpenCL.cl_event;
+  TCLEvent = cl_event;
 
   TCLEvents = TArray<TCLEvent>;
 
@@ -189,7 +189,7 @@ procedure TNNOpenCL.ActivateArray(const N: SizeInt; const x: cl_mem;
   const offset: SizeInt; const activation: longint; const events: TCLEvents;
   event: PCLEvent);
 const kernelId = 5;
-var NN:SizeInt;
+//var NN:SizeInt;
 begin
   if activation= 4{longint(acLINEAR)} then exit;
   SetGlobalWorkGroupSizes(N);
@@ -468,15 +468,15 @@ begin
   SetGlobalOffsets(0);
   //NN:=LSize(N);
   //SetLocalWorkGroupSizes(NN);
-  FErr := clSetKernelArg(Kernels[kernelId], 0, SizeOf(src1) , @src1);               CheckError();
-  FErr := clSetKernelArg(Kernels[kernelId], 1, SizeOf(src1Offset) , @src1Offset);   CheckError();
-  FErr := clSetKernelArg(Kernels[kernelId], 2, SizeOf(inca) , @inca);              CheckError();
-  FErr := clSetKernelArg(Kernels[kernelId], 3, SizeOf(src2) , @src2);               CheckError();
-  FErr := clSetKernelArg(Kernels[kernelId], 4, SizeOf(src2Offset) , @src2Offset);   CheckError();
-  FErr := clSetKernelArg(Kernels[kernelId], 5, SizeOf(incb) , @incb);              CheckError();
-  FErr := clSetKernelArg(Kernels[kernelId], 6, SizeOf(dst)  , @dst);               CheckError();
-  FErr := clSetKernelArg(Kernels[kernelId], 7, SizeOf(dstOffset) , @dstOffset);    CheckError();
-  FErr := clSetKernelArg(Kernels[kernelId], 8, SizeOf(incc) , @incc);              CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 0, SizeOf(src1)       , @src1           );   CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 1, SizeOf(src1Offset) , @src1Offset     );   CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 2, SizeOf(inca)       , @inca           );   CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 3, SizeOf(src2)       , @src2           );   CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 4, SizeOf(src2Offset) , @src2Offset     );   CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 5, SizeOf(incb)       , @incb           );   CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 6, SizeOf(dst)        , @dst            );   CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 7, SizeOf(dstOffset)  , @dstOffset      );   CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 8, SizeOf(incc)       , @incc           );   CheckError();
   FErr := clEnqueueNDRangeKernel(
      ActiveQueue, Kernels[kernelId],
      WorkItemDimensions, @GlobalOffsets[0],
@@ -959,23 +959,23 @@ begin
   SetGlobalOffsets(0);
 
   // Sets the kernel arguments
-  FErr := clSetKernelArg(Kernels[kernelId], 0,  sizeOf(aHeight    ), @aHeight    ); checkError();
-  FErr := clSetKernelArg(Kernels[kernelId], 1,  sizeOf(aWidth     ), @aWidth     ); checkError();
-  FErr := clSetKernelArg(Kernels[kernelId], 2,  sizeOf(aChannels  ), @aChannels  ); checkError();
-  FErr := clSetKernelArg(Kernels[kernelId], 3,  sizeOf(col_h     ), @col_h     ); checkError();
-  FErr := clSetKernelArg(Kernels[kernelId], 4,  sizeOf(col_w     ), @col_w     ); checkError();
+  FErr := clSetKernelArg(Kernels[kernelId], 0,  sizeOf(aHeight       ), @aHeight       ); checkError();
+  FErr := clSetKernelArg(Kernels[kernelId], 1,  sizeOf(aWidth        ), @aWidth        ); checkError();
+  FErr := clSetKernelArg(Kernels[kernelId], 2,  sizeOf(aChannels     ), @aChannels     ); checkError();
+  FErr := clSetKernelArg(Kernels[kernelId], 3,  sizeOf(col_h         ), @col_h         ); checkError();
+  FErr := clSetKernelArg(Kernels[kernelId], 4,  sizeOf(col_w         ), @col_w         ); checkError();
   FErr := clSetKernelArg(Kernels[kernelId], 5,  sizeOf(kernelHeight  ), @kernelHeight  ); checkError();
-  FErr := clSetKernelArg(Kernels[kernelId], 6,  sizeOf(kernelWidth  ), @kernelWidth  ); checkError();
+  FErr := clSetKernelArg(Kernels[kernelId], 6,  sizeOf(kernelWidth   ), @kernelWidth   ); checkError();
   FErr := clSetKernelArg(Kernels[kernelId], 7,  sizeOf(padHeight     ), @padHeight     ); checkError();
-  FErr := clSetKernelArg(Kernels[kernelId], 8,  sizeOf(padWidth     ), @padWidth     ); checkError();
-  FErr := clSetKernelArg(Kernels[kernelId], 9,  sizeOf(strideY  ), @strideY  ); checkError();
-  FErr := clSetKernelArg(Kernels[kernelId], 10, sizeOf(strideX  ), @strideX  ); checkError();
-  FErr := clSetKernelArg(Kernels[kernelId], 11, sizeOf(dilationY), @dilationY); checkError();
-  FErr := clSetKernelArg(Kernels[kernelId], 12, sizeOf(dilationX), @dilationX); checkError();
-  FErr := clSetKernelArg(Kernels[kernelId], 13, sizeOf(im        ), @im        ); checkError();
-  FErr := clSetKernelArg(Kernels[kernelId], 14, sizeOf(imOffset  ), @imOffset  ); checkError();
-  FErr := clSetKernelArg(Kernels[kernelId], 15, sizeOf(col       ), @col       ); checkError();
-  FErr := clSetKernelArg(Kernels[kernelId], 16, sizeOf(colOffset ), @colOffset ); checkError();
+  FErr := clSetKernelArg(Kernels[kernelId], 8,  sizeOf(padWidth      ), @padWidth      ); checkError();
+  FErr := clSetKernelArg(Kernels[kernelId], 9,  sizeOf(strideY       ), @strideY       ); checkError();
+  FErr := clSetKernelArg(Kernels[kernelId], 10, sizeOf(strideX       ), @strideX       ); checkError();
+  FErr := clSetKernelArg(Kernels[kernelId], 11, sizeOf(dilationY     ), @dilationY     ); checkError();
+  FErr := clSetKernelArg(Kernels[kernelId], 12, sizeOf(dilationX     ), @dilationX     ); checkError();
+  FErr := clSetKernelArg(Kernels[kernelId], 13, sizeOf(im            ), @im            ); checkError();
+  FErr := clSetKernelArg(Kernels[kernelId], 14, sizeOf(imOffset      ), @imOffset      ); checkError();
+  FErr := clSetKernelArg(Kernels[kernelId], 15, sizeOf(col           ), @col           ); checkError();
+  FErr := clSetKernelArg(Kernels[kernelId], 16, sizeOf(colOffset     ), @colOffset     ); checkError();
 
   // Launches the kernel
   //NN:=LSize(N);
