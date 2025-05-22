@@ -503,7 +503,7 @@ begin
     //end;
     //wait_key_cv(5)
 
-    Result := seen div (batch * subDivisions);
+    //Result := seen div (batch * subDivisions);
 
     if seen mod (batch * subDivisions) = 0 then begin
       update();

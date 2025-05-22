@@ -6166,7 +6166,7 @@ begin
   if not assigned(ocl) then
   begin
     ocl := TNNOpenCL.Create(TCLDeviceType.dtALL);
-    ocl.LoadFromFile(GetCurrentDir + '/../../../../NN/source/cl_sgemm.c');
+    ocl.LoadFromFile(GetCurrentDir + '/../../../source/cl_sgemm.c');
   end;
   ocl.ActivePlatformId := platformId;
   ocl.ActiveDeviceId := deviceId;
