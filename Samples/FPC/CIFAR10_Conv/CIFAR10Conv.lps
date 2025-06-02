@@ -3,13 +3,13 @@
   <ProjectSession>
     <PathDelim Value="\"/>
     <Version Value="12"/>
-    <BuildModes Active="Debug"/>
+    <BuildModes Active="Release"/>
     <Units>
       <Unit>
         <Filename Value="CIFAR10Conv.pas"/>
         <IsPartOfProject Value="True"/>
-        <TopLine Value="147"/>
-        <CursorPos X="32" Y="173"/>
+        <TopLine Value="206"/>
+        <CursorPos X="21" Y="238"/>
         <UsageCount Value="217"/>
         <Loaded Value="True"/>
       </Unit>
@@ -40,7 +40,7 @@
       <Unit>
         <Filename Value="..\..\..\source\termesc.pas"/>
         <IsPartOfProject Value="True"/>
-        <EditorIndex Value="23"/>
+        <EditorIndex Value="27"/>
         <TopLine Value="86"/>
         <CursorPos X="11" Y="103"/>
         <UsageCount Value="205"/>
@@ -50,8 +50,8 @@
         <Filename Value="..\..\..\source\nnOpenCL.pas"/>
         <IsPartOfProject Value="True"/>
         <WindowIndex Value="1"/>
-        <TopLine Value="1099"/>
-        <CursorPos X="70" Y="1065"/>
+        <TopLine Value="296"/>
+        <CursorPos X="3" Y="303"/>
         <UsageCount Value="201"/>
         <Loaded Value="True"/>
       </Unit>
@@ -59,8 +59,8 @@
         <Filename Value="..\..\..\source\nopmetrics.pas"/>
         <IsPartOfProject Value="True"/>
         <UnitName Value="nOpMetrics"/>
-        <EditorIndex Value="22"/>
-        <TopLine Value="43"/>
+        <EditorIndex Value="26"/>
+        <CursorPos X="67" Y="13"/>
         <UsageCount Value="242"/>
         <Loaded Value="True"/>
       </Unit>
@@ -68,7 +68,7 @@
         <Filename Value="..\..\..\source\nrnnlayer.pas"/>
         <IsPartOfProject Value="True"/>
         <UnitName Value="nRNNLayer"/>
-        <EditorIndex Value="2"/>
+        <EditorIndex Value="5"/>
         <TopLine Value="70"/>
         <CursorPos X="21" Y="49"/>
         <UsageCount Value="306"/>
@@ -78,67 +78,68 @@
         <Filename Value="..\..\..\source\nncuda.pas"/>
         <IsPartOfProject Value="True"/>
         <UnitName Value="nnCuda"/>
-        <EditorIndex Value="6"/>
-        <TopLine Value="693"/>
-        <CursorPos X="58" Y="716"/>
-        <UsageCount Value="128"/>
+        <EditorIndex Value="13"/>
+        <TopLine Value="400"/>
+        <CursorPos X="13" Y="406"/>
+        <UsageCount Value="243"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\ntensors.pas"/>
-        <EditorIndex Value="13"/>
-        <TopLine Value="6530"/>
-        <CursorPos X="48" Y="6546"/>
+        <IsVisibleTab Value="True"/>
+        <EditorIndex Value="2"/>
+        <TopLine Value="39"/>
+        <CursorPos X="53" Y="66"/>
         <UsageCount Value="109"/>
         <Loaded Value="True"/>
+        <DefaultSyntaxHighlighter Value="Delphi"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\nConvolutionLayer.pas"/>
-        <EditorIndex Value="12"/>
-        <TopLine Value="303"/>
-        <CursorPos Y="331"/>
+        <EditorIndex Value="6"/>
+        <TopLine Value="1156"/>
+        <CursorPos X="83" Y="1189"/>
         <UsageCount Value="109"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\nbaselayer.pas"/>
         <UnitName Value="nBaseLayer"/>
-        <IsVisibleTab Value="True"/>
-        <EditorIndex Value="11"/>
-        <TopLine Value="74"/>
-        <CursorPos X="15" Y="95"/>
+        <EditorIndex Value="18"/>
+        <TopLine Value="652"/>
+        <CursorPos X="22" Y="666"/>
         <UsageCount Value="103"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\nnet.pas"/>
-        <EditorIndex Value="19"/>
-        <TopLine Value="149"/>
-        <CursorPos X="26" Y="163"/>
+        <EditorIndex Value="24"/>
+        <TopLine Value="327"/>
+        <CursorPos Y="344"/>
         <UsageCount Value="108"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\nactivation.pas"/>
         <UnitName Value="nActivation"/>
-        <EditorIndex Value="33"/>
-        <CursorPos X="11" Y="18"/>
+        <EditorIndex Value="35"/>
+        <CursorPos X="11" Y="22"/>
         <UsageCount Value="106"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\openclhelper.pas"/>
         <UnitName Value="OpenCLHelper"/>
-        <EditorIndex Value="15"/>
-        <TopLine Value="752"/>
-        <CursorPos Y="763"/>
+        <EditorIndex Value="21"/>
+        <TopLine Value="659"/>
+        <CursorPos X="50" Y="670"/>
         <UsageCount Value="106"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\opencl.pas"/>
         <UnitName Value="OpenCL"/>
-        <EditorIndex Value="27"/>
+        <EditorIndex Value="30"/>
         <TopLine Value="1170"/>
         <CursorPos X="20" Y="1336"/>
         <UsageCount Value="106"/>
@@ -147,7 +148,7 @@
       <Unit>
         <Filename Value="..\..\..\source\ntypes.pas"/>
         <UnitName Value="NTypes"/>
-        <EditorIndex Value="18"/>
+        <EditorIndex Value="23"/>
         <TopLine Value="1389"/>
         <CursorPos X="13" Y="1426"/>
         <UsageCount Value="100"/>
@@ -155,33 +156,34 @@
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\steroids.pas"/>
-        <EditorIndex Value="34"/>
-        <TopLine Value="544"/>
-        <CursorPos X="21" Y="557"/>
+        <EditorIndex Value="36"/>
+        <TopLine Value="546"/>
+        <CursorPos Y="563"/>
         <UsageCount Value="106"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\nsoftmaxlayer.pas"/>
         <UnitName Value="nSoftmaxLayer"/>
-        <EditorIndex Value="28"/>
-        <TopLine Value="125"/>
-        <CursorPos X="3" Y="15"/>
+        <EditorIndex Value="7"/>
+        <TopLine Value="307"/>
+        <CursorPos X="8" Y="301"/>
         <UsageCount Value="106"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
         <UnitName Value="nConnectedlayer"/>
-        <EditorIndex Value="3"/>
-        <CursorPos X="24" Y="739"/>
+        <EditorIndex Value="9"/>
+        <TopLine Value="705"/>
+        <CursorPos X="98" Y="731"/>
         <UsageCount Value="102"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\nyololayer.pas"/>
         <UnitName Value="nYoloLayer"/>
-        <EditorIndex Value="32"/>
+        <EditorIndex Value="34"/>
         <TopLine Value="830"/>
         <CursorPos X="12" Y="870"/>
         <UsageCount Value="102"/>
@@ -191,8 +193,8 @@
         <Filename Value="..\..\..\source\cl_sgemm.c"/>
         <EditorIndex Value="2"/>
         <WindowIndex Value="1"/>
-        <TopLine Value="880"/>
-        <CursorPos X="6" Y="903"/>
+        <TopLine Value="764"/>
+        <CursorPos X="20" Y="771"/>
         <ExtraEditorCount Value="1"/>
         <ExtraEditor1>
           <EditorIndex Value="-1"/>
@@ -207,7 +209,7 @@
       <Unit>
         <Filename Value="..\..\..\source\naddlayer.pas"/>
         <UnitName Value="nAddLayer"/>
-        <EditorIndex Value="31"/>
+        <EditorIndex Value="33"/>
         <TopLine Value="217"/>
         <CursorPos X="66" Y="233"/>
         <UsageCount Value="105"/>
@@ -218,37 +220,38 @@
         <UnitName Value="nBatchNormLayer"/>
         <EditorIndex Value="-1"/>
         <CursorPos X="6" Y="157"/>
-        <UsageCount Value="87"/>
+        <UsageCount Value="38"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\nlogisticlayer.pas"/>
         <UnitName Value="nLogisticLayer"/>
-        <EditorIndex Value="29"/>
-        <CursorPos X="55" Y="133"/>
+        <EditorIndex Value="31"/>
+        <TopLine Value="206"/>
+        <CursorPos Y="249"/>
         <UsageCount Value="105"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\nmodels.pas"/>
         <UnitName Value="nModels"/>
-        <EditorIndex Value="16"/>
-        <TopLine Value="62"/>
-        <CursorPos Y="85"/>
+        <EditorIndex Value="1"/>
+        <TopLine Value="14"/>
+        <CursorPos X="10" Y="32"/>
         <UsageCount Value="105"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\nMaxPoolLayer.pas"/>
-        <EditorIndex Value="20"/>
-        <TopLine Value="223"/>
-        <CursorPos X="34" Y="237"/>
+        <EditorIndex Value="8"/>
+        <TopLine Value="684"/>
+        <CursorPos X="11" Y="666"/>
         <UsageCount Value="101"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\nchrono.pas"/>
         <UnitName Value="nChrono"/>
-        <EditorIndex Value="26"/>
+        <EditorIndex Value="29"/>
         <TopLine Value="14"/>
         <CursorPos X="17" Y="78"/>
         <UsageCount Value="101"/>
@@ -257,7 +260,7 @@
       <Unit>
         <Filename Value="..\..\..\source\nconcatlayer.pas"/>
         <UnitName Value="nConcatLayer"/>
-        <EditorIndex Value="30"/>
+        <EditorIndex Value="32"/>
         <TopLine Value="119"/>
         <CursorPos X="12" Y="147"/>
         <UsageCount Value="107"/>
@@ -268,20 +271,21 @@
         <EditorIndex Value="-1"/>
         <TopLine Value="212"/>
         <CursorPos Y="257"/>
-        <UsageCount Value="84"/>
+        <UsageCount Value="35"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\3rdparty\cudnn\source\cudnn_cnn.pas"/>
         <EditorIndex Value="-1"/>
         <TopLine Value="20"/>
         <CursorPos X="67" Y="28"/>
-        <UsageCount Value="109"/>
+        <UsageCount Value="60"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\3rdparty\oneAPI\mkl\source\mkl_cblas.pas"/>
-        <EditorIndex Value="24"/>
-        <UsageCount Value="102"/>
-        <Loaded Value="True"/>
+        <EditorIndex Value="-1"/>
+        <TopLine Value="814"/>
+        <CursorPos X="41" Y="848"/>
+        <UsageCount Value="56"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\..\..\..\src\blas.c"/>
@@ -289,15 +293,15 @@
         <WindowIndex Value="1"/>
         <TopLine Value="792"/>
         <CursorPos X="41" Y="817"/>
-        <UsageCount Value="83"/>
+        <UsageCount Value="34"/>
         <DefaultSyntaxHighlighter Value="C++"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\ndropoutlayer.pas"/>
         <UnitName Value="nDropOutLayer"/>
-        <EditorIndex Value="25"/>
-        <TopLine Value="96"/>
-        <CursorPos Y="123"/>
+        <EditorIndex Value="28"/>
+        <TopLine Value="49"/>
+        <CursorPos X="3" Y="15"/>
         <UsageCount Value="194"/>
         <Loaded Value="True"/>
       </Unit>
@@ -307,12 +311,12 @@
         <WindowIndex Value="1"/>
         <TopLine Value="1576"/>
         <CursorPos X="13" Y="1605"/>
-        <UsageCount Value="174"/>
+        <UsageCount Value="125"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\nparser.pas"/>
         <UnitName Value="nParser"/>
-        <EditorIndex Value="17"/>
+        <EditorIndex Value="22"/>
         <TopLine Value="702"/>
         <CursorPos X="28" Y="721"/>
         <UsageCount Value="107"/>
@@ -325,27 +329,27 @@
         <WindowIndex Value="1"/>
         <TopLine Value="187"/>
         <CursorPos X="40" Y="208"/>
-        <UsageCount Value="136"/>
+        <UsageCount Value="87"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\3rdparty\cudnn\source\cudnn_ops.pas"/>
         <EditorIndex Value="-1"/>
         <TopLine Value="317"/>
         <CursorPos X="81" Y="326"/>
-        <UsageCount Value="158"/>
+        <UsageCount Value="109"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\3rdparty\cudnn\source\cudnn_graph.pas"/>
         <EditorIndex Value="-1"/>
         <TopLine Value="843"/>
         <CursorPos X="24" Y="883"/>
-        <UsageCount Value="158"/>
+        <UsageCount Value="109"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\3rdparty\cudnn\source\cudnn_adv.pas"/>
         <EditorIndex Value="-1"/>
         <TopLine Value="125"/>
-        <UsageCount Value="158"/>
+        <UsageCount Value="109"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\..\..\lastver\source\rnnlayer.pas"/>
@@ -354,7 +358,7 @@
         <WindowIndex Value="1"/>
         <TopLine Value="138"/>
         <CursorPos X="31" Y="156"/>
-        <UsageCount Value="136"/>
+        <UsageCount Value="87"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\..\..\..\..\..\..\lazarus\fpc\3.2.2\source\rtl\objpas\math.pp"/>
@@ -363,7 +367,7 @@
         <WindowIndex Value="1"/>
         <TopLine Value="609"/>
         <CursorPos X="43" Y="634"/>
-        <UsageCount Value="246"/>
+        <UsageCount Value="197"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\..\..\lastver\source\blas.pas"/>
@@ -371,7 +375,7 @@
         <WindowIndex Value="1"/>
         <TopLine Value="99"/>
         <CursorPos X="11" Y="116"/>
-        <UsageCount Value="87"/>
+        <UsageCount Value="38"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\..\..\lastver\source\lightnet.pas"/>
@@ -379,14 +383,14 @@
         <WindowIndex Value="1"/>
         <TopLine Value="731"/>
         <CursorPos X="15" Y="751"/>
-        <UsageCount Value="102"/>
+        <UsageCount Value="53"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\..\..\lastver\source\locallayer.pas"/>
         <UnitName Value="LocalLayer"/>
         <EditorIndex Value="-1"/>
         <WindowIndex Value="1"/>
-        <UsageCount Value="246"/>
+        <UsageCount Value="197"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\..\..\lastver\source\softmaxlayer.pas"/>
@@ -395,7 +399,7 @@
         <WindowIndex Value="1"/>
         <TopLine Value="142"/>
         <CursorPos X="22" Y="168"/>
-        <UsageCount Value="246"/>
+        <UsageCount Value="197"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\..\..\lastver\source\logisticlayer.pas"/>
@@ -403,11 +407,11 @@
         <EditorIndex Value="-1"/>
         <WindowIndex Value="1"/>
         <CursorPos X="10" Y="12"/>
-        <UsageCount Value="246"/>
+        <UsageCount Value="197"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\nCol2Im.pas"/>
-        <EditorIndex Value="21"/>
+        <EditorIndex Value="25"/>
         <CursorPos X="15" Y="17"/>
         <UsageCount Value="178"/>
         <Loaded Value="True"/>
@@ -419,7 +423,7 @@
         <WindowIndex Value="1"/>
         <TopLine Value="1300"/>
         <CursorPos X="63" Y="1321"/>
-        <UsageCount Value="88"/>
+        <UsageCount Value="39"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\..\..\lastver\source\dropoutlayer.pas"/>
@@ -427,12 +431,12 @@
         <EditorIndex Value="-1"/>
         <WindowIndex Value="1"/>
         <CursorPos Y="31"/>
-        <UsageCount Value="84"/>
+        <UsageCount Value="35"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\ndatasets.pas"/>
         <UnitName Value="nDatasets"/>
-        <EditorIndex Value="1"/>
+        <EditorIndex Value="4"/>
         <TopLine Value="30"/>
         <CursorPos X="3" Y="53"/>
         <UsageCount Value="133"/>
@@ -440,103 +444,119 @@
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\3rdparty\cuda\source\cublas_api.pas"/>
-        <EditorIndex Value="14"/>
-        <TopLine Value="212"/>
-        <CursorPos X="49" Y="231"/>
-        <UsageCount Value="96"/>
+        <EditorIndex Value="19"/>
+        <TopLine Value="216"/>
+        <CursorPos X="5" Y="236"/>
+        <UsageCount Value="107"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\3rdparty\cuda\source\cudnn_ops.pas"/>
-        <EditorIndex Value="10"/>
+        <EditorIndex Value="17"/>
         <TopLine Value="172"/>
         <CursorPos X="29" Y="190"/>
-        <UsageCount Value="72"/>
+        <UsageCount Value="129"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\3rdparty\cuda\source\cudnn_cnn.pas"/>
-        <EditorIndex Value="9"/>
-        <UsageCount Value="72"/>
+        <EditorIndex Value="16"/>
+        <CursorPos X="14" Y="10"/>
+        <UsageCount Value="129"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
-        <Filename Value="..\..\..\source\3rdparty\cuda\source\cudnn_graph.pas"/>
-        <EditorIndex Value="-1"/>
-        <TopLine Value="77"/>
-        <CursorPos X="47" Y="17"/>
-        <UsageCount Value="13"/>
-      </Unit>
-      <Unit>
         <Filename Value="..\..\..\source\3rdparty\cuda\source\cudart.pas"/>
-        <EditorIndex Value="4"/>
-        <TopLine Value="4838"/>
-        <CursorPos X="11" Y="4876"/>
-        <UsageCount Value="64"/>
+        <EditorIndex Value="11"/>
+        <TopLine Value="103"/>
+        <CursorPos X="27" Y="126"/>
+        <UsageCount Value="121"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\3rdparty\cuda\source\cudarttypes.pas"/>
-        <EditorIndex Value="5"/>
-        <TopLine Value="3206"/>
-        <CursorPos X="42" Y="3055"/>
-        <UsageCount Value="64"/>
+        <EditorIndex Value="12"/>
+        <TopLine Value="1327"/>
+        <CursorPos X="38" Y="1003"/>
+        <UsageCount Value="121"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\..\..\..\..\..\..\lazarus\fpc\3.2.2\source\rtl\inc\systemh.inc"/>
-        <EditorIndex Value="8"/>
-        <TopLine Value="1315"/>
-        <CursorPos X="11" Y="1334"/>
-        <UsageCount Value="63"/>
-        <Loaded Value="True"/>
+        <EditorIndex Value="-1"/>
+        <TopLine Value="818"/>
+        <CursorPos X="11" Y="844"/>
+        <UsageCount Value="28"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\3rdparty\cuda\source\nvrtc.pas"/>
-        <EditorIndex Value="7"/>
-        <TopLine Value="595"/>
-        <CursorPos X="29" Y="666"/>
-        <UsageCount Value="62"/>
+        <EditorIndex Value="15"/>
+        <CursorPos X="15" Y="3"/>
+        <UsageCount Value="119"/>
         <Loaded Value="True"/>
-      </Unit>
-      <Unit>
-        <Filename Value="..\..\..\..\..\..\..\..\..\lazarus\fpc\3.2.2\source\rtl\inc\text.inc"/>
-        <EditorIndex Value="-1"/>
-        <TopLine Value="162"/>
-        <CursorPos X="3" Y="164"/>
-        <UsageCount Value="2"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\..\..\..\..\..\..\lazarus\fpc\3.2.2\source\rtl\objpas\objpas.pp"/>
         <EditorIndex Value="-1"/>
         <TopLine Value="112"/>
         <CursorPos X="16" Y="131"/>
-        <UsageCount Value="50"/>
+        <UsageCount Value="1"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\cuda_sgemm.cuda"/>
         <IsVisibleTab Value="True"/>
         <EditorIndex Value="1"/>
         <WindowIndex Value="1"/>
-        <TopLine Value="871"/>
-        <CursorPos X="9" Y="894"/>
-        <UsageCount Value="59"/>
+        <TopLine Value="742"/>
+        <CursorPos X="41" Y="722"/>
+        <UsageCount Value="116"/>
         <Loaded Value="True"/>
         <DefaultSyntaxHighlighter Value="None"/>
       </Unit>
       <Unit>
-        <Filename Value="..\..\..\..\..\..\..\..\..\lazarus\fpc\3.2.2\source\rtl\inc\objpash.inc"/>
-        <EditorIndex Value="-1"/>
-        <TopLine Value="185"/>
-        <CursorPos X="11" Y="208"/>
-        <UsageCount Value="8"/>
+        <Filename Value="..\..\..\..\..\..\src\blas_kernels.cu"/>
+        <EditorIndex Value="3"/>
+        <WindowIndex Value="1"/>
+        <TopLine Value="863"/>
+        <CursorPos X="47" Y="887"/>
+        <UsageCount Value="56"/>
+        <Loaded Value="True"/>
+        <DefaultSyntaxHighlighter Value="None"/>
       </Unit>
       <Unit>
-        <Filename Value="..\..\..\..\..\..\..\..\..\lazarus\fpc\3.2.2\source\rtl\inc\objpas.inc"/>
-        <EditorIndex Value="-1"/>
-        <TopLine Value="321"/>
-        <CursorPos X="35" Y="338"/>
-        <UsageCount Value="8"/>
+        <Filename Value="..\..\..\source\3rdparty\openblas\source\openblas.pas"/>
+        <EditorIndex Value="3"/>
+        <TopLine Value="4"/>
+        <CursorPos X="15" Y="4"/>
+        <UsageCount Value="100"/>
+        <Loaded Value="True"/>
+        <DefaultSyntaxHighlighter Value="Delphi"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\3rdparty\cuda\source\cudatypes.pas"/>
+        <UnitName Value="cudaTypes"/>
+        <EditorIndex Value="20"/>
+        <UsageCount Value="43"/>
+        <Loaded Value="True"/>
+        <DefaultSyntaxHighlighter Value="Delphi"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\3rdparty\cuda\source\cublas.pas"/>
+        <EditorIndex Value="14"/>
+        <TopLine Value="51"/>
+        <CursorPos X="3" Y="283"/>
+        <UsageCount Value="43"/>
+        <Loaded Value="True"/>
+        <DefaultSyntaxHighlighter Value="Delphi"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\nlrnlayer.pas"/>
+        <UnitName Value="nLRNLayer"/>
+        <EditorIndex Value="10"/>
+        <CursorPos X="31" Y="25"/>
+        <UsageCount Value="28"/>
+        <Loaded Value="True"/>
+        <DefaultSyntaxHighlighter Value="Delphi"/>
       </Unit>
     </Units>
     <OtherDefines Count="12">
@@ -553,125 +573,126 @@
       <Define10 Value="USE_CUDNN"/>
       <Define11 Value="USE_CUDART"/>
     </OtherDefines>
-    <General>
-      <ActiveWindowIndexAtStart Value="1"/>
-    </General>
-    <JumpHistory HistoryIndex="28">
+    <JumpHistory HistoryIndex="29">
       <Position>
-        <Filename Value="..\..\..\source\nnet.pas"/>
-        <Caret Line="163" Column="26" TopLine="149"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\nConvolutionLayer.pas"/>
-        <Caret Line="331" TopLine="303"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\ntensors.pas"/>
-        <Caret Line="605" Column="14" TopLine="583"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\ntensors.pas"/>
-        <Caret Line="6553" Column="41" TopLine="6537"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\openclhelper.pas"/>
-        <Caret Line="214" Column="14" TopLine="191"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\openclhelper.pas"/>
-        <Caret Line="755" Column="57" TopLine="750"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\openclhelper.pas"/>
-        <Caret Line="214" Column="130" TopLine="193"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\ntensors.pas"/>
-        <Caret Line="12052" Column="20" TopLine="12009"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\ntensors.pas"/>
-        <Caret Line="6553" TopLine="6530"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\openclhelper.pas"/>
-        <Caret Line="215" Column="15" TopLine="194"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\openclhelper.pas"/>
-        <Caret Line="760" Column="3" TopLine="756"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\openclhelper.pas"/>
-        <Caret Line="215" Column="36" TopLine="194"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\openclhelper.pas"/>
-        <Caret Line="763" Column="28" TopLine="756"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\ntensors.pas"/>
-        <Caret Line="6554" TopLine="6530"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\openclhelper.pas"/>
-        <Caret Line="760" TopLine="752"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\openclhelper.pas"/>
-        <Caret Line="761" TopLine="752"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\openclhelper.pas"/>
-        <Caret Line="762" TopLine="752"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\openclhelper.pas"/>
-        <Caret Line="763" TopLine="752"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\ntensors.pas"/>
-        <Caret Line="6546" Column="48" TopLine="6530"/>
+        <Filename Value="..\..\..\source\cuda_sgemm.cuda"/>
+        <Caret Line="9" Column="16"/>
       </Position>
       <Position>
         <Filename Value="..\..\..\source\cuda_sgemm.cuda"/>
-        <Caret Line="808" Column="40" TopLine="835"/>
+        <Caret Line="1418" Column="47" TopLine="1392"/>
       </Position>
       <Position>
         <Filename Value="..\..\..\source\cuda_sgemm.cuda"/>
-        <Caret Line="882" Column="79" TopLine="852"/>
+        <Caret Line="1416" Column="30" TopLine="1392"/>
       </Position>
       <Position>
         <Filename Value="..\..\..\source\cuda_sgemm.cuda"/>
-        <Caret Line="949" Column="17" TopLine="912"/>
+        <Caret Line="3" Column="35"/>
       </Position>
       <Position>
         <Filename Value="..\..\..\source\cuda_sgemm.cuda"/>
-        <Caret Line="894" Column="17" TopLine="871"/>
+        <Caret Line="1647" Column="23" TopLine="1623"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\nbaselayer.pas"/>
+        <Caret Line="666" Column="22" TopLine="652"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\nncuda.pas"/>
+        <Caret Line="84" Column="15" TopLine="71"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\nncuda.pas"/>
+        <Caret Line="963" TopLine="945"/>
       </Position>
       <Position>
         <Filename Value="..\..\..\source\cuda_sgemm.cuda"/>
-        <Caret Line="949" Column="17" TopLine="911"/>
+        <Caret Line="1701" Column="13" TopLine="1674"/>
       </Position>
       <Position>
         <Filename Value="..\..\..\source\cuda_sgemm.cuda"/>
-        <Caret Line="894" Column="17" TopLine="871"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\cl_sgemm.c"/>
-        <Caret Line="241" Column="28" TopLine="220"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\cl_sgemm.c"/>
-        <Caret Line="903" Column="10" TopLine="891"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\cl_sgemm.c"/>
-        <Caret Line="958" Column="17" TopLine="920"/>
+        <Caret Line="1681" Column="18" TopLine="1663"/>
       </Position>
       <Position>
         <Filename Value="..\..\..\source\cuda_sgemm.cuda"/>
-        <Caret Line="949" Column="17" TopLine="911"/>
+        <Caret Line="1697" Column="13" TopLine="1674"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\cuda_sgemm.cuda"/>
+        <Caret Line="1669" Column="16" TopLine="1662"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\nncuda.pas"/>
+        <Caret Line="1126" Column="52" TopLine="1105"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\nncuda.pas"/>
+        <Caret Line="84" Column="27" TopLine="66"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\nncuda.pas"/>
+        <Caret Line="957" TopLine="945"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\nncuda.pas"/>
+        <Caret Line="963" TopLine="945"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\nncuda.pas"/>
+        <Caret Line="965" TopLine="945"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\nncuda.pas"/>
+        <Caret Line="966" TopLine="945"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\nncuda.pas"/>
+        <Caret Line="953" Column="31" TopLine="945"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\cuda_sgemm.cuda"/>
+        <Caret Line="1695" Column="19" TopLine="1677"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\cuda_sgemm.cuda"/>
+        <Caret Line="764" Column="31" TopLine="747"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\cuda_sgemm.cuda"/>
+        <Caret Line="978" Column="20" TopLine="957"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\cuda_sgemm.cuda"/>
+        <Caret Line="756" Column="21" TopLine="732"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\cuda_sgemm.cuda"/>
+        <Caret Line="1480" Column="24" TopLine="1322"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\nncuda.pas"/>
+        <Caret Line="1000" Column="49" TopLine="982"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\nncuda.pas"/>
+        <Caret Line="60" Column="27" TopLine="46"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\cuda_sgemm.cuda"/>
+        <Caret Line="755" Column="15" TopLine="742"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\cuda_sgemm.cuda"/>
+        <Caret Line="776" Column="30" TopLine="769"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\cuda_sgemm.cuda"/>
+        <Caret Line="1244" Column="19" TopLine="1224"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\nncuda.pas"/>
+        <Caret Line="406" Column="13" TopLine="400"/>
       </Position>
     </JumpHistory>
     <RunParams>

@@ -543,18 +543,166 @@ begin
 end;
 
 procedure TBaseLayer.batchNormGPU(var state: TNNetState);
+var
+  outputStep, offset: SizeInt;
 begin
+{$ifdef USE_TELEMETRY}
+  if benchmark then metrics.forward.start(ltBATCHNORM);
+{$endif}
+  if not biases.wasGPU() then biases.pushToDevice;
+  if not scales.wasGPU() then scales.pushToDevice;
+  if not rolling_mean.wasGPU() then rolling_mean.pushToDevice;
+  if not rolling_variance.wasGPU() then rolling_variance.pushToDevice;
 
+  outputStep := batch*outputs;
+  offset := state.step*outputStep;
+
+  if LayerType = ltBATCHNORM then
+      //state.input.copyTo(output);
+      cuda.copy(outputStep, state.input.devData, 0, 1, output.devData, 0, 1);
+
+  //if l.&type = ltCONNECTED then begin
+  //    outC := outputs;
+  //    outH :=1;
+  //    outW:=1;
+  //end;
+  if not scales.wasGPU() then scales.pushToDevice;
+  if not rolling_mean.wasGPU() then rolling_mean.pushToDevice;
+  if not rolling_variance.wasGPU() then rolling_variance.pushToDevice;
+
+  if state.isTraining then begin
+      //cuda.meansAndVars(outputStep, mean.Size(), output.Groups, output.devData, offset, mean.devData, variance.devData);
+      cuda.means(outputStep, mean.Size(), output.Groups, output.devData, offset, mean.devData);
+      cuda.variances(outputStep, mean.Size(), output.Groups, output.devData, offset, mean.devData, variance.devData);
+//output.MeansAndVars(mean, variance);
+//mean.printGpuSumSqrDiff();
+//variance.printGpuSumSqrDiff();
+
+      cuda.scale(rolling_mean.size(), 0.9, rolling_mean.devData, 1);
+//rolling_mean.Multiply(0.9);
+//rolling_mean.printGpuSumSqrDiff();
+
+
+      cuda.axpy(rolling_mean.Size(), 0.1, mean.devData, 0, 1, rolling_mean.devData, 0, 1);
+//rolling_mean.axpy(0.1, mean);
+//rolling_mean.printGpuSumSqrDiff();
+
+      cuda.scale(rolling_variance.Size(), 0.9, rolling_variance.devData, 1);
+//rolling_variance.Multiply(0.9);
+//rolling_variance.printGpuSumSqrDiff();
+
+      cuda.axpy(rolling_variance.size(), 0.1, variance.devData, 0, 1, rolling_variance.devData, 0, 1);
+//rolling_variance.axpy(0.1, variance);
+//rolling_variance.printGpuSumSqrDiff();
+
+      cuda.copy(outputStep, output.devData, offset, 1, x.devData, offset, 1);
+//output.CopyTo(x);
+//x.printGpuSumSqrDiff();
+
+      cuda.normalize(mean.Size(), outputStep, output.groups, mean.devData, 1, variance.devData, 1, output.devData, offset);
+//output.Normalize(mean, variance);
+//output.printGpuSumSqrDiff();
+
+      cuda.copy(outputStep, output.devData, offset, 1, x_norm.devData ,offset, 1);
+//output.copyTo(x_norm) ;
+//x_norm.printGpuSumSqrDiff();
+  end else begin
+      cuda.normalize(rolling_mean.Size(), outputStep, output.Groups, rolling_mean.devData, 1, rolling_variance.devData, 1, output.devData, 0);
+//output.Normalize(rolling_mean, rolling_variance);
+//output.printGpuSumSqrDiff();
+  end;
+
+
+
+  //cuda.forwardScaleAdd(outputStep, output.devData, offset, scales.size(), scales.devData, biases.devData, 1, output.groups);
+  cuda.forwardScale(outputStep, output.devData, offset, scales.size(), scales.devData, 1, output.groups);
+  cuda.forwardBias(outputStep, output.devData, offset, biases.size(), biases.devData, 1, output.groups);
+//output.forwardScale(scales);
+//output.forwardBias(biases);
+
+//output.printGpuSumSqrDiff();
+//mean.printGpuSumSqrDiff();
+//variance.printGpuSumSqrDiff();
+//x.printGpuSumSqrDiff();
+//x_norm.printGpuSumSqrDiff();
+
+
+
+{$ifdef USE_TELEMETRY}
+  cuda.finish();
+  if benchmark then metrics.forward.finish(ltBATCHNORM);
+{$endif}
 end;
 
 procedure TBaseLayer.batchNormBackGPU(var state: TNNetState);
+var
+  outputStep, offset: SizeInt;
 begin
+{$ifdef USE_TELEMETRY}
+  if benchmark then metrics.backward.start(ltBATCHNORM);
+{$endif}
 
+  // spatial dot (x_norm . delta) then add to scale_updates
+  //scale_updates.addDots(x_norm, delta);
+  //
+  //// add scales to all delta batches
+  //delta.add(scales);
+  //TSingleTensor.MeansAndVarsDelta(delta, x, mean, variance, mean_delta, variance_delta);
+  //TSingleTensor.normalizeDelta(x, mean, variance, mean_delta, variance_delta, delta);
+  //if layerType = ltBATCHNORM then
+  //  delta.copyTo(state.delta^);
+  //cuda.backwardBias(bias_updates.Size(), bias_updates.devData, delta.size(), delta.devData, 1, delta.groups);  //todo [batchNormBack] should we "bias_updates.Add(delta)"  here?
+  outputStep := batch*outputs;
+  offset := state.step*outputStep;
+
+  cuda.addDots(outputStep, scale_updates.Size(), delta.groups, x_norm.devData, delta.devData, offset, scale_updates.devData);
+//scale_updates.addDots(x_norm, delta, offset, outputStep);
+//scale_updates.printGpuSumSqrDiff();
+
+  cuda.forwardScale(outputStep, delta.devData, offset, scales.Size(), scales.devData, 1, delta.groups);
+//delta.forwardScale(scales, offset, outputStep);
+//delta.printGpuSumSqrDiff();
+
+  cuda.meansAndVarsDelta(outputStep, mean.size(), delta.groups, delta.devData, x.devData, offset, mean.devData, variance.devData, mean_delta.devData, variance_delta.devData);
+//TSingleTensor.MeansAndVarsDelta(delta, x, mean, variance, mean_delta, variance_delta, offset);
+//mean_delta.printGpuSumSqrDiff();
+//variance_delta.printGpuSumSqrDiff();
+
+  cuda.normalizeDelta(outputStep, mean.size(), delta.groups, delta.devData, x.devData, offset, mean.devData, variance.devData, mean_delta.devData, variance_delta.devData);
+//TSingleTensor.normalizeDelta(x, mean, variance, mean_delta, variance_delta, delta, offset);
+//delta.printGpuSumSqrDiff();
+
+  if layerType = ltBATCHNORM then
+    cuda.copy(outputStep, delta.devData, 0, 1, state.delta^.devData, 0, 1);
+{$ifdef USE_TELEMETRY}
+  cuda.finish();
+  if benchmark then metrics.backward.finish(ltBATCHNORM);
+{$endif}
 end;
 
 procedure TBaseLayer.batchNormUpdateGPU(const args: TUpdateArgs);
 begin
+{$ifdef USE_TELEMETRY}
+  if benchmark then metrics.update.start(ltBATCHNORM);
+{$endif}
+  //biases.axpy(args.learningRate / args.batch, bias_updates);
+  //bias_updates.Multiply(args.momentum);
+  //
+  //scales.axpy(args.learningRate / args.batch, scale_updates);
+  //scale_updates.Multiply(args.momentum);
+  if layerType=ltBATCHNORM then begin
+    cuda.axpy(biases.size(), args.learningRate / args.batch, bias_updates.devData, 0, 1, biases.devData, 0, 1);
+    cuda.scale(bias_updates.size(), args.momentum, bias_updates.devData, 1);
 
+  end;
+
+  cuda.axpy(scales.size(), args.learningRate / args.batch, scale_updates.devData, 0, 1, scales.devData, 0, 1);
+  cuda.scale(scale_updates.size(), args.momentum, scale_updates.devData, 1);
+
+{$ifdef USE_TELEMETRY}
+  cuda.finish();
+  if benchmark then metrics.update.finish(ltBATCHNORM);
+{$endif}
 end;
 {$endif}
 

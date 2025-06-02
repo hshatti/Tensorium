@@ -170,6 +170,9 @@ begin
 
     s.inputStep:=j;
     outputLayer.forward(s);
+    if state.isTraining then
+        write(#13, 'FW RNN [',state.index,'] ', 100*i/steps:3:0,'%');
+
 end;
 
 procedure TRNNLayer.rnnStepBackward(var s, state: TNNetState; const hiddenStep,
@@ -209,6 +212,7 @@ begin
   s.inputStep := i;
   s.deltaStep := i;
   inputLayer.backward(s);
+  write(#13, 'BW RNN [',state.index,'] ', 100*i/steps:3:0,'%');
 end;
 
 procedure TRNNLayer.forward(var state: TNNetState);
@@ -241,8 +245,7 @@ begin
         self.state.FillExt(0, 0, hiddenStep);
     for i := 0 to steps -1 do
       rnnStepForward(s, state, hiddenStep, i);
-    if state.isTraining then
-        write(#13, 'FW RNN [',state.index,'] ', 100*i/steps:3:0,'%');
+
     InputLayer .reGroup(steps*batch);
     selfLayer  .reGroup(steps*batch);
     outputLayer.reGroup(steps*batch);
@@ -370,7 +373,6 @@ if benchmark then metrics.backward.start(layerType);
       rnnStepBackward(s, state, hiddenStep, i);
     end;
     finally
-      write(#13, 'BW RNN [',state.index,'] ', 100*i/steps:3:0,'%');
       InputLayer .reGroup(steps*batch);
       selfLayer  .reGroup(steps*batch);
       outputLayer.reGroup(steps*batch);

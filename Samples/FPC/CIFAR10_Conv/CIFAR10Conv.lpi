@@ -24,7 +24,7 @@
             <Filename Value="CIFAR10Conv"/>
           </Target>
           <SearchPaths>
-            <OtherUnitFiles Value="..\..\..\source;..\..\..\source\3rdparty\cuda\source;..\..\..\source\3rdparty\clblast\source;..\..\..\source\3rdparty\oneAPI\mkl\source"/>
+            <OtherUnitFiles Value="..\..\..\source;..\..\..\source\3rdparty\cuda\source;..\..\..\source\3rdparty\clblast\source;..\..\..\source\3rdparty\oneAPI\mkl\source;..\..\..\source\3rdparty\openblas\source"/>
             <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Parsing>
@@ -35,7 +35,7 @@
           <CodeGeneration>
             <SmartLinkUnit Value="True"/>
             <Optimizations>
-              <OptimizationLevel Value="3"/>
+              <OptimizationLevel Value="4"/>
             </Optimizations>
           </CodeGeneration>
           <Linking>
@@ -51,11 +51,10 @@
             <CustomOptions Value="-CfAVX2
 -OpCOREAVX2
 -dUSE_AVX2
--dUSE_MKL
 -dUSE_MULTITHREADING
 -dUSE_TELEMETRY
 -dUSE_CUDART"/>
-            <OtherDefines Count="11">
+            <OtherDefines Count="12">
               <Define0 Value="USE_OPENCL"/>
               <Define1 Value="USE_AVX2"/>
               <Define2 Value="USE_OPENBLAS"/>
@@ -67,6 +66,7 @@
               <Define8 Value="CL_BLAST"/>
               <Define9 Value="BIG_MATRECIES"/>
               <Define10 Value="USE_CUDNN"/>
+              <Define11 Value="USE_CUDART"/>
             </OtherDefines>
           </Other>
         </CompilerOptions>
@@ -128,7 +128,7 @@
       <Filename Value="CIFAR10Conv"/>
     </Target>
     <SearchPaths>
-      <OtherUnitFiles Value="..\..\..\source;..\..\..\source\3rdparty\clblast\source;..\..\..\source\3rdparty\cuda\source;..\..\..\source\3rdparty\oneAPI\mkl\source"/>
+      <OtherUnitFiles Value="..\..\..\source;..\..\..\source\3rdparty\clblast\source;..\..\..\source\3rdparty\cuda\source;..\..\..\source\3rdparty\oneAPI\mkl\source;..\..\..\source\3rdparty\openblas\source"/>
       <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
     </SearchPaths>
     <Parsing>

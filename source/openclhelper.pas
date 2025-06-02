@@ -667,7 +667,7 @@ begin
 {$ifdef DEBUG}
   par:=PAnsiCHar('-cl-kernel-arg-info -cl-std=CL3.0 -cl-opt-disable -Werror -g '+params);
 {$else}
-  par:=PAnsiCHar('-cl-kernel-arg-info -cl-std=CL3.0 -cl-fast-relaxed-math -Werror -cl-mad-enable '+params);
+  par:=PAnsiCHar('-cl-kernel-arg-info -cl-std=CL2.0 -cl-fast-relaxed-math -Werror -cl-mad-enable '+params);
 {$endif}
   FProgram:=clCreateProgramWithSource(FContext, 1, @src, nil, FErr);CheckError();
   FErr:=clBuildProgram(Fprogram, FDeviceCount, @FDevices[0], par, nil, nil);

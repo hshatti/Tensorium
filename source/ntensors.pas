@@ -3368,6 +3368,11 @@ begin
   Result := abs(a);
 end;
 
+function _Abs(const a: SizeInt): SizeInt; overload; inline;
+begin
+  Result := abs(a);
+end;
+
 function _Sqr(const a: single): single; overload; inline;
 begin
   Result := a * a;
@@ -6254,9 +6259,8 @@ begin
   lastOP := cdOpenCL;
   {$elseif defined(USE_CUDART)}
   sz := byteSize();
-  //cuda.writeBuffer(devData, sz, Data);
-  SAFE_CALL(cudaMemcpy(devData, data, sz, cudaMemcpyHostToDevice));
-  //ocl.finish();
+  cuda.writeBuffer(devData, sz, Data);
+  //SAFE_CALL(cudaMemcpy(devData, data, sz, cudaMemcpyHostToDevice));
   lastOP := cdCUDA;
   {$endif}
 
@@ -6280,9 +6284,7 @@ begin
   lastOP := cdCPU;
   {$elseif defined(USE_CUDART)}
   sz := byteSize();
-  //cuda.readBuffer(devData, sz, Data);
-  SAFE_CALL(cudaMemcpy(Data, devData, sz, cudaMemcpyHostToDevice));
-  //ocl.finish();
+  cuda.readBuffer(devData, sz, Data);
   lastOP := cdCPU;
   {$endif}
 
@@ -10737,6 +10739,7 @@ var delta, temp
     //, temp2
     :TTensor<T>;
     ids : TTensor<SizeInt>;
+    i:SizeInt;
 begin
   if N=0 then N := Size();
   assert(N + offset <= size(), '[printGpuDiff][out of bounds] incorrect size or offset');
@@ -10747,7 +10750,11 @@ begin
 //copyTo(temp2, 0, 1, offset, 1, N);
 
   delta.resize(temp.shape);
-  subvv(N, data + offset, 1, temp.data, 1, delta.Data, 1);
+  //subvv(N, data + offset, 1, temp.data, 1, delta.Data, 1);
+
+  for i:=0 to N-1 do
+    delta.data[i+offset] := minus(data[i+offset], temp.data[i+offset]);
+
   ids := delta.findValues([0], true, tolerance);
   if ids.size()>0 then
     ids.print()
@@ -11891,6 +11898,7 @@ begin
           toStr := @bToStr;
 
         end;
+
         otSByte:
         begin
           plus := @sbplus;
@@ -11907,6 +11915,7 @@ begin
           toStr := @i8ToStr;
 
         end;
+
         otSWord:
         begin
           plus := @swplus;
@@ -11922,8 +11931,8 @@ begin
           vcvts := @cvti16s;
           vcvtd := @cvti16d;
           toStr := @i16ToStr;
-
         end;
+
         otSLong:
         begin
           plus := @slplus;
@@ -11938,6 +11947,22 @@ begin
           vcvts := @cvti32s;
           vcvtd := @cvti32d;
           toStr := @i32ToStr;
+        end;
+
+        otSQWord:
+        begin
+          plus := @sqplus;
+          minus := @sqminus;
+          times := @sqmul;
+          division := @sqdiv;
+          casti := @sqcasti;
+          //vcvtb           := @cvti64b;
+          //vcvti8          := @cvti64i8;
+          //vcvti16         := @cvti64i16;
+          //vcvti32         := @cvti64i32;
+          vcvts := @cvti64s;
+          vcvtd := @cvti64d;
+          toStr := @i64ToStr;
         end;
 
       end;
@@ -12226,6 +12251,8 @@ initialization
   TTensor<int64>.__abs := _abs;
   TTensor<byte>.__abs := _abs;
   TTensor<shortint>.__abs := _abs;
+  TTensor<SizeInt>.__abs := _abs;
+
 
   TTensor<single>.Division := _Division;
   TTensor<double>.Division := _Division;

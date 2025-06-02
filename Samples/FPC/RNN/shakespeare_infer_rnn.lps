@@ -8,9 +8,8 @@
       <Unit>
         <Filename Value="shakespeare_infer_rnn.pas"/>
         <IsPartOfProject Value="True"/>
-        <IsVisibleTab Value="True"/>
-        <TopLine Value="335"/>
-        <CursorPos Y="351"/>
+        <TopLine Value="64"/>
+        <CursorPos X="31" Y="96"/>
         <UsageCount Value="217"/>
         <Loaded Value="True"/>
       </Unit>
@@ -69,11 +68,13 @@
         <Filename Value="..\..\..\source\nrnnlayer.pas"/>
         <IsPartOfProject Value="True"/>
         <UnitName Value="nRNNLayer"/>
+        <IsVisibleTab Value="True"/>
         <EditorIndex Value="4"/>
-        <TopLine Value="55"/>
-        <CursorPos X="33" Y="83"/>
+        <TopLine Value="537"/>
+        <CursorPos X="13" Y="551"/>
         <ExtraEditorCount Value="1"/>
         <ExtraEditor1>
+          <IsVisibleTab Value="True"/>
           <EditorIndex Value="-1"/>
           <WindowIndex Value="1"/>
           <TopLine Value="208"/>
@@ -97,7 +98,7 @@
         <UnitName Value="nLRNLayer"/>
         <EditorIndex Value="18"/>
         <CursorPos X="25" Y="14"/>
-        <UsageCount Value="42"/>
+        <UsageCount Value="43"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
@@ -190,10 +191,11 @@
         <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
         <UnitName Value="nConnectedlayer"/>
         <EditorIndex Value="5"/>
-        <TopLine Value="603"/>
+        <TopLine Value="179"/>
         <CursorPos X="58" Y="610"/>
         <ExtraEditorCount Value="1"/>
         <ExtraEditor1>
+          <IsVisibleTab Value="True"/>
           <EditorIndex Value="-1"/>
           <WindowIndex Value="1"/>
           <TopLine Value="157"/>
@@ -219,6 +221,7 @@
         <CursorPos X="17" Y="773"/>
         <ExtraEditorCount Value="1"/>
         <ExtraEditor1>
+          <IsVisibleTab Value="True"/>
           <EditorIndex Value="-1"/>
           <WindowIndex Value="1"/>
           <TopLine Value="1462"/>
@@ -314,6 +317,7 @@
       </Unit>
       <Unit>
         <Filename Value="..\..\..\..\..\..\src\blas.c"/>
+        <IsVisibleTab Value="True"/>
         <EditorIndex Value="-1"/>
         <WindowIndex Value="1"/>
         <TopLine Value="158"/>
@@ -332,6 +336,7 @@
       </Unit>
       <Unit>
         <Filename Value="..\..\..\..\..\lastver\source\parser.pas"/>
+        <IsVisibleTab Value="True"/>
         <EditorIndex Value="-1"/>
         <WindowIndex Value="1"/>
         <TopLine Value="1990"/>
@@ -350,6 +355,7 @@
       <Unit>
         <Filename Value="..\..\..\..\..\lastver\source\connectedlayer.pas"/>
         <UnitName Value="ConnectedLayer"/>
+        <IsVisibleTab Value="True"/>
         <EditorIndex Value="-1"/>
         <WindowIndex Value="1"/>
         <TopLine Value="185"/>
@@ -380,6 +386,7 @@
       <Unit>
         <Filename Value="..\..\..\..\..\lastver\source\rnnlayer.pas"/>
         <UnitName Value="RNNLayer"/>
+        <IsVisibleTab Value="True"/>
         <EditorIndex Value="-1"/>
         <WindowIndex Value="1"/>
         <TopLine Value="176"/>
@@ -388,6 +395,7 @@
       </Unit>
       <Unit>
         <Filename Value="..\..\..\..\..\lastver\source\blas.pas"/>
+        <IsVisibleTab Value="True"/>
         <EditorIndex Value="-1"/>
         <WindowIndex Value="1"/>
         <TopLine Value="56"/>
@@ -396,6 +404,7 @@
       </Unit>
       <Unit>
         <Filename Value="..\..\..\..\..\lastver\source\lightnet.pas"/>
+        <IsVisibleTab Value="True"/>
         <EditorIndex Value="-1"/>
         <WindowIndex Value="1"/>
         <TopLine Value="788"/>
@@ -405,6 +414,7 @@
       <Unit>
         <Filename Value="..\..\..\..\..\lastver\source\locallayer.pas"/>
         <UnitName Value="LocalLayer"/>
+        <IsVisibleTab Value="True"/>
         <EditorIndex Value="-1"/>
         <WindowIndex Value="1"/>
         <TopLine Value="80"/>
@@ -414,6 +424,7 @@
       <Unit>
         <Filename Value="..\..\..\..\..\lastver\source\softmaxlayer.pas"/>
         <UnitName Value="SoftmaxLayer"/>
+        <IsVisibleTab Value="True"/>
         <EditorIndex Value="-1"/>
         <WindowIndex Value="1"/>
         <TopLine Value="480"/>
@@ -423,6 +434,7 @@
       <Unit>
         <Filename Value="..\..\..\..\..\lastver\source\logisticlayer.pas"/>
         <UnitName Value="LogisticLayer"/>
+        <IsVisibleTab Value="True"/>
         <EditorIndex Value="-1"/>
         <WindowIndex Value="1"/>
         <CursorPos X="39" Y="22"/>
@@ -430,6 +442,7 @@
       </Unit>
       <Unit>
         <Filename Value="..\..\..\..\nnetwork.pas"/>
+        <IsVisibleTab Value="True"/>
         <EditorIndex Value="-1"/>
         <WindowIndex Value="1"/>
         <TopLine Value="1572"/>
@@ -438,6 +451,7 @@
       </Unit>
       <Unit>
         <Filename Value="..\..\..\..\..\..\src\rnn.c"/>
+        <IsVisibleTab Value="True"/>
         <EditorIndex Value="-1"/>
         <WindowIndex Value="1"/>
         <TopLine Value="71"/>
@@ -465,6 +479,7 @@
       </Unit>
       <Unit>
         <Filename Value="..\..\..\..\..\..\src\utils.c"/>
+        <IsVisibleTab Value="True"/>
         <EditorIndex Value="-1"/>
         <WindowIndex Value="1"/>
         <TopLine Value="887"/>
@@ -481,6 +496,7 @@
       </Unit>
       <Unit>
         <Filename Value="..\..\..\..\..\..\src\utils.h"/>
+        <IsVisibleTab Value="True"/>
         <EditorIndex Value="-1"/>
         <WindowIndex Value="1"/>
         <TopLine Value="45"/>
@@ -498,6 +514,7 @@
       <Unit>
         <Filename Value="..\..\..\..\..\lastver\source\activations.pas"/>
         <UnitName Value="Activations"/>
+        <IsVisibleTab Value="True"/>
         <EditorIndex Value="-1"/>
         <WindowIndex Value="1"/>
         <TopLine Value="41"/>
@@ -506,6 +523,7 @@
       </Unit>
       <Unit>
         <Filename Value="..\..\..\..\lightnet.pas"/>
+        <IsVisibleTab Value="True"/>
         <EditorIndex Value="-1"/>
         <WindowIndex Value="1"/>
         <TopLine Value="857"/>
@@ -515,6 +533,7 @@
       <Unit>
         <Filename Value="..\..\..\..\..\lastver\source\convlstmlayer.pas"/>
         <UnitName Value="ConvLSTMLayer"/>
+        <IsVisibleTab Value="True"/>
         <EditorIndex Value="-1"/>
         <WindowIndex Value="1"/>
         <TopLine Value="99"/>
@@ -523,6 +542,7 @@
       </Unit>
       <Unit>
         <Filename Value="..\..\..\..\..\lastver\source\nnetwork.pas"/>
+        <IsVisibleTab Value="True"/>
         <EditorIndex Value="-1"/>
         <WindowIndex Value="1"/>
         <TopLine Value="1941"/>
@@ -532,6 +552,7 @@
       <Unit>
         <Filename Value="..\..\..\..\..\lastver\source\convolutionallayer.pas"/>
         <UnitName Value="ConvolutionalLayer"/>
+        <IsVisibleTab Value="True"/>
         <EditorIndex Value="-1"/>
         <WindowIndex Value="1"/>
         <TopLine Value="584"/>
@@ -540,6 +561,7 @@
       </Unit>
       <Unit>
         <Filename Value="..\..\..\..\..\..\src\crnn_layer.c"/>
+        <IsVisibleTab Value="True"/>
         <EditorIndex Value="-1"/>
         <WindowIndex Value="1"/>
         <TopLine Value="169"/>
@@ -550,6 +572,7 @@
       <Unit>
         <Filename Value="..\..\..\..\..\lastver\source\lstmlayer.pas"/>
         <UnitName Value="LSTMLayer"/>
+        <IsVisibleTab Value="True"/>
         <EditorIndex Value="-1"/>
         <WindowIndex Value="1"/>
         <TopLine Value="228"/>
@@ -615,6 +638,7 @@
       <Unit>
         <Filename Value="..\..\..\..\..\lastver\source\l2normlayer.pas"/>
         <UnitName Value="L2NormLayer"/>
+        <IsVisibleTab Value="True"/>
         <EditorIndex Value="-1"/>
         <WindowIndex Value="1"/>
         <UsageCount Value="24"/>
@@ -622,6 +646,7 @@
       <Unit>
         <Filename Value="..\..\..\..\..\lastver\source\representationlayer.pas"/>
         <UnitName Value="RepresentationLayer"/>
+        <IsVisibleTab Value="True"/>
         <EditorIndex Value="-1"/>
         <WindowIndex Value="1"/>
         <TopLine Value="32"/>
@@ -658,26 +683,6 @@
       <Define11 Value="DEBUG"/>
     </OtherDefines>
     <JumpHistory HistoryIndex="28">
-      <Position>
-        <Filename Value="shakespeare_infer_rnn.pas"/>
-        <Caret Line="168" Column="49" TopLine="160"/>
-      </Position>
-      <Position>
-        <Filename Value="shakespeare_infer_rnn.pas"/>
-        <Caret Line="165" Column="38" TopLine="154"/>
-      </Position>
-      <Position>
-        <Filename Value="shakespeare_infer_rnn.pas"/>
-        <Caret Line="329" Column="22" TopLine="300"/>
-      </Position>
-      <Position>
-        <Filename Value="shakespeare_infer_rnn.pas"/>
-        <Caret Line="333" Column="22" TopLine="304"/>
-      </Position>
-      <Position>
-        <Filename Value="shakespeare_infer_rnn.pas"/>
-        <Caret Line="396" Column="17" TopLine="367"/>
-      </Position>
       <Position>
         <Filename Value="shakespeare_infer_rnn.pas"/>
         <Caret Line="402" Column="17" TopLine="373"/>
@@ -764,15 +769,39 @@
       </Position>
       <Position>
         <Filename Value="..\..\..\source\nparser.pas"/>
-        <Caret Line="898" Column="29" TopLine="1143"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\nparser.pas"/>
         <Caret Line="1038" Column="27" TopLine="1018"/>
       </Position>
       <Position>
         <Filename Value="..\..\..\source\nparser.pas"/>
         <Caret Line="1051" Column="37" TopLine="1018"/>
+      </Position>
+      <Position>
+        <Filename Value="shakespeare_infer_rnn.pas"/>
+        <Caret Line="27" Column="8" TopLine="2"/>
+      </Position>
+      <Position>
+        <Filename Value="shakespeare_infer_rnn.pas"/>
+        <Caret Line="96" Column="31" TopLine="64"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\nrnnlayer.pas"/>
+        <Caret Line="83" Column="33" TopLine="223"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\nrnnlayer.pas"/>
+        <Caret Line="33" Column="15" TopLine="13"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\nrnnlayer.pas"/>
+        <Caret Line="150" Column="5" TopLine="146"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\nrnnlayer.pas"/>
+        <Caret Line="175" TopLine="144"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\nrnnlayer.pas"/>
+        <Caret Line="16" Column="5"/>
       </Position>
     </JumpHistory>
     <RunParams>

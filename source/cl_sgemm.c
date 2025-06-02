@@ -735,9 +735,36 @@ __kernel void gradient_array(__global nfloat* x, long const offset, const Activa
     }
 
 }
+
+#define BLOCK 512
 __kernel void backward_bias(__global nfloat* dst, const long blockSize, __global nfloat* src, const long srcOffset, const long batch)
 {
-
+    //const long filter = get_group_id(0);
+    //const long p = get_local_id(0);
+    //const long N = get_global_size(0);
+    //
+    //int i,b;
+    //local float part[BLOCK];
+    //
+    //src += srcOffset;
+    //float sum = 0;
+    //for(b = 0; b < batch; ++b){
+    //    for(i = 0; i < blockSize; i += BLOCK){
+    //        int index = p + i + blockSize*(filter + N*b);
+    //        sum += (p+i < blockSize) ? src[index] : 0;
+    //    }
+    //}
+    //part[p] = sum;
+    //
+    ////__syncthreads();
+    //barrier(CLK_LOCAL_MEM_FENCE);
+    //if (p == 0) {
+    //    printf("summing up :\n");
+    //    for(i = 0; i < BLOCK; ++i){
+    //      dst[filter] += part[i];
+    //      printf("%f\n", part[i]);
+    //    }
+    //}
     const long i = get_global_id(0);//if (i==0) printf("long %ull\n", sizeof(long));
     const long N = get_global_size(0);
     //for (long i=0 ; i<N ;i++) {
@@ -746,7 +773,7 @@ __kernel void backward_bias(__global nfloat* dst, const long blockSize, __global
       const long incbias = N*blockSize;
       // take a shortcut
       if(blockSize==1){
-        sum = sumv(batch, src+i, N);
+        sum = sumv(batch, src, N);
         dst[i] +=sum;
         return;
       }
@@ -1219,14 +1246,15 @@ __kernel void upsample(__global nfloat* in, const long stride, const int isForwa
 
 __kernel void fmavss(__global nfloat* src, const long offset, const nfloat scalar, const nfloat bias, __global nfloat* dst){
 
-  const long w = get_global_size(1);
+  //const long w = get_global_size(1);
   const long y = get_global_id(0);
-  const long x = get_global_id(1);
-  const long idx = y*w + x;
+  //const long x = get_global_id(1);
+  //const long idx = y*w + x;
   src += offset;
   dst += offset;
   //dst[idx] = mad(src[idx], scalar, bias);
-  dst[idx] = src[idx]*scalar + bias;
+  //dst[idx] = src[idx]*scalar + bias;
+  dst[y] = src[y]*scalar + bias;
 
 }
 

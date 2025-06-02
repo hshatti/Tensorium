@@ -296,40 +296,24 @@ begin
 
           inc(count , group_size)
       end
-  end else
-      cuda.softmaxBatch(inputs div groups, state.input.devData, 0, batch, inputs, groups, inputs div groups, 1, temperature, output.devData, 0
-        {$IFDEF CL_EVENTS}
-        , 1, pointer(state.events), pointer(state.events));
-        {$ELSE}
-        );
-        {$ENDIF}
-  //ocl.waitForEvents(batch, pointer(events));
-  //ocl.finish();
+  end else begin
+      cuda.softmaxBatch(inputs div groups, state.input.devData, 0, batch, inputs, groups, inputs div groups, 1, temperature, output.devData, 0);
+//softmaxBatch(pointer(state.input.data), inputs div groups, batch, inputs, groups, inputs div groups, 1, temperature, pointer(output.Data));
+  end;
 
   if assigned(state.truth.data) and not noloss then begin
     if not state.truth.wasGPU() then
       state.truth.pushToDevice();
-    cuda.crossEntropySoftmax(output.size(), output.devData, state.truth.devData, delta.devData, loss.devData
-      {$IFDEF CL_EVENTS}
-      , 1, pointer(state.events), pointer(state.events));
-      {$ELSE}
-      );
-      {$ENDIF}
+    cuda.crossEntropySoftmax(output.size(), output.devData, state.truth.devData, delta.devData, loss.devData);
+//softmaxCrossEntropy(output, state.truth, delta, loss);
 
-    //ocl.finish();
-    //ocl.waitForEvents(batch, pointer(events));
-    //softmaxCrossEntropy(output, state.truth, delta, loss);
-    //delta.pullFromDevice(t);
-    //writeln(state.index,' FW SOFTMAX sumSqrDelta : ', t.sumSqrDiff(delta):1:6);
-    //readln;
     loss.pullFromDevice();
     cost[0] := loss.Sum();
   end;
 
-  //output.pullFromDevice(t1);
-  //forward(state);
-  //t1.printStat();
-  //output.printStat();
+//output.printGpuSumSqrDiff();
+//delta.printGpuSumSqrDiff();
+//loss.printGpuSumSqrDiff();
 
   {$ifdef USE_TELEMETRY}
    if benchmark then metrics.forward.finish(layerType);
@@ -342,18 +326,13 @@ begin
   {$ifdef USE_TELEMETRY}
    if benchmark then metrics.backward.start(layerType);
   {$endif}
-
+//delta.printGpuSumSqrDiff();
   //if not state.delta.wasGPU() then state.delta.pushToDevice();
   if not delta.wasGPU() then delta.pushToDevice();
 
   cuda.addvv(delta.size(), delta.devData, 0, 1, state.delta.devData, 0, 1, state.delta.devData, 0, 1);
-
-  //backward(state);
-  //state.delta.pullFromDevice(t);
-  //writeln(state.index,' BW SOFTMAX sumSqrDiff state.delta : ', t.sumSqrDiff(delta):1:6);
-  //readln;
-  //ocl.waitForEvents(batch, pointer(events));
-  //ocl.finish();
+//backward(state);
+//state.delta^.printGpuSumSqrDiff();
   {$ifdef USE_TELEMETRY}
   if benchmark then metrics.backward.finish(layerType);
   {$endif}

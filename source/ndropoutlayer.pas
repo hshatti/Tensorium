@@ -24,7 +24,7 @@ type
     procedure setTrain(ATrain: boolean); override;
     procedure forward(var state: TNNetState); override;
     procedure backward(var state: TNNetState); override;
-{$if defined(USE_OPENCL)}
+{$if defined(USE_OPENCL) or defined(USE_CUDART)}
     procedure forwardGPU(var state: TNNetState);override;
     procedure backwardGPU(var state: TNNetState);override;
 {$endif}
@@ -128,11 +128,12 @@ begin
   {$endif}
 end;
 
+
 {$if defined(USE_OPENCL)}
 procedure TDropoutLayer.forwardGPU(var state: TNNetState);
 begin
   if not state.input.wasGPU() then state.input.pushToDevice;
-
+  //random(1000); // next randSeed
   output := state.input^;
   ocl.forwardDropout(output.size(), output.devData, probability, scale, rand.devData, output.devData);
   //rand.pullFromDevice();
@@ -146,6 +147,25 @@ begin
       exit();
   if not state.delta.wasGPU() then state.delta.pushToDevice;
   ocl.backwardDropout(state.delta.Size(), state.delta.devData, probability, scale, rand.devData, state.delta.devData);
+  delta := state.delta^;
+end;
+{$elseif defined(USE_CUDART)}
+procedure TDropoutLayer.forwardGPU(var state: TNNetState);
+begin
+  if not state.input.wasGPU() then state.input.pushToDevice;
+  output := state.input^;
+  cuda.forwardDropout(output.size(), output.devData, probability, scale, rand.devData, output.devData);
+  //rand.pullFromDevice();
+  //rand.print(psGray);
+  //readln
+end;
+
+procedure TDropoutLayer.backwardGPU(var state: TNNetState);
+begin
+  if not assigned(state.delta.devData) then
+      exit();
+  if not state.delta.wasGPU() then state.delta.pushToDevice;
+  cuda.backwardDropout(state.delta.Size(), state.delta.devData, probability, scale, rand.devData, state.delta.devData);
   delta := state.delta^;
 end;
 {$endif}

@@ -1,6 +1,7 @@
 
 {$ifdef FPC}
 {$mode delphi}
+{$PackRecords C}
 {$endif}
 unit cudart;
 interface
@@ -76,7 +77,7 @@ type
   PcudaResourceDesc  = ^cudaResourceDesc;
   PcudaResourceViewDesc  = ^cudaResourceViewDesc;
   PcudaSharedMemConfig  = ^cudaSharedMemConfig;
-  PcudaStream_t  = ^cudaStream_t;
+  //PcudaStream_t  = ^cudaStream_t;
   PcudaStreamAttrValue  = ^cudaStreamAttrValue;
   cudaStreamAttrValue = record end;
   PcudaStreamCaptureMode  = ^cudaStreamCaptureMode;

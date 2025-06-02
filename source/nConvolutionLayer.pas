@@ -70,7 +70,7 @@ type
     procedure forward(var state: TNNetState); override;
     procedure backward(var state: TNNetState); override;
     procedure update(const args: TUpdateArgs); override;
-    {$ifdef USE_OPENCL}
+    {$if defined(USE_OPENCL) or defined(USE_CUDART)}
     procedure forwardGPU(var state: TNNetState);  override;
     procedure backwardGPU(var state: TNNetState); override;
     procedure updateGPU(const args: TUpdateArgs); override;
@@ -565,8 +565,8 @@ end;
 procedure TConvolutionalLayer.backward(var state: TNNetState);
 var
     //nweights,
-      i,j, m, n, k, colSize: SizeInt;
-    _A, _B, _C, im: Pointer; tmp:TSingleTensor;
+      b,j, m, n, k, colSize: SizeInt;
+    _A, _B, _C, im: Pointer;
 
 begin
   {$ifdef USE_TELEMETRY}
@@ -630,10 +630,10 @@ begin
   {$ifdef USE_TELEMETRY}
     if benchmark then tensorMetrics.start(opGemm);
   {$endif}
-  for i:= 0 to batch -1 do
+  for b:= 0 to batch -1 do
     TSingleTensor.gemm(CblasRowMajor, CblasNoTrans, CblasTrans, m, n, k, 1
-    , delta.data + i*m*k, k
-    , state.workspace.data + i*ColSize, k
+    , delta.data + b*m*k, k
+    , state.workspace.data + b*ColSize, k
     , 1, weight_updates.data, n);
   {$ifdef USE_TELEMETRY}
     if benchmark then tensorMetrics.finish(opGemm);
@@ -642,12 +642,12 @@ begin
   {$ifdef USE_TELEMETRY}
     if benchmark then tensorMetrics.start(opGemm);
   {$endif}
-    for i := 0 to batch -1 do begin
+    for b := 0 to batch -1 do begin
         TSingleTensor.gemm(
           CblasRowMajor, CblasTrans, CblasNoTrans, n, k, m, 1
           , weights.Data, n
-          , delta.Data + i * m * k, k
-          , 0, state.workspace.data + i*colSize, k);
+          , delta.Data + b * m * k, k
+          , 0, state.workspace.data + b*colSize, k);
     end;
   {$ifdef USE_TELEMETRY}
     if benchmark then tensorMetrics.finish(opGemm);
@@ -699,13 +699,12 @@ begin
   {$endif}
 end;
 
-{$ifdef USE_OPENCL}
+{$if defined(USE_OPENCL)}
 procedure TConvolutionalLayer.forwardGPU(var state: TNNetState);
 var
     b, aOffset, bOffset , outImgSize, kSize, k, imColSize, o:SizeInt;
     _A, _B, _C : pointer;
     s : TNNetState;
-    t : TSingleTensor;
 begin
   {$ifdef USE_TELEMETRY}
   if benchmark then metrics.forward.start(layerType);
@@ -884,7 +883,6 @@ end;
 procedure TConvolutionalLayer.backwardGPU(var state: TNNetState);
 var
     b, m, n, k, colSize, _vol, imSize: SizeInt;
-    t:TSingleTensor;
 begin
   {$ifdef USE_TELEMETRY}
   if benchmark then metrics.backward.start(layerType);
@@ -1147,6 +1145,264 @@ begin
   if benchmark then metrics.update.finish(layerType);
   {$endif}
 end;
+{$elseif defined(USE_CUDART)}
+procedure TConvolutionalLayer.forwardGPU(var state: TNNetState);
+var
+    b, aOffset, bOffset , outImgSize, kSize, k, imColSize, o:SizeInt;
+    _A, _B, _C : pointer;
+    s : TNNetState;
+begin
+  {$ifdef USE_TELEMETRY}
+  if benchmark then metrics.forward.start(layerType);
+  {$endif}
+
+  if not state.input.wasGPU() then state.input.pushToDevice;
+  if not weights.wasGPU() then weights.pushToDevice;
+  if not biases.wasGPU() then biases.pushToDevice;
+  output.setCUDA;
+
+  kSize := kernelSize*kernelSize;
+  outImgSize := output.area();
+  //filters := weights.c();
+  k := c * kSize;
+  imColSize := c * kSize * outImgSize;
+
+
+  for b := 0 to batch - 1 do
+  begin
+    bOffset := 0;
+    if (kSize <> 1) or (Stride_y * Stride_x <> 1) or (Dilation * Dilation <> 1) then
+      begin
+        _A := state.input.devData;
+        _B := state.workspace.devData;
+        aOffset := b * state.input.volume();
+        bOffset := b * imColSize;
+        cuda.im2col(c, h, w, kernelSize, kernelSize, Padding, Padding, stride_y, stride_x, Dilation, Dilation, _A, aOffset, _B, bOffset);
+      end
+    else
+      begin
+        _B := state.input.devData;
+        bOffset := b * state.input.volume();
+      end;
+
+    _C := output.devData;
+    cuda.gemm(false, false, filters, outImgSize, k, 1, weights.devData, 0, k, _B, bOffset, outImgSize, 0, _C, b * outImgSize * filters, outImgSize);
+
+  end;
+
+//state.input.Conv2D(weights, output, Padding, Padding, stride_x, stride_y, Dilation, Dilation);
+
+
+  if isBatchNormalized then
+    batchNormGPU(state)
+  else begin
+    cuda.forwardBias(output.Size(), output.devData, 0, biases.size(), biases.devData,1, Batch);
+//output.forwardBias(biases);
+  end;
+
+  {$ifdef USE_TELEMETRY}
+  if benchmark then metrics.act.start(ActivationType);
+  {$endif}
+  case ActivationType of
+     acSWISH :
+       if train then
+         cuda.activateArraySWISH(output.size(), output.devData, 0, ActivationInput.devData, output.devData)
+       else
+         cuda.ActivateArray(output.size(), output.devData, 0, longint(ActivationType));
+     //acMISH :
+     //   activate_array_mish(output, outputs * batch, activationInput, output);
+     //acHARD_MISH :
+     //     activate_array_hard_mish(output, outputs * batch, ActivationInput, output);
+     //acNORM_CHAN :
+     //     activate_array_normalize_channels(output, outputs * batch, batch, outC, outW * outH, output);
+     //acNORM_CHAN_SOFTMAX, acNORM_CHAN_SOFTMAX_MAXVAL :
+     //     activate_array_normalize_channels_softmax(output, outputs * batch, batch, outC, outW * outH, output, activationType = acNORM_CHAN_SOFTMAX_MAXVAL);
+     else
+       cuda.ActivateArray(output.size(), output.devData, 0, longint(ActivationType));
+  end;
+  {$ifdef USE_TELEMETRY}
+  cuda.finish();
+  if benchmark then metrics.act.finish(ActivationType);
+  {$endif}
+//Activate();
+
+  if (assistedExcitation<>0) and state.isTraining then
+      assistedForward(state);
+  if antialiasing<>0 then begin
+      s := default(TNNetState);
+      s.isTraining := state.isTraining;
+      s.workspace := state.workspace;
+      s.input := @output;
+      inputLayer.forwardGPU(s);
+      cuda.copy(output.Size(), inputLayer.output.devData, 0, 1, output.devData, 0, 1);
+  end;
+//output.printGpuSumSqrDiff();
+  {$ifdef USE_TELEMETRY}
+  cuda.finish();
+  if benchmark then metrics.forward.finish(layerType);
+  {$endif}
+end;
+
+procedure TConvolutionalLayer.backwardGPU(var state: TNNetState);
+var
+    b, m, n, k, colSize, _vol, imSize: SizeInt;
+begin
+  {$ifdef USE_TELEMETRY}
+  if benchmark then metrics.backward.start(layerType);
+  {$endif}
+  m := filters div groups;
+  n := kernelSize * kernelSize * c div groups;
+  k := outH * outW;
+
+  colSize := c * outH * outW * kernelSize * kernelSize;
+  //colSize := getWorkspaceSize div batch;
+  _vol := state.input.Volume();
+  if not delta.wasGPU() then delta.pushToDevice;
+  if not bias_updates.wasGPU() then bias_updates.pushToDevice;
+  if not state.input.wasGPU() then state.input.pushToDevice;
+
+  case activationType of
+    acSWISH : ;
+      //gradient_array_swish(output, outputs * batch, activationInput, delta) ;
+    //acMISH  :
+    //  gradient_array_mish(outputs * batch, activationInput, delta) ;
+    //acHARD_MISH :
+    //  gradient_array_hard_mish(outputs * batch, activationInput, delta) ;
+    //acNORM_CHAN_SOFTMAX, acNORM_CHAN_SOFTMAX_MAXVAL :
+    //  gradient_array_normalize_channels_softmax(output, outputs * batch, batch, outC, outW * outW, delta) ;
+    //acNORM_CHAN :
+    //  gradient_array_normalize_channels(output, outputs * batch, batch, outC, outW * outW, delta) ;
+    else
+      cuda.DeriveArray(output.size(), output.devData, 0, longint(ActivationType), delta.devData);
+  end;
+//Derivative();
+//delta.printGpuSumSqrDiff();
+  if isBatchNormalized then
+    batchNormBackGPU(state)
+  else begin
+    cuda.backwardBias(bias_updates.size(), bias_updates.devData, delta.size, delta.devData, 0, 1, batch);
+//bias_updates.addSums(delta);
+  end;
+
+  state.workspace.setCUDA;
+  for b:=0 to batch-1 do begin
+    cuda.im2col(c, h, w, kernelSize, kernelSize, Padding, Padding,
+      stride_y, stride_x, dilation, dilation, state.input.devData , b*_vol, state.workspace.devData, b*colSize);
+  end;
+//state.input.im2Col(kernelSize, kernelSize, padding * dilation, padding * dilation, stride_y, stride_x, dilation, dilation, state.workspace, 1);
+
+
+
+
+  if not weight_updates.wasGPU() then weight_updates.pushToDevice;
+
+  for b:= 0 to batch -1 do begin
+    cuda.gemm(false, true,
+            m, n, k, 1
+            , delta.devData , b*m*k, k
+            , state.workspace.devData, b*ColSize, k
+            , 1, weight_updates.devData, 0, n);
+  end;
+
+//for b:= 0 to batch -1 do
+//TSingleTensor.gemm(CblasRowMajor, CblasNoTrans, CblasTrans, m, n, k, 1
+//, delta.data + b*m*k, k
+//, state.workspace.data + b*ColSize, k
+//, 1, weight_updates.data, n);
+
+  if assigned(state.delta) and assigned(state.delta.devdata) then begin
+    if not weights.wasGPU() then weights.pushToDevice;
+    //if not state.delta.wasGPU then state.delta.pushToDevice;
+
+    for b := 0 to batch -1 do begin
+        cuda.gemm(true, false,
+          n, k, m, 1,
+          weights.devData, 0    , n,
+          delta.devData  , b*m*k, k,
+          0, state.workspace.devData, b*colSize, k);
+    end;
+
+//for b := 0 to batch -1 do begin
+//    TSingleTensor.gemm(
+//      CblasRowMajor, CblasTrans, CblasNoTrans, n, k, m, 1
+//      , weights.Data, n
+//      , delta.Data + b * m * k, k
+//      , 0, state.workspace.data + b*colSize, k);
+//end;
+
+
+    imSize := state.delta.Volume();
+    for b := 0 to batch-1 do begin
+      cuda.col2im(state.delta.c, state.delta.h, state.delta.w, kernelSize, kernelSize, Padding, Padding
+              , stride_y, stride_x, dilation, dilation, state.workspace.devData, b*colSize, state.delta.devData, b*imSize);
+    end;
+//state.delta.col2Im(kernelSize, kernelSize, padding*Dilation, padding*Dilation, stride_x, stride_y, dilation, dilation, state.workspace);
+
+  end ;
+
+//bias_updates.printGpuSumSqrDiff();
+//weight_updates.printGpuSumSqrDiff();
+//state.delta.printGpuSumSqrDiff();
+  {$ifdef USE_TELEMETRY}
+  cuda.finish();
+  if benchmark then metrics.backward.finish(layerType);
+  {$endif}
+end;
+
+procedure TConvolutionalLayer.updateGPU(const args: TUpdateArgs);
+var
+    learning_rate: single;
+begin
+  {$ifdef USE_TELEMETRY}
+  if benchmark then metrics.update.start(layerType);
+  {$endif}
+
+  if not biases.wasGPU() then biases.pushToDevice;
+  if not bias_updates.wasGPU() then bias_updates.pushToDevice;
+  if not weights.wasGPU() then weights.pushToDevice;
+  if not weight_updates.wasGPU() then weight_updates.pushToDevice;
+
+  learning_rate := args.learningRate * learningRateScale;
+
+  cuda.axpy(biases.size(), learning_rate / args.batch, bias_updates.devData, 0, 1, biases.devData, 0, 1);
+  //cuda.waitForEvents(batch, pointer(events));
+  //cuda.finish();
+
+  cuda.scale(bias_updates.size(), args.momentum, bias_updates.devData, 1);
+  //cuda.waitForEvents(batch, pointer(events));
+  //cuda.finish();
+
+  cuda.axpy(weight_updates.size(), -args.decay * args.batch, weights.devData, 0, 1, weight_updates.devData, 0, 1);
+  //cuda.waitForEvents(batch, pointer(events));
+  //cuda.finish();
+
+  cuda.axpy(weights.size(), learning_Rate / args.batch, weight_updates.devData, 0, 1, weights.devData, 0, 1);
+  //cuda.waitForEvents(batch, pointer(events));
+  //cuda.finish();
+
+  cuda.scale(weight_updates.size(), args.momentum, weight_updates.devData, 1);
+  //cuda.waitForEvents(batch, pointer(events));
+  //cuda.finish();
+
+  if assigned(scales.Data) then begin
+      //scales.axpy(learning_rate / args.batch, scale_updates);
+      //scale_updates.multiply(args.momentum);
+    cuda.axpy(scales.size(), learning_rate / args.batch, scale_updates.devData, 0, 1, scales.devData, 0, 1);
+    cuda.scale(scale_updates.size(), args.momentum, scale_updates.devData, 1);
+
+  end;
+
+  //update(args);
+  //ocl.waitForEvents(batch, pointer(events));
+
+  inherited;
+
+  {$ifdef USE_TELEMETRY}
+  cuda.finish();
+  if benchmark then metrics.update.finish(layerType);
+  {$endif}
+end;
+
 {$endif}
 
 initialization

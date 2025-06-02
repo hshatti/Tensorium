@@ -52,8 +52,8 @@ type
      );
     libraryPropertyType = libraryPropertyType_t;
     CUStream_t = pointer;
-    PcudaStream_t = ^cudaStream_t;
     cudaStream_t = ^CUStream_t;
+    PcudaStream_t = ^cudaStream_t;
 
     PPhalf = ^Phalf;
     Phalf = ^half;
