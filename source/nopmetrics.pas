@@ -10,7 +10,7 @@ type
     opIncFill, opFill, opCopy, opNorm, opBatchAddvs, opAddvs, opBatchMulvs,
     opMulvs, opBatchSubvs, opSubvs, opBatchDivvs, opDivvs, opPow, opAxpy, opMulvv, opAddvv, opSubvv, opDivvv, opFmavv, opDot, opBatchFmavss, opFmavss, opGemm, opIm2col, opCol2im,
     opConv2D, opConcat, opAddConcat, opHostToDevice, opDeviceToHost, opMemAllocate, opMemRelease, opGPUAllocate,
-    opGPURelease, opIm2ColExt, opCol2ImExt,
+    opGPURelease, opIm2ColExt, opCol2ImExt, opMeans, opVariances,
     opMeansVars, opNormalize, opMeansVarsDelta, opNormalizeDelta, opAddDots, opForwardBias, opBackwardBias, opForwardScale, opForwardScaleAdd,
     opReduce , opFwDropout, opBwDropout, opL2,
     opInit

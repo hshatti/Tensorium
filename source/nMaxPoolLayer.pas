@@ -31,7 +31,7 @@ type
     procedure backwardAvgPool(var state : TNNetState);
     procedure forward(var state: TNNetState); override;
     procedure backward(var state: TNNetState); override;
-{$ifdef USE_OPENCL}
+{$if defined(USE_OPENCL) or defined(USE_CUDART)}
     procedure forwardGPU(var state: TNNetState); override;
     procedure backwardGPU(var state: TNNetState); override;
 {$endif}
@@ -569,7 +569,7 @@ begin
   {$endif}
 end;
 
-{$ifdef USE_OPENCL}
+{$if defined(USE_OPENCL)}
 procedure TMaxPoolLayer.forwardGPU(var state: TNNetState);
 var s:TNNetState;
 begin
@@ -649,6 +649,58 @@ begin
   //ocl.finish();
   {$ifdef USE_TELEMETRY}
   ocl.finish();
+  if benchmark then metrics.backward.finish(layerType);
+  {$endif}
+end;
+{$elseif defined(USE_CUDART)}
+procedure TMaxPoolLayer.forwardGPU(var state: TNNetState);
+var s:TNNetState;
+begin
+  {$ifdef USE_TELEMETRY}
+  if benchmark then metrics.forward.start(layerType);
+  {$endif}
+  if not state.input.wasGPU() then state.input.pushToDevice;
+  if avgPool then begin end
+  else begin
+    cuda.forwardMaxPool(batch, outC, outH, outW, state.input.devData, c, h, w, stride_x, stride_y, padding, kernelSize, indexes.devData, output.devData);
+//forward(state);
+    if antialiasing<>0 then
+        begin
+            s := default(TNNetState);
+            s.isTraining := state.isTraining;
+            s.workspace := state.workspace;
+            s.net := state.net;
+            s.input := @output;
+            inputLayer.forwardGPU(s);
+            cuda.copy(inputLayer.output.size(), inputLayer.output.devData, 0, 1, output.devData, 0, 1)
+        end;
+
+  end;
+
+//output.printGpuSumSqrDiff();
+  output.setCUDA;
+  indexes.setCUDA;
+  {$ifdef USE_TELEMETRY}
+  cuda.finish();
+  if benchmark then metrics.forward.finish(layerType);
+  {$endif}
+end;
+
+procedure TMaxPoolLayer.backwardGPU(var state: TNNetState);
+var t:TSingleTensor;
+begin
+  {$ifdef USE_TELEMETRY}
+  if benchmark then metrics.backward.start(layerType);
+  {$endif}
+  if not delta.wasGPU() then delta.pushToDevice;
+  //if not state.delta.wasGPU() then state.delta.pushToDevice;
+  if avgpool then
+  else
+    cuda.backwardMaxPool(batch, outC, outH, outW, state.delta.devData, indexes.devData, delta.devData);
+//backward(state);
+//state.delta^.printGpuSumSqrDiff();
+  {$ifdef USE_TELEMETRY}
+  cuda.finish();
   if benchmark then metrics.backward.finish(layerType);
   {$endif}
 end;

@@ -53,6 +53,7 @@
 -OpCOREAVX2
 -dUSE_OPENCL
 -dUSE_AVX2
+-dUSE_MKL
 -dUSE_MULTITHREADING
 -dUSE_TELEMETRY"/>
             <OtherDefines Count="12">

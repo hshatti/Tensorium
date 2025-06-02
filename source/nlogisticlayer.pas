@@ -22,7 +22,7 @@ type
     procedure setTrain(ATrain: boolean); override;
     procedure forward(var state: TNNetState); override;
     procedure backward(var state: TNNetState); override;
-    {$ifdef USE_OPENCL}
+    {$if defined(USE_OPENCL) or defined(USE_CUDART)}
     procedure forwardGPU(var state: TNNetState); override;
     procedure backwardGPU(var state: TNNetState); override;
     {$endif}
@@ -67,6 +67,19 @@ begin
   FTrain := ATrain;
 end;
 
+class procedure TLogisticLayer.logisticCrossEntropy(const pred, truth: TSingleTensor; var delta, error: TSingleTensor);
+var i:SizeInt;
+    t,p:single;
+begin
+  // todo [logistic_x_ent] simdfy and GPU
+  for i := 0 to delta.Size-1 do begin
+      t := truth.Data[i];
+      p := pred.Data[i];
+      error.Data[i] := -t*ln(max(p, sEPSILON)) - (1-t) * ln(max(1 - p, sEPSILON));
+      delta.Data[i] := t - p;
+  end
+end;
+
 procedure TLogisticLayer.forward(var state: TNNetState);
 begin
   {$ifdef USE_TELEMETRY}
@@ -107,7 +120,7 @@ begin
   {$endif}
 end;
 
-{$ifdef USE_OPENCL}
+{$if defined(USE_OPENCL)}
 procedure TLogisticLayer.forwardGPU(var state: TNNetState);
 var t:TSingleTensor;
     ev:cl_event;
@@ -190,20 +203,56 @@ begin
   if benchmark then metrics.backward.finish(layerType);
   {$endif}
 end;
-{$endif}
-
-class procedure TLogisticLayer.logisticCrossEntropy(const pred, truth: TSingleTensor; var delta, error: TSingleTensor);
-var i:SizeInt;
-    t,p:single;
+{$elseif defined(USE_CUDART)}
+procedure TLogisticLayer.forwardGPU(var state: TNNetState);
 begin
-  // todo [logistic_x_ent] simdfy and GPU
-  for i := 0 to delta.Size-1 do begin
-      t := truth.Data[i];
-      p := pred.Data[i];
-      error.Data[i] := -t*ln(max(p, sEPSILON)) - (1-t) * ln(max(1 - p, sEPSILON));
-      delta.Data[i] := t - p;
-  end
+  {$ifdef USE_TELEMETRY}
+   if benchmark then metrics.forward.start(layerType);
+  {$endif}
+
+  //CLBlastScopy(output.Size, state.input.devData, 0, 1, output.devData, 0, 1, @ocl.ActiveQueue
+  //, nil//@ev
+  //);
+  cuda.copy(output.size(), state.input.devData, 0, 1, output.devData, 0, 1);
+  //ocl.finish;
+  output.setCUDA;
+  delta.setCUDA;
+  loss.setCUDA;
+
+  cuda.ActivateArray(output.size(), output.devData, 0, longint(ActivationType));
+  //ocl.finish();
+
+  if assigned(state.truth.Data) then  begin
+    if not state.truth.wasGPU() then
+      state.truth.pushToDevice();
+
+    cuda.crossEntropyLogistic(output.size(), output.devData, state.truth.devData, delta.devData, loss.devData);
+    //ocl.finish();
+
+    loss.pullFromDevice();
+    cost[0] := loss.sum
+  end;
+
+  {$ifdef USE_TELEMETRY}
+  if benchmark then metrics.forward.finish(layerType);
+  {$endif}
 end;
+
+procedure TLogisticLayer.backwardGPU(var state: TNNetState);
+begin
+  {$ifdef USE_TELEMETRY}
+  if benchmark then metrics.backward.start(layerType);
+  {$endif}
+  //if not state.delta.wasGPU() then state.delta.pushToDevice();
+  if not delta.wasGPU() then delta.pushToDevice();
+
+  cuda.addvv(delta.size(), delta.devData, 0, 1, state.delta.devData, 0, 1, state.delta.devData, 0, 1);
+  {$ifdef USE_TELEMETRY}
+  if benchmark then metrics.backward.finish(layerType);
+  {$endif}
+end;
+
+{$endif}
 
 end.
 

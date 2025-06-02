@@ -1429,7 +1429,9 @@ begin
   SetGlobalOffsets(0);
   //SetLocalWorkGroupSizes(NN);
 
-  randomize;
+  //randomize;
+  random(1000); // next randSeed
+
   FErr := clSetKernelArg(Kernels[kernelId], 0, SizeOf(randSeed)    , @RandSeed);    CheckError();
   FErr := clSetKernelArg(Kernels[kernelId], 1, SizeOf(probability) , @probability); CheckError();
   FErr := clSetKernelArg(Kernels[kernelId], 2, SizeOf(scale)       , @scale);       CheckError();

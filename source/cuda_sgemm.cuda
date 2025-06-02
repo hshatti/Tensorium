@@ -1,5 +1,5 @@
 #define nfloat  float
-#define sEPSILON 0.0000001f
+#define sEPSILON 0.000001f
 //#include <stdio.h>
 /*
 inline nfloat mapX(const nfloat x){
@@ -95,6 +95,10 @@ typedef enum {
   } ActivationType;
 
 
+__device__ nfloat sqr(const nfloat x){
+  return x*x;
+}
+
 __device__ nfloat sumv(const long N,  const nfloat* v, const long stride){
   nfloat sum=0;
   #pragma unroll 8
@@ -107,7 +111,7 @@ __device__ nfloat maxv(const long N,  const nfloat* v, const long stride){
   nfloat m=v[0];
   #pragma unroll 8
   for (long i=1;i<N; i++)
-    m = fmax(m, v[i*stride]);
+    m = max(m, v[i*stride]);
   return m;
 }
 
@@ -115,7 +119,7 @@ __device__ nfloat minv(const long N,  const nfloat* v, const long stride){
   nfloat m=v[0];
   #pragma unroll 8
   for (long i=1;i<N; i++)
-    m = fmin(m, v[i*stride]);
+    m = min(m, v[i*stride]);
   return m;
 }
 
@@ -273,7 +277,7 @@ extern "C" __global__ void forward_bias(const long N, const long biasSize, const
     if (i >= N) return;
 
     const int f = (i / blockSize) % biasSize;
-    output[i] += bias[f];
+    output[i + outputOffset] += bias[f];
 }
 
 __device__ nfloat stair_activate(const nfloat x)
@@ -713,29 +717,63 @@ extern "C" __global__ void gradient_array(const long N, nfloat* x, long const of
     }
 
 }
-extern "C" __global__ void backward_bias(const long N, nfloat* dst, const long blockSize,  nfloat* src, const long srcOffset, const long batch)
+
+//#define BLOCK 0x20
+extern "C" __global__ void backward_bias(
+       const long N,
+       nfloat* dst,
+       const long blockSize,
+       nfloat* src,
+       const long srcOffset,
+       const long batch)
 {
 
-    const long i = blockDim.x * blockIdx.x + threadIdx.x;//if (i==0) printf("long %ull\n", sizeof(long));
-    if (i>=N) return;
-    //const long N = blockDim.x * gridDim.x;
-    //for (long i=0 ; i<N ;i++) {
-      nfloat sum = 0;
-      src += i * blockSize + srcOffset;
-      const long incbias = N*blockSize;
-      // take a shortcut
-      if(blockSize==1){
-        sum = sumv(batch, src+i, N);
-        dst[i] +=sum;
-        return;
-      }
 
-      #pragma unroll 8
-      for (long j=0; j<batch; j++){
-        sum += sumv(blockSize, src, 1);
-        src += incbias;
-      }
-      dst[i] +=sum;
+    const long filter = blockIdx.x;
+    const long p = threadIdx.x;
+    //if(blockDim.x * filter + p>=N) return;
+
+    long i,b;
+    __shared__ float part[BLOCK];
+
+    src += srcOffset;
+    float sum = 0;
+    for(b = 0; b < batch; ++b){
+        for(i = 0; i < blockSize; i += BLOCK){
+            int index = p + i + blockSize*(filter + N*b);
+            sum += (p+i < blockSize) ? src[index] : 0;
+        }
+    }
+    part[p] = sum;
+    __syncthreads();
+    if (p == 0) {
+        for(i = 0; i < BLOCK; ++i)
+          dst[filter] += part[i];
+    }
+
+    //const long i = blockDim.x * blockIdx.x + threadIdx.x;//if (i==0) printf("long %ull\n", sizeof(long));
+    //if (i>=N) return;
+    //nfloat sum = 0;
+    ////const long N = blockDim.x * gridDim.x;
+    ////for (long i=0 ; i<N ;i++) {
+    //  src += i * blockSize + srcOffset;
+    //   //take a shortcut
+    //  if(blockSize==1){
+    //    dst[i] += sumv(batch, src, N);
+    //    //#pragma unroll 8
+    //    //for (long j=0; j<batch; j++)
+    //    //  sum += src[j*N];
+    //    //dst[i] +=sum;
+    //    return;
+    //  }
+    //
+    //  const long incbias = N*blockSize;
+    //  #pragma unroll 8
+    //  for (long j=0; j<batch; j++){
+    //    sum += sumv(blockSize, src, 1);
+    //    src += incbias;
+    //  }
+    //  dst[i] +=sum;
 }
 
 extern "C" __global__ void addv(const long N, nfloat* src1, const long src1Offset, const long inca,  nfloat* src2, const long src2Offset, const long incb,  nfloat* dst, const long dstOffset, const long incc){
@@ -770,13 +808,18 @@ extern "C" __global__ void scale(const long N, const nfloat a,  nfloat* x, const
 
 }
 
-extern "C" __global__ void crossEntropyLogistics(const long N, const nfloat* pred,  const nfloat* truth,  nfloat* delta,  nfloat* error){
+extern "C" __global__ void crossEntropyLogistics(
+           const long N,
+           const nfloat* pred,
+           const nfloat* truth,
+           nfloat* delta,
+           nfloat* error){
 
   const long i = blockDim.x * blockIdx.x + threadIdx.x;
   if (i >= N) return;
   nfloat t = truth[i];
   nfloat p = pred[i];
-  error[i] = -t*log(fmax(p, sEPSILON)) - (1-t) * log(fmax(1 - p, sEPSILON));
+  error[i] = -t*log(max(p, sEPSILON)) - (1-t) * log(max(1 - p, sEPSILON));
   //error[i] = -t*log(p) - (1-t) * log(1 - p);
   delta[i] = t - p;
    //printf("%ld, ", i);
@@ -809,11 +852,20 @@ extern "C" __global__ void copy(const long N,
 #define FLT_MAX 3.402823466e+38F
 
 extern "C" __global__ void forward_maxpool(
-     const long N, const long outH, const long outW
+     const long N
+     , const long outH
+     , const long outW
      , nfloat* input
-     , const long c, const long h, const long w
-     , const long stride_x, const long stride_y, const long padding, const long kernelSize
-     ,  long* indexes,  nfloat* output){
+     , const long c
+     , const long h
+     , const long w
+     , const long stride_x
+     , const long stride_y
+     , const long padding
+     , const long kernelSize
+     , size_t* indexes
+     , nfloat* output
+     ){
 
   const long w_offset = -padding / 2;
   const long h_offset = -padding / 2;
@@ -847,7 +899,7 @@ extern "C" __global__ void forward_maxpool(
       indexes[out_index] = max_i;
 }
 
-extern "C" __global__ void backwardMaxPool(const long M, const long N,  nfloat* output,  const long* indexes,  const nfloat* delta){
+extern "C" __global__ void backward_maxpool(const long M, const long N,  nfloat* output,  const size_t* indexes,  const nfloat* delta){
         const long i = blockDim.x * blockIdx.x + threadIdx.x;
         const long j = blockDim.y * blockIdx.y + threadIdx.y;
         //const long id = i*blockDim.y * gridDim.y + j;
@@ -866,7 +918,7 @@ __device__ void softmax(const long n,  nfloat* input, const long stride, const n
   nfloat sum = 0;
   #pragma unroll 8
   for (long i=0;i<n;i++) {
-      nfloat e = exp((input[i*stride] - largest)/temp);
+      nfloat e = expf((input[i*stride] - largest)/temp);
       sum += e;
       output[i*stride] = e;
   }
@@ -896,14 +948,19 @@ __device__ void move(const nfloat* src,  nfloat* dst , const long count){
   for (long i=0 ; i<count; i++) dst[i] = src[i];
 }
 
-extern "C" __global__ void crossEntropySoftmax(const  nfloat* pred, const  nfloat* truth,  nfloat* delta,  nfloat* error){
+extern "C" __global__ void crossEntropySoftmax(
+  const long N,
+  const nfloat* pred,
+  const nfloat* truth,
+  nfloat* delta,
+  nfloat* error){
 
   const long i = blockDim.x * blockIdx.x + threadIdx.x;
-
+  if (i>=N) return;
   nfloat t = truth[i];
   nfloat p = pred[i];
   if (t!=0)
-      error[i] = -log(fmax(p, sEPSILON));
+      error[i] = -log(max(p, sEPSILON));
       //error[i] = -log(p);
   else
       error[i] = 0;
@@ -1211,11 +1268,16 @@ void Xcol2imKernelNormal(const long M, const long N,
 }
 
 
-extern "C" __global__ void upsample( nfloat* in, const long stride, const int isForward, const nfloat scale,  nfloat* out, const int zero){
+extern "C" __global__ void upsample(const long N, const long M, const long K,
+                                    nfloat* in, const long stride, const int isForward, const nfloat scale,  nfloat* out, const int zero){
 
    const long c = blockDim.x * blockIdx.x + threadIdx.x;
+   if (c>=N) return;
    const long y = blockDim.y * blockIdx.y + threadIdx.y;
+   if (y>=M) return;
    const long x = blockDim.z * blockIdx.z + threadIdx.z;
+   if (x>=K) return;
+
    const long h = blockDim.y * gridDim.y/stride; // but why multiplying by stride (look at setWorkgroupSizes) and then dividing by it in the loop??
    const long w = blockDim.z * gridDim.z/stride; // but why multiplying by stride (look at setWorkgroupSizes) and then dividing by it in the loop??
 
@@ -1230,25 +1292,31 @@ extern "C" __global__ void upsample( nfloat* in, const long stride, const int is
 
 }
 
-extern "C" __global__ void fmavss( nfloat* src, const long offset, const nfloat scalar, const nfloat bias,  nfloat* dst){
+extern "C" __global__ void fmavss(const long N, nfloat* src, const long offset, const nfloat scalar, const nfloat bias,  nfloat* dst){
 
-  const long w = blockDim.y * gridDim.y;
+  //const long w = blockDim.y * gridDim.y;
   const long y = blockDim.x * blockIdx.x + threadIdx.x;
-  const long x = blockDim.y * blockIdx.y + threadIdx.y;
-  const long idx = y*w + x;
+  //const long x = blockDim.y * blockIdx.y + threadIdx.y;
+  if (y>=N) return;
+
+  //const long idx = y*w + x;
   src += offset;
   dst += offset;
   //dst[idx] = mad(src[idx], scalar, bias);
-  dst[idx] = src[idx]*scalar + bias;
+  //dst[idx] = src[idx]*scalar + bias;
+  dst[y] = src[y]*scalar + bias;
 
 }
 
-extern "C" __global__ void means_vars(const long blocksize, const long groups,  nfloat* src, const long offset,  nfloat* means,  nfloat* vars){
+extern "C" __global__ void means_vars(const long N, const long blocksize, const long groups,  nfloat* src, const long offset,  nfloat* means,  nfloat* vars){
 
     nfloat m = 0;
     nfloat v = 0;
     const long i = blockDim.x * blockIdx.x + threadIdx.x;
-    const long N = blockDim.x * gridDim.x;
+    if (i>=N) return;
+
+    //const long N = blockDim.x * gridDim.x;
+
     const long S = groups*blocksize;
     src += offset;
     // take a shortcut
@@ -1279,29 +1347,34 @@ extern "C" __global__ void means_vars(const long blocksize, const long groups,  
 extern "C" __global__ void normvv( nfloat* mean, const long mean_stride,  nfloat* variance, const long variance_stride,  nfloat* dst, const long dst_stride)
 {
   const long i = blockDim.x * blockIdx.x + threadIdx.x;
-  dst[i * dst_stride] = (dst[i*dst_stride] - mean[i*mean_stride])/sqrt(fmax(variance[i*variance_stride], sEPSILON));
+  dst[i * dst_stride] = (dst[i*dst_stride] - mean[i*mean_stride])/sqrt(max(variance[i*variance_stride], sEPSILON));
 }
 
 extern "C" __global__ void normvs( nfloat* src, const nfloat mean, const nfloat variance)
 {
   const long i = blockDim.x * blockIdx.x + threadIdx.x;
-  src[i] = (src[i] - mean)/sqrt(fmax(variance, sEPSILON));
+  src[i] = (src[i] - mean)/sqrt(max(variance, sEPSILON));
 }
 
-extern "C" __global__ void normblkvv( nfloat* means, const long means_stride,  nfloat* vars, const long vars_stride,  nfloat* dst, const long offset)
+extern "C" __global__ void normblkvv( const long M, const long N, const long K,
+                                      nfloat* means, const long means_stride,  nfloat* vars, const long vars_stride,  nfloat* dst, const long offset)
 {
-  const long blocksize = blockDim.y * gridDim.y;
-  const long batchsize = blockDim.x * gridDim.x*blocksize;
+  const long blocksize = N;                      //blockDim.y * gridDim.y;
+  const long batchsize = M*blocksize;            //blockDim.x * gridDim.x*blocksize;
   const long i = blockDim.x * blockIdx.x + threadIdx.x; // means vars pos
   const long b = blockDim.z * blockIdx.z + threadIdx.z; // batch batch pos
-  const long j = blockDim.y * blockIdx.y + threadIdx.y+ b*batchsize + i*blocksize + offset; // block pos
-  const nfloat v = sqrt(fmax(vars[i*vars_stride], sEPSILON));
+  long j = blockDim.y * blockIdx.y + threadIdx.y;
+  if (i>=M || j>=N || b>=K) return;
+
+  j += b*batchsize + i*blocksize + offset; // block pos
+  const nfloat v = sqrt(max(vars[i*vars_stride], sEPSILON));
   const nfloat m = means[i*means_stride];
   //dst += b*batchsize + i*blocksize + offset;
   dst[j] = (dst[j] - m)/v;
 }
 
-extern "C" __global__ void means_vars_delta(const long groups, const long blocksize,
+extern "C" __global__ void means_vars_delta(
+          const long N, const long groups, const long blocksize,
           nfloat* delta,  nfloat* x, const long offset,
           nfloat* means,  nfloat* vars,
           nfloat* means_delta,  nfloat* vars_delta){
@@ -1309,46 +1382,55 @@ extern "C" __global__ void means_vars_delta(const long groups, const long blocks
   nfloat m = 0;
   nfloat v = 0;
   const long i = blockDim.x * blockIdx.x + threadIdx.x;
-  const long ndst = blockDim.x * gridDim.x;
+
+  if (i>=N) return;
+
+  //const long ndst = blockDim.x * gridDim.x;
   x     += offset;
   delta += offset;
+
   // take a shortcut
   if(blocksize==1){
     #pragma unroll
     for (long j=0 ;j<groups; j++){
-      const long index = i+j*ndst;
+      const long index = i+j*N;
       m += delta[index];
       v += delta[index] * (x[index] - means[i]);
     }
-    means_delta[i] = m * (-1.0f / sqrt(fmax(vars[i], sEPSILON)));
-    vars_delta[i]  = v * -0.5f * pow(fmax(vars[i], sEPSILON), -1.5f);
+    means_delta[i] = m * (-1.0f / sqrt(max(vars[i], sEPSILON)));
+    vars_delta[i]  = v * -0.5f * pow(max(vars[i], sEPSILON), -1.5f);
     return;
   }
   #pragma unroll
   for (long j=0 ;j<groups; j++)
     #pragma unroll
     for (long k=0; k<blocksize; k++){
-      const long index = (i + j*ndst)*blocksize + k;
+      const long index = (i + j*N)*blocksize + k;
       m += delta[index];
       v += delta[index] * (x[index] - means[i]);
     }
-  means_delta[i] = m * (-1.0f / sqrt(fmax(vars[i], sEPSILON)));
-  vars_delta[i]  = v * -0.5f * pow(fmax(vars[i], sEPSILON), -1.5f);
+  means_delta[i] = m * (-1.0f / sqrt(max(vars[i], sEPSILON)));
+  vars_delta[i]  = v * -0.5f * pow(max(vars[i], sEPSILON), -1.5f);
   //means_delta[i] = m * (-1.0f / sqrt(vars[i]));
   //vars_delta[i]  = v * -0.5f / (vars[i]*sqrt(vars[i]));
 
 }
 
-extern "C" __global__ void norm_delta( nfloat* x, const long offset,  nfloat* means,  nfloat* vars,  nfloat* means_delta,  nfloat* vars_delta,  nfloat* delta){
+extern "C" __global__ void norm_delta(const long N, const long blockSize, const long groups,
+                                      nfloat* x, const long offset,  nfloat* means,  nfloat* vars,  nfloat* means_delta,  nfloat* vars_delta,  nfloat* delta){
   const long j = blockDim.z * blockIdx.z + threadIdx.z;
+  if (j>=groups) return;
   const long i = blockDim.x * blockIdx.x + threadIdx.x;
+  if (i>=N) return;
   const long k = blockDim.y * blockIdx.y + threadIdx.y;
-  const long groups    = blockDim.z * gridDim.z;
-  const long N         = blockDim.x * gridDim.x;
-  const long blocksize = blockDim.y * gridDim.y;
+  if (k>=blockSize) return;
 
-  const long batchsize = blocksize * groups;
-  const long index = (i + j*N) * blocksize +k;
+  //const long groups    = blockDim.z * gridDim.z;
+  //const long N         = blockDim.x * gridDim.x;
+  //const long blocksize = blockDim.y * gridDim.y;
+
+  const long batchsize = blockSize * groups;
+  const long index = (i + j*N) * blockSize +k;
   delta += offset;
   x     += offset;
   delta[index] =
@@ -1358,94 +1440,92 @@ extern "C" __global__ void norm_delta( nfloat* x, const long offset,  nfloat* me
 
 }
 
-extern "C" __global__ void add_dots(const long groups, const long blocksize,  nfloat* src1,  nfloat* src2, const long srcOffset,  nfloat* dst){
+extern "C" __global__ void add_dots(
+       const long N
+       , const long groups
+       , const long blockSize
+       , nfloat* src1
+       , nfloat* src2
+       , const long srcOffset
+       , nfloat* dst){
 
-    const long i = blockDim.x * blockIdx.x + threadIdx.x;
-    const long ndst = blockDim.x * gridDim.x;
-    nfloat sum = 0;
+    const long filter = blockIdx.x;
+    const long p = threadIdx.x;
+
+    //if (blockDim.x*filter + p>=N) return;
+
+    __shared__ float part[BLOCK];
     src1 += srcOffset;
     src2 += srcOffset;
-    // take a shortcut
-    if (blocksize==1){
-      sum = dotv(groups, src1 + i, ndst, src2 + i, ndst);
-      dst[i] += sum;
-      return;
+
+    long i,b;
+    float sum = 0;
+    for(b = 0; b < groups; ++b){
+        for(i = 0; i < blockSize; i += BLOCK){
+            int index = p + i + blockSize*(filter + N*b);
+            sum += (p+i < blockSize) ? src1[index]*src2[index] : 0;
+        }
     }
-    #pragma unroll
-    for (long b=0; b<groups; b++){
-      const long idx = (i + b * ndst) * blocksize;
-      sum += dotv(blocksize, src1 + idx, 1, src2 + idx, 1);
+    part[p] = sum;
+    __syncthreads();
+    if (p == 0) {
+        for(i = 0; i < BLOCK; ++i) dst[filter] += part[i];
     }
-    dst[i] += sum;
+
+    //const long i = blockDim.x * blockIdx.x + threadIdx.x;
+    //if (i>=N) return;
+    //
+    ////const long ndst = blockDim.x * gridDim.x;
+    //nfloat sum = 0;
+    //src1 += srcOffset;
+    //src2 += srcOffset;
+    //// take a shortcut
+    //if (blockSize==1){
+    //  sum = dotv(groups, src1 + i, N, src2 + i, N);
+    //  dst[i] += sum;
+    //  return;
+    //}
+    //#pragma unroll
+    //for (long b=0; b<groups; b++){
+    //  const long idx = (i + b * N) * blockSize;
+    //  sum += dotv(blockSize, src1 + idx, 1, src2 + idx, 1);
+    //}
+    //dst[i] += sum;
 }
 
-extern "C" __global__ void forward_scale(const int reshape,  nfloat* a,  const long aOffset,  nfloat* b, const long bOffset, const long incb)
+extern "C" __global__ void forward_scale(
+       const long N,
+       const long scaleSize,
+       const long blockSize,
+       nfloat* output,
+       const long outputOffset,
+       nfloat* scale,
+       const long scaleOffset,
+       const long incb)
 {
-  long N, blockSize, i, k, j;
-  switch (reshape) {
-    case 0:
-      N = blockDim.x * gridDim.x;
-      blockSize = blockDim.y * gridDim.y;
-      i = blockDim.x * blockIdx.x + threadIdx.x;
-      k = blockDim.z * blockIdx.z + threadIdx.z;
-      j = blockDim.y * blockIdx.y + threadIdx.y;
-      break;
-    case 1:
-      N = blockDim.y * gridDim.y;
-      blockSize = blockDim.x * gridDim.x;
-      i = blockDim.y * blockIdx.y + threadIdx.y;
-      k = blockDim.z * blockIdx.z + threadIdx.z;
-      j = blockDim.x * blockIdx.x + threadIdx.x;
-      break;
-  }
-  //if (i==0 && k==0){
-    //printf("        N = %ld\n", N);
-    //printf("blockSize = %ld\n", blockSize);
-  //}
-  //for (i = 0; i<N; i++)
-  //  for (k = 0; k<batch; k++){
-  a += (k*N + i)*blockSize + aOffset;
-  nfloat bb = b[i * incb];
-  //#pragma unroll 8
-  //    for (long j=0; j<blockSize; j++)
-        a[j] *= bb;
-  //}
+    const int i = blockIdx.x*blockDim.x + threadIdx.x;
+    if (i >= N) return;
+
+    const int f = (i / blockSize) % scaleSize;
+    output[i + outputOffset] *= scale[f];
 }
 
-extern "C" __global__ void forward_scale_add(const int reshape,  nfloat* a,  const long aOffset,  nfloat* s,  nfloat* b, const long bOffset, const long incb)
+extern "C" __global__ void forward_scale_add(
+       const long N,
+       const long scaleSize,
+       const long blockSize,
+       nfloat* output,
+       const long outputOffset,
+       nfloat* scale,
+       nfloat* bias,
+       const long sOffset,
+       const long incb)
 {
-  long N, blockSize, i, k, j;
-  switch (reshape) {
-    case 0:
-      N = blockDim.x * gridDim.x;
-      blockSize = blockDim.y * gridDim.y;
-      i = blockDim.x * blockIdx.x + threadIdx.x;
-      k = blockDim.z * blockIdx.z + threadIdx.z;
-      j = blockDim.y * blockIdx.y + threadIdx.y;
-      break;
-    case 1:
-      N = blockDim.y * gridDim.y;
-      blockSize = blockDim.x * gridDim.x;
-      i = blockDim.y * blockIdx.y + threadIdx.y;
-      k = blockDim.z * blockIdx.z + threadIdx.z;
-      j = blockDim.x * blockIdx.x + threadIdx.x;
-      break;
-  }
-  //if (i==0 && k==0){
-    //printf("        N = %ld\n", N);
-    //printf("blockSize = %ld\n", blockSize);
-  //}
-  //for (i = 0; i<N; i++)
-  //  for (k = 0; k<batch; k++){
-  a += (k*N + i)*blockSize + aOffset;
-  nfloat ss = s[i * incb];
-  nfloat bb = b[i * incb];
-  //#pragma unroll 8
-  //    for (long j=0; j<blockSize; j++)
+    const int i = blockIdx.x*blockDim.x + threadIdx.x;
+    if (i >= N) return;
 
-        a[j] *= ss;
-        a[j] += bb;
-  //}
+    const int f = (i / blockSize) % scaleSize;
+    output[i + outputOffset] = output[i + outputOffset]*scale[f] + bias[f];
 }
 
 #define RANDOM_MAX 1024u
@@ -1460,24 +1540,27 @@ __device__ unsigned int rand(const unsigned int seed){
 	return x % RANDOM_MAX;
 }
 
-extern "C" __global__ void forward_dropout(const unsigned int seed, const nfloat probability, const nfloat scale, const nfloat* src, nfloat* rnd, nfloat* dst)
+extern "C" __global__ void forward_dropout(const long N, const unsigned int seed, const nfloat probability, const nfloat scale, const nfloat* src, nfloat* rnd, nfloat* dst)
 {
   long i  = blockDim.x * blockIdx.x + threadIdx.x;
+  if (i>N) return;
   rnd[i]  = rand(seed);
   rnd[i] /= RANDOM_MAX;
   dst[i]  = rnd[i] < probability? 0: src[i]*scale;
 
 }
 
-extern "C" __global__ void backward_dropout(const nfloat probability, const nfloat scale, const nfloat* src, const nfloat* rnd, nfloat* dst)
+extern "C" __global__ void backward_dropout(const long N, const nfloat probability, const nfloat scale, const nfloat* src, const nfloat* rnd, nfloat* dst)
 {
   long i = blockDim.x * blockIdx.x + threadIdx.x;
+  if (i>N) return;
   dst[i] = rnd[i] < probability? 0: src[i]*scale;
 
 }
 
-extern "C" __global__ void cost_l2(const nfloat* pred, const nfloat* truth, nfloat* delta, nfloat* error){
+extern "C" __global__ void cost_l2(const long N, const nfloat* pred, const nfloat* truth, nfloat* delta, nfloat* error){
   long i = blockDim.x * blockIdx.x + threadIdx.x;
+  if (i>=N) return;
   nfloat r = truth[i] - pred[i];
   delta[i] = r ;
   error[i] = r*r;
@@ -1508,3 +1591,115 @@ extern "C" __global__ void power( nfloat* base, const long srcOffset, const long
 //   const long i = blockDim.x * blockIdx.x + threadIdx.x;
 //  c[i] = a[i]+b[i];
 //}
+
+extern "C" __global__ void means(const long N, const long blocksize, const long groups,  nfloat* src, const long offset,  nfloat* means){
+
+    __shared__ float local[BLOCK];
+
+    const long id = threadIdx.x;
+    local[id] = 0;
+
+    long filter = blockIdx.x;
+    src += offset;
+    long i, j;
+    for(j = 0; j < groups; ++j){
+        for(i = 0; i < blocksize; i += BLOCK){
+            long index = j*blocksize*N + filter*blocksize + i + id;
+            local[id] += (i+id < blocksize) ? src[index] : 0;
+        }
+    }
+    __syncthreads();
+
+    if(id == 0){
+        float mean_tmp = 0;
+        for(i = 0; i < BLOCK; ++i){
+            mean_tmp += local[i];
+        }
+        mean_tmp /= blocksize * groups;
+        means[filter] = mean_tmp;
+    }
+
+}
+
+extern "C" __global__ void vars(const long N, const long blocksize, const long groups,  nfloat* src, const long offset,  nfloat* means,  nfloat* vars){
+
+    __shared__ float local[BLOCK];
+
+    const long id = threadIdx.x;
+    local[id] = 0;
+
+    long filter = blockIdx.x;
+    src += offset;
+    long i, j;
+    for(j = 0; j < groups; ++j){
+        for(i = 0; i < blocksize; i += BLOCK){
+            long index = j*blocksize*N + filter*blocksize + i + id;
+            //local[id] += (i+id < blocksize) ? pow((src[index] - means[filter]), 2.0f) : 0; // pow will not work always when -use_fast_math compiler switch
+            local[id] += (i+id < blocksize) ? sqr(src[index] - means[filter]) : 0;
+        }
+    }
+    __syncthreads();
+
+    if(id == 0){
+        float variance_tmp = 0;
+        for(i = 0; i < BLOCK; ++i){
+            variance_tmp += local[i];
+        }
+        variance_tmp /= (blocksize * groups);
+        vars[filter] = variance_tmp;
+    }
+}
+
+extern "C" __global__ void means_vars_delta_fast(
+          const long N, const long groups, const long blocksize,
+          nfloat* delta,  nfloat* x, const long offset,
+          nfloat* means,  nfloat* vars,
+          nfloat* means_delta,  nfloat* vars_delta){
+
+    __shared__ float local[BLOCK];
+
+    int id = threadIdx.x;
+    local[id] = 0;
+
+    int filter = blockIdx.x;
+
+    x     += offset;
+    delta += offset;
+
+    int i, j;
+    for(j = 0; j < groups; ++j){
+        for(i = 0; i < blocksize; i += BLOCK){
+            int index = j*blocksize*N + filter*blocksize + i + id;
+            local[id] += (i+id < blocksize) ? delta[index] : 0;
+        }
+    }
+    __syncthreads();
+
+    if(id == 0){
+        means_delta[filter] = 0;
+        for(i = 0; i < BLOCK; ++i){
+            means_delta[filter] += local[i];
+        }
+        means_delta[filter] *= (-1.0f/sqrt(max(vars[filter] , sEPSILON)));
+    }
+
+    __syncthreads();
+    for(j = 0; j < groups; ++j){
+        for(i = 0; i < blocksize; i += BLOCK){
+            int index = j*blocksize*N + filter*blocksize + i + id;
+
+            local[id] += (i+id < blocksize) ? delta[index]*(x[index] - means[filter]) : 0;
+        }
+    }
+    __syncthreads();
+
+    if(id == 0){
+        vars_delta[filter] = 0;
+        for(i = 0; i < BLOCK; ++i){
+            vars_delta[filter] += local[i];
+        }
+        vars_delta[filter] *= -0.5f * pow(max(vars[filter] , sEPSILON), -1.5f);
+    }
+}
+
+

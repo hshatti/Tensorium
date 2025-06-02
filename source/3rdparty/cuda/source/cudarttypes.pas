@@ -1,5 +1,6 @@
 unit cudarttypes;
 interface
+uses cudaTypes;
 {
   Automatically converted by H2Pas 1.0.0 from driver_types.h
   The following command line parameters were used:
@@ -9,9 +10,10 @@ interface
 {$IFDEF FPC}
 {$mode delphi}
 {$PACKRECORDS C}
+//{$PackEnum 4}
+//{$MinEnumSize 4}
 {$ModeSwitch advancedrecords}
 {$ENDIF}
-//{$PackEnum 4}
 
   {
    * Copyright 1993-2018 NVIDIA Corporation.  All rights reserved.
@@ -2919,9 +2921,14 @@ interface
   {*
    * CUDA stream
     }
-
+  {$if declared(cudaStream_t)}
+  pcudaStream_t = cudatypes.pcudaStream_t;
+  cudaStream_t = cudatypes.cudaStream_t;
+  {$else}
+    pcudaStream_t = ^cudaStream_t;
     cudaStream_t = ^CUstream_st;
     CUstream_st = record end;
+  {$endif}
   {*
    * CUDA event types
     }
@@ -3012,7 +3019,16 @@ interface
     dim3 = record
       x, y, z : longword;
       constructor Create(const aX:longword ; const aY:longword =1; const aZ:longword =1);
-      class operator add(const a, b :dim3):dim3;
+      class operator Add(const a, b :dim3):dim3;
+      class operator Subtract(const a, b :dim3):dim3;
+      class operator Multiply(const a, b :dim3):dim3;
+      class operator intDivide(const a, b :dim3):dim3;
+      class operator Modulus(const a, b :dim3):dim3;
+      class operator Add(const a:dim3;const b :longword):dim3;
+      class operator Subtract(const a:dim3;const b :longword):dim3;
+      class operator Multiply(const a:dim3;const b :longword):dim3;
+      class operator intDivide(const a:dim3;const b :longword):dim3;
+
     end;
 
   {*
@@ -3586,9 +3602,67 @@ begin
   x := ax; y := ay; z := az
 end;
 
-class operator dim3.add(const a, b: dim3): dim3;
+class operator dim3.Add(const a, b: dim3): dim3;
 begin
-  result := dim3.create(a.x+b.x, a.y+b.y, a.z+b.z)
+  result.x := a.x+b.x;
+  result.y := a.y+b.y;
+  result.z := a.z+b.z
+end;
+
+class operator dim3.Subtract(const a, b: dim3): dim3;
+begin
+  result.x := a.x - b.x;
+  result.y := a.y - b.y;
+  result.z := a.z - b.z
+end;
+
+class operator dim3.Multiply(const a, b: dim3): dim3;
+begin
+  result.x := a.x * b.x;
+  result.y := a.y * b.y;
+  result.z := a.z * b.z
+end;
+
+class operator dim3.intDivide(const a, b: dim3): dim3;
+begin
+  result.x := a.x div b.x;
+  result.y := a.y div b.y;
+  result.z := a.z div b.z
+end;
+
+class operator dim3.Modulus(const a, b: dim3): dim3;
+begin
+  result.x := a.x mod b.x;
+  result.y := a.y mod b.y;
+  result.z := a.z mod b.z
+end;
+
+class operator dim3.Add(const a: dim3; const b: longword): dim3;
+begin
+  result.x := a.x + b;
+  result.y := a.y + b;
+  result.z := a.z + b
+end;
+
+class operator dim3.Subtract(const a: dim3; const b: longword): dim3;
+begin
+  result.x := a.x - b;
+  result.y := a.y - b;
+  result.z := a.z - b
+end;
+
+class operator dim3.Multiply(const a: dim3; const b: longword): dim3;
+begin
+  result.x := a.x * b;
+  result.y := a.y * b;
+  result.z := a.z * b
+end;
+
+class operator dim3.intDivide(const a: dim3; const b: longword): dim3;
+begin
+  result.x := a.x div b;
+  result.y := a.y div b;
+  result.z := a.z div b
 end;
 
 end.

@@ -1,5 +1,6 @@
 {$ifdef FPC}
 {$mode delphi}
+{$packrecords C}
 {$endif}
 unit nvrtc;
 interface
