@@ -13093,7 +13093,8 @@ implementation
 
   procedure Freecuda_runtime_api;
     begin
-      FreeLibrary(hlib);
+      if hlib<>0 then
+        FreeLibrary(hlib);
       cudaDeviceReset:=nil;
       cudaDeviceSynchronize:=nil;
       cudaDeviceSetLimit:=nil;

@@ -660,6 +660,8 @@ begin
   if benchmark then metrics.forward.start(layerType);
   {$endif}
   if not state.input.wasGPU() then state.input.pushToDevice;
+  output.setCUDA;
+  indexes.setCUDA;
   if avgPool then begin end
   else begin
     cuda.forwardMaxPool(batch, outC, outH, outW, state.input.devData, c, h, w, stride_x, stride_y, padding, kernelSize, indexes.devData, output.devData);
@@ -678,8 +680,6 @@ begin
   end;
 
 //output.printGpuSumSqrDiff();
-  output.setCUDA;
-  indexes.setCUDA;
   {$ifdef USE_TELEMETRY}
   cuda.finish();
   if benchmark then metrics.forward.finish(layerType);

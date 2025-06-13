@@ -14,6 +14,8 @@ uses
   {$endif}
   {$if defined(USE_OPENCL)}
   , OpenCLHelper, OpenCL, nnOpenCL//
+  {$elseif defined(USE_CUDART)}
+  , nnCuda
   {$endif}
   { you can add units after this };
 
@@ -322,6 +324,7 @@ var t1, t2, t3, t4, t5, t6 :TSingleTensor;
   h1, h2, h3 : TTensor<Half>;
 begin
   DeleteFile('heap.trc');
+
   //setHeapTraceOutput('heap.trc');
 
 //  tensor1 := TSingleTensor.Create([100]); // one dimension tensor of size [100], will always be initialized with zero
@@ -340,7 +343,7 @@ begin
 //
 //  exit;
   //write(#$1B'[1J');
-{$ifdef USE_OPENCL}
+{$if defined(USE_OPENCL)}
   i:=0;
   j:=0;
   //initOpenCL(i, j);
@@ -386,6 +389,8 @@ begin
   ocl.useBLAS := 2;
   //ocl.queueInOrder:=true;
   writeln('  - out of Order mode : ', not ocl.queueInOrder);
+{$elseif defined(USE_CUDART)}
+  initCUDART(0);
 {$endif}
   sDigits := 10;
 

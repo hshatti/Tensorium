@@ -411,7 +411,8 @@ begin
   state.net := Self;
   state.isTraining := True;
   state.input := @input;
-  state.workspace := workspace;
+  if not speedOverSize then
+    state.workspace := workspace;
   if assigned(state.delta) then
     state.delta.free;
   state.index := 0;

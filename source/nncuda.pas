@@ -6,7 +6,7 @@ unit nnCuda;
 {$ModeSwitch advancedrecords}
 {$ModeSwitch typehelpers}
 {$endif}
-
+{$PointerMath ON}
 interface
 
 uses
@@ -58,7 +58,13 @@ type
     procedure DeriveArray(const N: SizeInt; const x: TCUMem; const offset:SizeInt; const activation: longint; delta: TCUMem);
     procedure forwardBias(const dstSize: SizeInt; const dst: TCUMem; const offset:SizeInt; const srcSize: SizeInt; const src: TCUMem; const incb: SizeInt; const batch: SizeInt);
     procedure backwardBias(const dstSize: SizeInt; const dst: TCUMem; const srcSize: SizeInt; const src: TCUMem; const srcOffset:SizeInt; const incb: SizeInt ; const batch: SizeInt);
-    procedure gemm(const transA, transB :boolean; const M, N, K:SizeInt; const ALPHA:single; const A:PSingle; const aOffset:SizeInt; lda:SizeInt; const B:PSingle; const bOffset:SizeInt; ldb:SizeInt; const BETA: single; const C:PSingle; const cOffset:SizeInt; ldc:SizeInt; const workspace: TCUMem = nil; const workspaceSize:SizeInt = 0);
+    procedure gemm(const transA, transB :boolean; const M, N, K:SizeInt; const ALPHA:single; const A:PSingle; const aOffset:SizeInt; const lda:SizeInt; const B:PSingle; const bOffset:SizeInt; const ldb:SizeInt; const BETA: single; const C:PSingle; const cOffset:SizeInt; const ldc:SizeInt);
+    procedure gemmBatched(const transA, transB: boolean; const M, N, K: SizeInt;
+      const ALPHA: Single; const A: PPSingle; const aOffset: SizeInt;
+      const lda: SizeInt; const B: PPSingle; const bOffset: SizeInt;
+      const ldb: SizeInt; const BETA: Single; const C: PPSingle;
+      const cOffset: SizeInt; const ldc: SizeInt; const batchCount: SizeInt);
+    procedure gemmStridedBatched(const transA, transB :boolean; const M, N, K:SizeInt; const ALPHA:Single; A:PSingle; const aOffset:SizeInt; const lda:SizeInt; const strideA:SizeInt; B:PSingle; const bOffset:SizeInt; const ldb:SizeInt; const strideB:SizeInt; const BETA: Single; C:PSingle; const cOffset:SizeInt; const ldc:SizeInt; const strideC:SizeInt; const batchCount : SizeInt);
     procedure addvv(const N:SizeInt; const src1:TCUMem; const src1Offset, inca:SizeInt; const src2:TCUMem; const src2Offset, incb:SizeInt; dst:TCUMem; const dstOffset, incc:SizeInt);
     procedure subvv(const N:SizeInt; const src1:TCUMem; const src1Offset, inca:SizeInt; const src2:TCUMem; const src2Offset, incb:SizeInt; dst:TCUMem; const dstOffset, incc:SizeInt);
     procedure mulvv(const N:SizeInt; const src1:TCUMem; const src1Offset, inca:SizeInt; const src2:TCUMem; const src2Offset, incb:SizeInt; dst:TCUMem; const dstOffset, incc:SizeInt);
@@ -75,7 +81,7 @@ type
     procedure backwardMaxPool(const aBatch, outC, outH, outW : SizeInt; output:TCUMem; const indexes, delta : TCUMem);
     procedure im2col(const aChannels, aHeight, aWidth , kernelHeight, kernelWidth, padHeight, padWidth , strideY, strideX, dilationY, dilationX : SizeInt ; const im :TCUMem; const imOffset : SizeInt ; const col:TCUMem; const colOffset:SizeInt);
     procedure col2im(const aChannels, aHeight, aWidth, kernelHeight, kernelWidth, padHeight, padWidth, strideY, strideX, dilationY, dilationX: SizeInt; const col: TCUMem; const colOffset: SizeInt; const im: TCUMem; const imOffset: SizeInt);
-    procedure upSample(const aBatch, aChannels, outHeight, outWidth: SizeInt; const &in: TCUMem;const stride: SizeInt; const isForward: longint; const scale: single; const &out: TCUMem; const zeroIn :boolean = false);
+    procedure upSample(const aBatch, aChannels, outHeight, outWidth: SizeInt; const &in: TCUMem;const stride: SizeInt; const isForward: longint; const scale: single; const &out: TCUMem; const zeroIn :integer = 0);
     procedure fmavss(const N: SizeInt; const src: TCUMem; const offset: SizeInt; const scalar, bias: single; dst : TCUMem);
     procedure meansAndVars(const srcSize, dstSize, groups:sizeInt; const src:TCUMem; const offset:sizeInt; means, vars:TCUMem);
     procedure means(const srcSize, dstSize, groups:sizeInt; const src:TCUMem; const offset:sizeInt; means:TCUMem);
@@ -94,6 +100,7 @@ type
     function compileToCUBIN(const code, name: ansistring; const headers: TArray<PAnsiChar> = nil; const includeNames: TArray<PAnsiChar> = nil): RawByteString;
     procedure loadCUBIN(const cubin : RawByteString);
     function compileFile(const filename : string):RawByteString;
+    procedure loadCUBinFile(const filename: string);
     // procedure halfTest(//  const N : SizeInt; a:TCUMem; b:TCUMem ; c:TCUMem);
 
   end;
@@ -165,6 +172,7 @@ begin
   self[13] := p13;
   self[14] := p14;
   self[15] := p15;
+
 end;
 
 { TNNCuda }
@@ -233,6 +241,7 @@ begin
   SAFE_CALL(cublasSetStream(cublas, stream));
   //SAFE_CALL(cublasInit());
   //SAFE_CALL(cublasSetKernelStream(stream));
+  useBLAS := 0;
   nnLib := nil;
 end;
 
@@ -298,10 +307,17 @@ var
   num_grids: SizeInt;
   params : array of pointer;
 begin
+  //{$ifdef USE_TELEMETRY}
+  //tensorMetrics.start(opActivate);
+  //{$endif}
   if activation= 4 then exit;
   num_grids := (N + NUM_THREADS-1) div NUM_THREADS;
   params := [@N, @x, @offset, @activation];
   SAFE_CALL(cudaLaunchKernel(FKernels[kernelId], dim3.Create(num_grids), dim3.create(NUM_THREADS), ppointer(params), 0, stream));
+  //{$ifdef USE_TELEMETRY}
+  //finish();
+  //tensorMetrics.finish(opActivate);
+  //{$endif}
 end;
 
 procedure TNNCuda.activateArraySWISH(const N: SizeInt; const x: TCUMem; const offset: SizeInt; const output_sigmoid, output: TCUMem);
@@ -310,9 +326,16 @@ var
   num_grids: SizeInt;
   params : array of pointer;
 begin
+  //{$ifdef USE_TELEMETRY}
+  //tensorMetrics.start(opActivate);
+  //{$endif}
   num_grids := (N + NUM_THREADS-1) div NUM_THREADS;
   params := [@N, @x, @offset, @output_sigmoid, @output];
   SAFE_CALL(cudaLaunchKernel(FKernels[kernelId], dim3.Create(num_grids), dim3.create(NUM_THREADS), ppointer(params), 0, stream));
+  //{$ifdef USE_TELEMETRY}
+  //finish();
+  //tensorMetrics.finish(opActivate);
+  //{$endif}
 end;
 
 procedure TNNCuda.DeriveArray(const N: SizeInt; const x: TCUMem; const offset: SizeInt; const activation: longint; delta: TCUMem);
@@ -321,10 +344,17 @@ var
   num_grids: SizeInt;
   params : array of pointer;
 begin
+  //{$ifdef USE_TELEMETRY}
+  //tensorMetrics.start(opDerive);
+  //{$endif}
   if activation= 4 then exit;   // keep as is if acLINEAR
   num_grids := (N + NUM_THREADS-1) div NUM_THREADS;
   params := [@N, @x, @offset, @activation, @delta];
   SAFE_CALL(cudaLaunchKernel(FKernels[kernelId], dim3.Create(num_grids), dim3.create(NUM_THREADS), ppointer(params), 0, stream));
+  //{$ifdef USE_TELEMETRY}
+  //finish();
+  //tensorMetrics.finish(opDerive);
+  //{$endif}
 end;
 
 procedure TNNCuda.forwardBias(const dstSize: SizeInt; const dst: TCUMem; const offset: SizeInt; const srcSize: SizeInt; const src: TCUMem; const incb: SizeInt; const batch: SizeInt);
@@ -370,18 +400,17 @@ begin
 end;
 
 procedure TNNCuda.gemm(const transA, transB: boolean; const M, N, K: SizeInt;
-  const ALPHA: single; const A: PSingle; const aOffset: SizeInt; lda: SizeInt;
-  const B: PSingle; const bOffset: SizeInt; ldb: SizeInt; const BETA: single;
-  const C: PSingle; const cOffset: SizeInt; ldc: SizeInt;
-  const workspace: TCUMem; const workspaceSize: SizeInt);
-const dimThr:dim3 =(x: 4; y:64; z:1);
+  const ALPHA: single;
+  const A: PSingle; const aOffset: SizeInt; const lda: SizeInt;
+  const B: PSingle; const bOffset: SizeInt; const ldb: SizeInt;
+  const BETA: single;
+  const C: PSingle; const cOffset: SizeInt; const ldc: SizeInt);
+const dimThr:dim3 =(x: 8; y:16; z:1);
 var
   kernelId: Integer;
-  MM, NN : SizeInt;
   dim : dim3;
   params : array of pointer;
 
-  opA, opB : cublasOperation_t;
   //opA, opB : ansichar;
   label done;
 begin
@@ -389,7 +418,6 @@ begin
   //   [...]      [...]      [...]
   // M [.A.]  X K [.B.] => M [.C.]
   //   [...]      [...]      [...]
-
 {$ifdef USE_TELEMETRY}
   tensorMetrics.start(opGemm);
 {$endif}
@@ -409,20 +437,23 @@ begin
   //                                  &beta,
   //                                  d_C,
   //                                  matrix_size.uiWB)
-  if transA then begin
-    opA := CUBLAS_OP_T;
-  end else begin
-    opA := CUBLAS_OP_N  ;
-  end;
-
-  if transb then begin
-    opB := CUBLAS_OP_T;
-  end else begin
-    opB := CUBLAS_OP_N  ;
-  end;
+  //if transA then begin
+  //  opA := CUBLAS_OP_T;
+  //end else begin
+  //  opA := CUBLAS_OP_N  ;
+  //end;
+  //
+  //if transb then begin
+  //  opB := CUBLAS_OP_T;
+  //end else begin
+  //  opB := CUBLAS_OP_N  ;
+  //end;
   //SAFE_CALL(cublasSetWorkspace(cublas, workspace, workspaceSize));
-  SAFE_CALL(cublasSgemm(cublas, opB, opA, N, M, K, @ALPHA, B+bOffset, ldb, A+aOffset, lda, @BETA, C+cOffset, ldc{, cublasComputeType_t.CUBLAS_COMPUTE_32F, cublasGemmAlgo_t.CUBLAS_GEMM_ALGO0}));
-  goto done;// yes goto! and there is nothing you can do about it!
+
+  if useBLAS = 1 then begin
+    SAFE_CALL(cublasSgemm(cublas, cublasOperation_t(transB), cublasOperation_t(transA), N, M, K, @ALPHA, B+bOffset, ldb, A+aOffset, lda, @BETA, C+cOffset, ldc{, cublasComputeType_t.CUBLAS_COMPUTE_32F, cublasGemmAlgo_t.CUBLAS_GEMM_ALGO0}));
+    goto done;// yes goto! and there is nothing you can do about it!
+  end;
 
   if (not transA) and (not transB)then
     if N > M then begin
@@ -459,6 +490,148 @@ done:
   finish();
   tensorMetrics.finish(opGemm)
 {$endif}
+end;
+
+procedure TNNCuda.gemmBatched(const transA, transB: boolean; const M, N,
+  K: SizeInt; const ALPHA: Single; const A: PPSingle; const aOffset: SizeInt;
+  const lda: SizeInt; const B: PPSingle; const bOffset: SizeInt;
+  const ldb: SizeInt; const BETA: Single; const C: PPSingle;
+  const cOffset: SizeInt; const ldc: SizeInt; const batchCount: SizeInt);
+
+const dimThr:dim3 =(x: 8; y:32; z:1);
+var
+  kernelId , i: integer;
+  dim : dim3;
+  params : array of pointer;
+  aa, bb, cc: array of pointer;
+label done;
+begin
+  {$ifdef USE_TELEMETRY}
+    tensorMetrics.start(opGemm);
+  {$endif}
+
+    //SAFE_CALL(cublasSetWorkspace(cublas, workspace, workspaceSize));
+
+    if useBLAS = 1 then begin
+    SAFE_CALL(cublasSgemmBatched_64(cublas, cublasOperation_t(transB), cublasOperation_t(transA), N, M, K,
+      @ALPHA, B, ldb, A, lda, @BETA, C, ldc, batchCount));
+      goto done;// yes goto! and there is nothing you can do about it!
+    end;
+
+    if (not transA) and (not transB)then
+      if N > M then begin
+        dim := dim3.create(N, M);
+        kernelId :=1;
+      end else begin
+        dim := dim3.create(M, N);
+        kernelId :=0;
+      end
+
+    else if (not transA) and transB then begin
+      dim := dim3.create(M, N);
+      kernelId := 2;
+    end else if transA and (not transB) then begin
+      dim := dim3.create(M, N);
+      kernelId := 3 ;
+    end;
+    dim := (dim + dimThr-1) div dimThr;
+    //MM := (dim.x + NUM_THREADS-1) div NUM_THREADS;
+    //NN := (dim.y + NUM_THREADS-1) div NUM_THREADS;
+
+    setLength(aa, batchCount);
+    setLength(bb, batchCount);
+    setLength(cc, batchCount);
+    readBuffer(a, batchCount*sizeOf(pointer), pointer(aa));
+    readBuffer(b, batchCount*sizeOf(pointer), pointer(bb));
+    readBuffer(c, batchCount*sizeOf(pointer), pointer(cc));
+    params := [
+           @M, @N, @K, @ALPHA,
+           @AA[0], @aOffset, @lda,
+           @BB[0], @bOffset, @ldb,
+           @BETA,
+           @CC[0], @cOffset, @ldc
+         ];
+    SAFE_CALL(cudaLaunchKernel(FKernels[kernelId], dim, dimThr, ppointer(params), 0, stream));
+    for i:=1 to batchCount-1 do begin
+      params[4] := @AA[i];
+      params[7] := @BB[i];
+      params[11] := @CC[i];
+      SAFE_CALL(cudaLaunchKernel(FKernels[kernelId], dim, dimThr, ppointer(params), 0, stream));
+    end;
+
+  done:
+  {$ifdef USE_TELEMETRY}
+    finish();
+    tensorMetrics.finish(opGemm)
+  {$endif}
+end;
+
+procedure TNNCuda.gemmStridedBatched(const transA, transB: boolean; const M, N,
+  K: SizeInt; const ALPHA: Single; A: PSingle; const aOffset: SizeInt;
+  const lda: SizeInt; const strideA: SizeInt; B: PSingle;
+  const bOffset: SizeInt; const ldb: SizeInt; const strideB: SizeInt;
+  const BETA: Single; C: PSingle; const cOffset: SizeInt; const ldc: SizeInt;
+  const strideC: SizeInt; const batchCount: SizeInt);
+
+const dimThr:dim3 =(x: 8; y:32; z:1);
+var
+  kernelId , i: integer;
+  dim : dim3;
+  params : array of pointer;
+label done;
+begin
+  {$ifdef USE_TELEMETRY}
+    tensorMetrics.start(opGemm);
+  {$endif}
+
+    //SAFE_CALL(cublasSetWorkspace(cublas, workspace, workspaceSize));
+
+    if useBLAS = 1 then begin
+    SAFE_CALL(cublasSgemmStridedBatched(cublas, cublasOperation_t(transB), cublasOperation_t(transA), N, M, K,
+      @ALPHA, B+bOffset, ldb, strideB, A+aOffset, lda, strideA, @BETA, C+cOffset, ldc, strideC, batchCount));
+      goto done;// yes goto! and there is nothing you can do about it!
+    end;
+
+    if (not transA) and (not transB)then
+      if N > M then begin
+        dim := dim3.create(N, M);
+        kernelId :=1;
+      end else begin
+        dim := dim3.create(M, N);
+        kernelId :=0;
+      end
+
+    else if (not transA) and transB then begin
+      dim := dim3.create(M, N);
+      kernelId := 2;
+    end else if transA and (not transB) then begin
+      dim := dim3.create(M, N);
+      kernelId := 3 ;
+    end;
+    dim := (dim + dimThr-1) div dimThr;
+    ////MM := (dim.x + NUM_THREADS-1) div NUM_THREADS;
+    ////NN := (dim.y + NUM_THREADS-1) div NUM_THREADS;
+    //
+    params := [
+           @M, @N, @K, @ALPHA,
+           @A, @aOffset, @lda,
+           @B, @bOffset, @ldb,
+           @BETA,
+           @C, @cOffset, @ldc
+         ];
+    for i:=0 to batchCount-1 do begin
+      SAFE_CALL(cudaLaunchKernel(FKernels[kernelId], dim, dimThr, ppointer(params), 0, stream));
+      inc(A, strideA);
+      inc(B, strideB);
+      inc(C, strideC);
+    end;
+
+
+  done:
+  {$ifdef USE_TELEMETRY}
+    finish();
+    tensorMetrics.finish(opGemm)
+  {$endif}
 end;
 
 procedure TNNCuda.addvv(const N: SizeInt; const src1: TCUMem; const src1Offset,
@@ -520,6 +693,7 @@ begin
 {$ifdef USE_TELEMETRY}
   tensorMetrics.start(opAxpy);
 {$endif}
+  //cublasSaxpy(cublas, N, @a, x, incx, y, incy);
   num_grids := (N + NUM_THREADS-1) div NUM_THREADS;
   params := [@N, @a, @x, @xOffset, @incx, @y, @yOffset, @incy];
   SAFE_CALL(cudaLaunchKernel(FKernels[kernelId], dim3.Create(num_grids), dim3.create(NUM_THREADS), ppointer(params), 0, stream));
@@ -532,10 +706,23 @@ end;
 procedure TNNCuda.power(const N: SizeInt; const x: TCUMem;
   const xOffset: SizeInt; const incx: SizeInt; const a: single;
   const y: TCUMem; const yOffset: SizeInt; const incy: sizeInt);
+  const kernelId = 41;
+var
+  num_grids: SizeInt;
+  params : array of pointer;
 begin
-
+{$ifdef USE_TELEMETRY}
+  tensorMetrics.start(opPow);
+{$endif}
+  //cublasSaxpy(cublas, N, @a, x, incx, y, incy);
+  num_grids := (N + NUM_THREADS-1) div NUM_THREADS;
+  params := [@N, @x, @xOffset, @incx, @a, @y, @yOffset, @incy];
+  SAFE_CALL(cudaLaunchKernel(FKernels[kernelId], dim3.Create(num_grids), dim3.create(NUM_THREADS), ppointer(params), 0, stream));
+{$ifdef USE_TELEMETRY}
+  finish();
+  tensorMetrics.finish(opPow);
+{$endif}
 end;
-
 procedure TNNCuda.scale(const N: SizeInt; const a: Single; const x: TCUMem;
   const stride: SizeInt);
 const kernelId = 12;
@@ -594,9 +781,16 @@ var
   num_grids: SizeInt;
   params : array of pointer;
 begin
+{$ifdef USE_TELEMETRY}
+  tensorMetrics.start(opCopy);
+{$endif}
   num_grids := (N + NUM_THREADS-1) div NUM_THREADS;
   params := [@N, @src, @srcOffset, @inca, @dst, @dstOffset, @incb];
   SAFE_CALL(cudaLaunchKernel(FKernels[kernelId], dim3.Create(num_grids), dim3.create(NUM_THREADS), ppointer(params), 0, stream));
+{$ifdef USE_TELEMETRY}
+  finish();
+  tensorMetrics.finish(opCopy)
+{$endif}
 end;
 
 procedure TNNCuda.softmaxBatch(const N: SizeInt; const input: TCUMem;
@@ -695,7 +889,7 @@ procedure TNNCuda.im2col(const aChannels, aHeight, aWidth, kernelHeight,
   dilationX: SizeInt; const im: TCUMem; const imOffset: SizeInt;
   const col: TCUMem; const colOffset: SizeInt);
 const kernelId = 22;
-      blockDim:dim3 =(x:8; y:64; z:1);
+      blockDim:dim3 =(x:4; y:64; z:1);
 var
     N, size_h, padding_h, col_h, padding_w, size_w, col_w, ceiled_w,
       ceiled_h:SizeInt;
@@ -763,7 +957,7 @@ procedure TNNCuda.col2im(const aChannels, aHeight, aWidth, kernelHeight,
   dilationX: SizeInt; const col: TCUMem; const colOffset: SizeInt;
   const im: TCUMem; const imOffset: SizeInt);
 const kernelId = 24;
-      blockDim:dim3 =(x:8; y:64; z:1);
+      blockDim:dim3 =(x:4; y:64; z:1);
 var
     MM, NN, N, size_h, padding_h, col_h, size_w, padding_w, col_w,
       dilation_bez_h, dilation_bez_w, gcd_h, gcd_w, stride_bez_h,
@@ -816,12 +1010,12 @@ end;
 procedure TNNCuda.upSample(const aBatch, aChannels, outHeight,
   outWidth: SizeInt; const &in: TCUMem; const stride: SizeInt;
   const isForward: longint; const scale: single; const &out: TCUMem;
-  const zeroIn: boolean);
+  const zeroIn: integer);
 
 const kernelId = 25;
-      blockDim : dim3 =(x:16; y:8; z:8);
+      blockDim : dim3 =(x:4; y:16; z:16);
 var
-  M, N, K, MM, NN, KK :SizeInt;
+  M, N, K :SizeInt;
   params : array of pointer;
   dim : dim3;
 begin
@@ -1064,11 +1258,12 @@ const kernelId=36;
 var
   num_grids : SizeInt;
   params : array of pointer;
+  seed : uint64;
 begin
   //randomize;
-  random(1000); // next randSeed
+  seed := random($100000000); // next randSeed
   num_grids := (N + NUM_THREADS-1) div NUM_THREADS;
-  params := [@N, @RandSeed, @probability, @scale, @src, @rnd, @dst];
+  params := [@N, @seed{@RandSeed}, @probability, @scale, @src, @rnd, @dst];
   SAFE_CALL(cudaLaunchKernel(FKernels[kernelId], dim3.create(num_grids), dim3.create(NUM_THREADS), ppointer(params), 0, stream));
 end;
 
@@ -1107,13 +1302,16 @@ var
   progSize : size_t;
   err: nvrtcResult;
   params : array of pansichar;
+  paramsPtr : PPAnsiChar;
   log : ansistring;
 begin
+  writeln('NVRTC compile start');
   SAFE_CALL_RTC(nvrtcCreateProgram(@prog, PAnsiChar(code), pAnsiChar(name), length(headers), Pointer(headers), Pointer(includeNames)));
 
   //params := [PAnsiChar('--gpu-architecture=sm_'+intToStr(devCapMajor)+intTostr(devCapMinor))];
-  params := [PAnsiChar('-DBLOCK='+intToStr(NUM_THREADS)), PAnsiChar('-arch=sm_' + intToStr(properties.major)+intTostr(properties.minor)), '--use_fast_math'];
-  err :=nvrtcCompileProgram(prog, length(params), pointer(params));
+  params := [PAnsiChar('-arch=sm_' + intToStr(properties.major)+intTostr(properties.minor)), '--use_fast_math', PAnsiChar('-DBLOCK='+intToStr(NUM_THREADS))]; // causes weird exception on linux
+  paramsPtr := pointer(params);
+  err :=nvrtcCompileProgram(prog, length(params), paramsPtr);
   log := CompileLog;
   if (log<>#0) and IsConsole then
     writeln(log);
@@ -1127,6 +1325,7 @@ begin
     SAFE_CALL_RTC(nvrtcGetCUBIN(prog, pointer(result)));
   end;
   SAFE_CALL_RTC(nvrtcDestroyProgram(@prog));
+  writeln('NVRTC compile end');
 end;
 
 procedure TNNCuda.loadCUBIN(const cubin: RawByteString);
@@ -1152,7 +1351,7 @@ var f : TextFile;
   cuda_path:ansistring;
 begin
   //cuda_path := GetEnvironmentVariable('CUDA_PATH')+'\include';
-  assert(FileExists(filename), 'Cannot find file '+filename);
+  //assert(FileExists(filename), 'Cannot find file '+filename);
   AssignFile(F, filename);
   reset(F);
   code :='';
@@ -1163,6 +1362,21 @@ begin
   CloseFile(F);
   result := compileToCUBIN(code, filename)
 
+end;
+
+procedure TNNCuda.loadCUBinFile(const filename: string);
+var f: file;
+  fs : SizeInt;
+  bin : RawByteString;
+begin
+  assert(fileExists(Filename),'File does not exists!');
+  assignFile(f, filename);
+  reset(f, 1);
+  fs := FileSize(f);
+  setLength(bin, fs);
+  BlockRead(f, bin[1], fs);
+  closeFile(f);
+  loadCUBIN(bin);
 end;
 
 initialization

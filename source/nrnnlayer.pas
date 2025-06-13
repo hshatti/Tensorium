@@ -23,7 +23,7 @@ type
     procedure forward(var state: TNNetState); override;
     procedure backward(var state: TNNetState); override;
     procedure update(const args: TUpdateArgs); override;
-    {$ifdef USE_OPENCL}
+    {$if defined(USE_OPENCL) or defined(USE_CUDART)}
     procedure forwardGPU(var state: TNNetState); override;
     procedure backwardGPU(var state: TNNetState); override;
     procedure updateGPU(const args: TUpdateArgs); override;
@@ -406,7 +406,7 @@ begin
   inherited Destroy;
 end;
 
-{$ifdef USE_OPENCL}
+{$if defined(USE_OPENCL)}
 procedure TRNNLayer.forwardGPU(var state: TNNetState);
 var
     s: TNNetState;
@@ -624,6 +624,226 @@ begin
   if benchmark then metrics.update.finish(layerType);
   {$endif}
 end;
+{$elseif defined(USE_CUDART)}
+
+procedure TRNNLayer.forwardGPU(var state: TNNetState);
+var
+    s: TNNetState;
+    i, j, inputStep, hiddenStep, outputStep: SizeInt;
+
+    gpuERR : Single;
+    tmp :TSingleTensor;
+    //t1, t2, t3 :TSingleTensor;
+    //old_state: PSingle;
+begin
+  {$ifdef USE_TELEMETRY}
+  if benchmark then metrics.forward.start(layerType);
+  {$endif}
+  if not state.input.wasGPU() then state.input.pushToDevice;
+
+  if not inputLayer.weights.wasGPU() then inputLayer.weights.pushToDevice;
+  if not inputLayer.biases.wasGPU() then inputLayer.biases.pushToDevice;
+
+  if not selfLayer.weights.wasGPU() then selfLayer.weights.pushToDevice;
+  if not selfLayer.biases.wasGPU() then selfLayer.biases.pushToDevice;
+
+  if not outputLayer.weights.wasGPU() then outputLayer.weights.pushToDevice;
+  if not outputLayer.biases.wasGPU() then outputLayer.biases.pushToDevice;
+  if not self.state.wasGPU() then self.state.pushToDevice;
+
+  output.setCUDA;
+
+
+  s := default(TNNetState);
+  s.isTraining := state.isTraining;
+  s.workspace := state.workspace;
+  s.net := state.net;
+  s.index := state.index;
+
+  inputStep  := inputs *batch;
+  hiddenStep := hidden *batch;
+  outputStep := outputs*batch;
+
+  InputLayer .reGroup(batch);
+  selfLayer  .reGroup(batch);
+  outputLayer.reGroup(batch);
+
+
+  if state.isTraining then begin
+      cuda.fill(InputLayer.delta.Size(), InputLayer.delta.devData, 0, 0, 1);
+      cuda.fill(selfLayer.delta.Size(), selfLayer.delta.devData, 0, 0, 1);
+      cuda.fill(outputLayer.delta.Size(), outputLayer.delta.devData, 0, 0, 1);
+      cuda.fill(hiddenStep, self.state.devData, 0, 0, 1);
+  end;
+
+  for i := 0 to steps -1 do begin
+
+          j := i;
+          s.step := i;
+          s.inputStep:=i;
+          s.input := state.input;
+          inputLayer.forwardGPU(s);
+
+
+          s.input := @self.state;
+          selfLayer.forwardGPU(s);
+
+          if state.isTraining then begin
+              inc(j);
+          end;
+          if isShortcut then begin
+            cuda.copy(hiddenStep, self.state.devData, i*hiddenStep, 1, self.state.devData, j*hiddenStep, 1);
+          end else begin
+            cuda.fill(hiddenStep, self.state.devData, j*hiddenStep, 0, 1);
+          end;
+
+
+          cuda.addvv(hiddenStep, inputLayer.output.devData, i*hiddenStep, 1, self.state.devData, j*hiddenStep, 1, self.state.devData, j*hiddenStep, 1);
+          cuda.addvv(hiddenStep, selfLayer.output.devData, i*hiddenStep, 1, self.state.devData, j*hiddenStep, 1, self.state.devData, j*hiddenStep, 1);
+
+          //s.input := @self.state;
+          s.inputStep:=j;
+          outputLayer.forwardGPU(s);
+
+          if state.isTraining then write(#13, 'FW RNN [',state.index,'] ', 100*i/steps:3:0,'%')
+          //if l.steps = 1 then break;
+
+          //state.input.data := state.input.data + inputStep;
+          //increment_layer(l.inputLayer, 1);
+          //increment_layer(l.selfLayer, 1);
+          //increment_layer(l.outputLayer, 1)
+  end;
+
+//output.printGpuSumSqrDiff();
+  InputLayer .reGroup(steps*batch);
+  selfLayer  .reGroup(steps*batch);
+  outputLayer.reGroup(steps*batch);
+
+  //l.output.printStat
+    //state.input.resetReference;
+    //reset_layer(l.InputLayer);
+    //reset_layer(l.selfLayer);
+    //reset_layer(l.outputLayer);
+    //l.output.printStat();
+    //readLn()
+
+  {$ifdef USE_TELEMETRY}
+  if benchmark then metrics.forward.finish(layerType);
+  {$endif}
+end;
+
+procedure TRNNLayer.backwardGPU(var state: TNNetState);
+var
+    s: TNNetState;
+    i, inputStep, hiddenStep, outputStep: SizeInt;
+begin
+  {$ifdef USE_TELEMETRY}
+  if benchmark then metrics.backward.start(layerType);
+  {$endif}
+  s := default(TNNetState);
+  s.isTraining := state.isTraining;
+  s.workspace := state.workspace;
+  s.net := state.net;
+
+  inputStep  := batch*inputs;
+  hiddenStep := Batch*hidden;
+  outputStep := Batch*outputs;
+
+  InputLayer .reGroup(batch);
+  selfLayer  .reGroup(batch);
+  outputLayer.reGroup(batch);
+  //increment_layer(l.InputLayer, l.steps-1);
+  //increment_layer(l.selfLayer, l.steps-1);
+  //increment_layer(l.outputLayer, l.steps-1);
+  //
+  //if pointer(l.state.data)<>pointer(l.state.DynData) then
+  //    l.state.resetReference;
+  //l.state.data := l.state.data + (hiddenStep * l.steps);
+
+  //try
+  for i := steps-1 downto 0 do begin
+      cuda.copy(hiddenStep, InputLayer.output.devData, i*hiddenStep, 1, self.state.devData, (1+i)*hiddenStep, 1);
+      //inputLayer.output.CopyTo(self.state, (i+1)*hiddenStep, 1, i*hiddenStep, 1, hiddenStep);
+  //InputLayer.output.printStat;
+  //
+  //InputLayer.output.pullFromDevice(t1);
+  //t1.printStat;
+
+      cuda.addvv(hiddenStep, selfLayer.output.devData, i*hiddenStep, 1, self.state.devData, (i+1)*hiddenStep, 1, self.state.devData, i*hiddenStep, 1);
+      //self.state.add(selfLayer.output, (i+1)*hiddenStep, i*hiddenStep, hiddenStep);
+
+      s.step := i;
+      s.inputStep := i+1;
+      s.deltaStep := i;
+      //s.step := 0;
+
+      s.input := @self.state;
+      s.Delta := @selfLayer.delta;
+      outputLayer.backwardGPU(s);
+      //outputLayer.backward(s);
+
+
+      s.inputStep := i;
+      s.deltaStep := i-1;
+      if i = 0 then
+          s.delta := nil;
+      selfLayer.backwardGPU(s);
+      //selfLayer.backward(s);
+
+      cuda.copy(hiddenStep, selfLayer.delta.devData, i*hiddenStep, 1, inputLayer.delta.devData, i*hiddenStep, 1);
+      //selfLayer.delta.CopyTo(inputLayer.delta, i*hiddenStep, 1, i*hiddenStep, 1, hiddenStep);
+
+      if (i > 0) and isShortcut then
+          cuda.addvv(hiddenStep, selfLayer.delta.devData, i*hiddenStep, 1, selfLayer.delta.devData, (i-1)*hiddenStep, 1, selfLayer.delta.devData, (i-1)*hiddenStep, 1);
+          //selfLayer.delta.add(selfLayer.delta, (i-1)*hiddenStep, i*hiddenStep, hiddenStep);
+
+      s.input := state.input;
+      //r.input.data := r.input.data + i*inputStep;
+      if assigned(state.delta) then begin
+          //r.delta.data := r.delta.data + i*inputStep;
+          s.delta := state.delta
+      end
+      else
+          s.delta := nil;
+
+      s.inputStep := i;
+      s.deltaStep := i;
+      inputLayer.backwardGPU(s);
+      //inputLayer.backward(s);
+
+      //increment_layer(l.inputLayer, -1);
+      //increment_layer(l.selfLayer, -1);
+      //increment_layer(l.outputLayer, -1);
+      write(#13, 'BW RNN [',state.index,'] ', 100*i/steps:3:0,'%')
+
+  end;
+  //finally
+    InputLayer .reGroup(steps*Batch);
+    selfLayer  .reGroup(steps*Batch);
+    outputLayer.reGroup(steps*Batch);
+  //end;
+
+
+  {$ifdef USE_TELEMETRY}
+  if benchmark then metrics.backward.finish(layerType);
+  {$endif}
+end;
+
+procedure TRNNLayer.updateGPU(const args: TUpdateArgs);
+begin
+  {$ifdef USE_TELEMETRY}
+  if benchmark then metrics.update.start(layerType);
+  {$endif}
+  InputLayer.updateGPU(args);
+  selfLayer.updateGPU(args);
+  outputLayer.updateGPU(args);
+
+  inherited updateGPU(args);
+  {$ifdef USE_TELEMETRY}
+  if benchmark then metrics.update.finish(layerType);
+  {$endif}
+end;
+
 {$endif}
 
 end.

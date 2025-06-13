@@ -61,7 +61,7 @@ type
     procedure correctBoxes(const dets: PDetection; const n, w, h, netw, neth: SizeInt; const relative, letter: boolean);
     procedure forward(var state: TNNetState); override;
     procedure backward(var state: TNNetState); override;
-{$ifdef USE_OPENCL}
+{$if defined(USE_OPENCL) or defined(USE_CUDART)}
     procedure forwardGPU(var state: TNNetState); override;
     procedure backwardGPU(var state: TNNetState); override;
 {$endif}
@@ -381,7 +381,7 @@ var
     i, _n, obj_index: SizeInt;
 begin
     result := 0;
-    {$ifdef USE_OPENCL}
+    {$if defined(USE_OPENCL) or defined(USE_CUDART)}
     if output.wasGPU() then output.pullFromDevice();
     {$endif}
     for i := 0 to w * h -1 do
@@ -404,8 +404,11 @@ var
     predictions: PSingle;
     objectness, prob: single;
 begin
-    predictions := pointer(output.Data);
     result := 0;
+    {$if defined(USE_OPENCL) or defined(USE_CUDART)}
+    if output.wasGPU() then output.pullFromDevice();
+    {$endif}
+    predictions := pointer(output.Data);
     for i := 0 to w * h -1 do
         begin
             row := i div w;
@@ -993,7 +996,52 @@ begin
   state.delta.add(delta)
 end;
 
-{$ifdef USE_OPENCL}
+{$if defined(USE_CUDART)}
+procedure TYoloLayer.forwardGPU(var state: TNNetState);
+var
+  _n, bbox_index, b, obj_index: SizeInt;
+begin
+  {$ifdef USE_TELEMETRY}
+  if benchmark then metrics.forward.start(layerType);
+  {$endif}
+  if not state.input.wasGPU() then state.input.pushToDevice;
+  output.setCUDA;
+  cuda.copy(state.input.size(), state.input.devData, 0, 1, output.devData, 0, 1);
+//state.input.copyTo(output);
+  for b := 0 to batch -1 do
+      for _n := 0 to n -1 do
+          begin
+              bbox_index := entryIndex(b, _n * w * h, 0);
+              if not newCoords then
+                  begin
+                      cuda.ActivateArray(2 * w * h, output.devData, bbox_index, longint(acLOGISTIC));
+//activate_array(pointer(output.data + bbox_index), 2 * w * h, acLOGISTIC); // activate 1st 2 images only for each channel
+
+                      obj_index := entryIndex(b, _n * w * h, 4);
+
+                      cuda.ActivateArray((1+classes) * w * h, output.devData , obj_index, longint(acLOGISTIC));
+//activate_array(pointer(output.Data + obj_index), (1+classes) * w * h, acLOGISTIC) // activate the fifth image and all the rest classifying images in each channel
+                  end;
+              //scal_add_cpu(2 * l.w * l.h, l.scale_x_y, -0.5 * (l.scale_x_y-1), l.output+bbox_index, 1)
+              if scaleXY<>1 then begin
+                  cuda.fmavss(2*w*h, output.devData, bbox_index, scaleXY, 0.5*(1-scaleXY), output.devData);
+//output.FusedMultiplyAdd(scaleXY, 0.5*(1-scaleXY), bbox_index, 2*w*h);
+              end;
+          end;
+
+//write(LayerTypeStr, ' ');
+//output.printGpuSumSqrDiff();
+  {$ifdef USE_TELEMETRY}
+  cuda.finish();
+  if benchmark then metrics.forward.finish(layerType);
+  {$endif}
+end;
+
+procedure TYoloLayer.backwardGPU(var state: TNNetState);
+begin
+
+end;
+{$elseif defined(USE_OPENCL)}
 procedure TYoloLayer.forwardGPU(var state: TNNetState);
 var
   _n, bbox_index, b, obj_index: SizeInt;

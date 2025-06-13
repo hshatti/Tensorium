@@ -24,7 +24,7 @@
             <Filename Value="shakespeare_infer_rnn"/>
           </Target>
           <SearchPaths>
-            <OtherUnitFiles Value="..\..\..\source;..\..\..\source\3rdparty\cudnn\source;..\..\..\source\3rdparty\clblast\source;..\..\..\source\3rdparty\oneAPI\mkl\source"/>
+            <OtherUnitFiles Value="..\..\..\source;..\..\..\source\3rdparty\cuda\source;..\..\..\source\3rdparty\clblast\source;..\..\..\source\3rdparty\oneAPI\mkl\source"/>
             <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Parsing>
@@ -51,12 +51,12 @@
           <Other>
             <CustomOptions Value="-CfAVX2
 -OpCOREAVX2
--dUSE_OPENCL
 -dUSE_AVX2
 -dUSE_MKL
 -dUSE_MULTITHREADING
--dUSE_TELEMETRY"/>
-            <OtherDefines Count="12">
+-dUSE_TELEMETRY
+-dUSE_CUDART"/>
+            <OtherDefines Count="13">
               <Define0 Value="USE_OPENCL"/>
               <Define1 Value="USE_AVX2"/>
               <Define2 Value="USE_OPENBLAS"/>
@@ -69,6 +69,7 @@
               <Define9 Value="BIG_MATRECIES"/>
               <Define10 Value="USE_CUDNN"/>
               <Define11 Value="DEBUG"/>
+              <Define12 Value="USE_CUDART"/>
             </OtherDefines>
           </Other>
         </CompilerOptions>
@@ -135,7 +136,7 @@
       <Filename Value="shakespeare_infer_rnn"/>
     </Target>
     <SearchPaths>
-      <OtherUnitFiles Value="..\..\..\source;..\..\..\source\3rdparty\clblast\source;..\..\..\source\3rdparty\cudnn\source;..\..\..\source\3rdparty\oneAPI\mkl\source;..\..\..\source\3rdparty\openblas\source"/>
+      <OtherUnitFiles Value="..\..\..\source;..\..\..\source\3rdparty\clblast\source;..\..\..\source\3rdparty\cuda\source;..\..\..\source\3rdparty\oneAPI\mkl\source;..\..\..\source\3rdparty\openblas\source"/>
       <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
     </SearchPaths>
     <Parsing>
@@ -165,13 +166,13 @@
       <CustomOptions Value="-CfAVX2
 -OpCOREAVX2
 -OoFASTMATH
--dUSE_OPENCL
 -dUSE_AVX2
 -dUSE_MKL
 -dUSE_MULTITHREADING
 -dUSE_TELEMETRY
--dDEBUG"/>
-      <OtherDefines Count="12">
+-dDEBUG
+-dUSE_CUDART"/>
+      <OtherDefines Count="13">
         <Define0 Value="USE_OPENCL"/>
         <Define1 Value="USE_AVX2"/>
         <Define2 Value="USE_OPENBLAS"/>
@@ -184,6 +185,7 @@
         <Define9 Value="BIG_MATRECIES"/>
         <Define10 Value="USE_CUDNN"/>
         <Define11 Value="DEBUG"/>
+        <Define12 Value="USE_CUDART"/>
       </OtherDefines>
     </Other>
   </CompilerOptions>

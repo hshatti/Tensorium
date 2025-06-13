@@ -1,3 +1,10 @@
+{$IFDEF FPC}
+  {$mode delphi}
+  {$PACKRECORDS C}
+//{$PackEnum 4}
+//{$MinEnumSize 4}
+  {$ModeSwitch advancedrecords}
+{$ENDIF}
 unit cudarttypes;
 interface
 uses cudaTypes;
@@ -7,13 +14,6 @@ uses cudaTypes;
     driver_types.h
 }
 
-{$IFDEF FPC}
-{$mode delphi}
-{$PACKRECORDS C}
-//{$PackEnum 4}
-//{$MinEnumSize 4}
-{$ModeSwitch advancedrecords}
-{$ENDIF}
 
   {
    * Copyright 1993-2018 NVIDIA Corporation.  All rights reserved.
@@ -848,6 +848,9 @@ uses cudaTypes;
         }
 
   type
+    {$if not declared(size_t)}
+    size_t = UIntPtr;
+    {$endif}
     cudaError = (cudaSuccess = 0,cudaErrorInvalidValue = 1,
       cudaErrorMemoryAllocation = 2,cudaErrorInitializationError = 3,
       cudaErrorCudartUnloading = 4,cudaErrorProfilerDisabled = 5,

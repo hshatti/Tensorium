@@ -94,13 +94,13 @@ begin
       TConvolutionalLayer.Create(1, 8, 8, 128, 128, 1, 3, 1, 1, 1, 1, acRELU, true),
       TMaxPoolLayer.Create(1, 8, 8, 128, 2),
 
-      //TDropoutLayer.create(1, 0.2, 4* 4*128),
+      TDropoutLayer.create(1, 0.2, 4* 4*128),
 
       //hidden layer
       TConnectedLayer.create(1, 1, 4*4*128, 1024, acRELU),
-      //TDropoutLayer.create(1, 0.2, 1024),
+      TDropoutLayer.create(1, 0.2, 1024),
 
-      // last hidden layer i.e.. output layer
+       //last hidden layer i.e.. output layer
       TConnectedLayer.create(1, 1, 1024, 10, acLINEAR),
       TSoftmaxLayer.Create(1, 10)
 

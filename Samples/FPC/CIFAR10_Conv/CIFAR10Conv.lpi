@@ -30,6 +30,7 @@
           <Parsing>
             <SyntaxOptions>
               <SyntaxMode Value="Delphi"/>
+              <IncludeAssertionCode Value="True"/>
             </SyntaxOptions>
           </Parsing>
           <CodeGeneration>
@@ -50,10 +51,8 @@
           <Other>
             <CustomOptions Value="-CfAVX2
 -OpCOREAVX2
--dUSE_AVX2
 -dUSE_MULTITHREADING
--dUSE_TELEMETRY
--dUSE_CUDART"/>
+-dUSE_TELEMETRY"/>
             <OtherDefines Count="12">
               <Define0 Value="USE_OPENCL"/>
               <Define1 Value="USE_AVX2"/>
@@ -119,6 +118,11 @@
         <IsPartOfProject Value="True"/>
         <UnitName Value="nnCuda"/>
       </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\utokenizer.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="uTokenizer"/>
+      </Unit>
     </Units>
   </ProjectOptions>
   <CompilerOptions>
@@ -149,15 +153,13 @@
     <Linking>
       <Debugging>
         <DebugInfoType Value="dsDwarf3"/>
-        <UseHeaptrc Value="True"/>
         <TrashVariables Value="True"/>
-        <UseExternalDbgSyms Value="True"/>
+        <UseValgrind Value="True"/>
       </Debugging>
     </Linking>
     <Other>
       <CustomOptions Value="-CfAVX2
 -OpCOREAVX2
--dUSE_AVX2
 -dUSE_MULTITHREADING
 -dUSE_TELEMETRY
 -dUSE_CUDART"/>

@@ -213,11 +213,11 @@ public
   procedure setWorkers(Count:longint);
   procedure &For(const Proc: TGroupProc; const _from, _to: IntPtr; const Params: Pointer = nil); overload;
 
-  procedure &For(const Proc:TGroupProcNested;const _from,_to:IntPtr;const Params:Pointer = nil); overload;
+  procedure &For(const Proc: TGroupProcNested;const _from,_to:IntPtr;const Params:Pointer = nil); overload;
 
-  procedure &For(const Proc:TGroupMethod;const _from,_to:IntPtr;const Params:Pointer = nil); overload;
+  procedure &For(const Proc: TGroupMethod;const _from,_to:IntPtr;const Params:Pointer = nil); overload;
 
-  procedure &for(const proc:TThreadProc2; const start, count:IntPtr; const args:Pointer; const step:IntPtr=1; const sync:TThreadMethod=nil); overload;
+  procedure &for(const proc: TThreadProc2; const start, count:IntPtr; const args:Pointer; const step:IntPtr=1; const sync:TThreadMethod=nil); overload;
 
   procedure &For(const proc: TThreadProcNested; const start, count: IntPtr; const args: Pointer=nil; const step: IntPtr=1; const sync: TThreadMethod=nil);overload;
 
@@ -414,12 +414,12 @@ begin
     //freeandNil(Pool[i]);
   end;
   dec(globalId);
-  inherited Destroy;
   {$ifdef FPC}
   RTLEventDestroy(PoolDone);
   {$else}
   FreeAndNil(PoolDone)
   {$endif}
+  inherited Destroy;
 
 end;
 
@@ -598,8 +598,8 @@ procedure TOPool.&For(const Proc: TGroupProc; const _from, _to: IntPtr;
 var i,N,group_m,group_t,ii:IntPtr;
 begin
     if _to < _from then exit;
+    WaitForPool;
     //while OTCount>0 do;// the pool is still hot! wait for it to cooldown before jumping in.
-    //WaitForPool;
     N:=_to -_from;
     ii:=0;
     group_t:=ceil((N+1) / length(Pool));
@@ -635,7 +635,8 @@ procedure TOPool.&For(const Proc: TGroupProcNested; const _from, _to: IntPtr;
 var i,N,group_m,group_t, ii:IntPtr;
 begin
     if _to < _from then exit;
-    while OTCount>0 do;// the pool is still hot! waiting to cooldown before jumping in.
+    WaitForPool;
+    //while OTCount>0 do;// the pool is still hot! waiting to cooldown before jumping in.
     N:=_to -_from;
     ii:=0;
     group_t:=ceil((N+1) / length(Pool));
@@ -671,7 +672,8 @@ procedure TOPool.&For(const Proc: TGroupMethod; const _from, _to: IntPtr;
 var i,N,group_m,group_t,ii:IntPtr;
 begin
     if _to < _from then exit;
-    while OTCount>0 do;// the pool is still hot! waiting to cooldown before jumping in.
+    WaitForPool;
+    //while OTCount>0 do;// the pool is still hot! waiting to cooldown before jumping in.
     N:=_to -_from;
     ii:=0;
     group_t:=ceil((N+1) / length(Pool));
@@ -706,8 +708,9 @@ procedure TOPool.&for(const proc: TThreadProc2; const start, count: IntPtr;
 var
   span, i, ii:IntPtr;
 begin
-    if count < start then exit;
-    while OTCount>0 do;// the pool is still hot! waiting to cooldown before jumping in.
+    //if count < start then exit;
+    WaitForPool;
+    //while OTCount>0 do;// the pool is still hot! waiting to cooldown before jumping in.
     span:=step*Length(Pool);
     ii:=start;
     for i:=0 to high(pool) do begin
@@ -741,8 +744,9 @@ procedure TOPool.&For(const proc: TThreadProcNested; const start,
 var
   span, i, ii:IntPtr;
 begin
-    if count < start then exit;
-    while OTCount>0 do;// the pool is still hot! waiting to cooldown before jumping in.
+    //if count < start then exit;
+    WaitForPool;
+    //while OTCount>0 do;// the pool is still hot! waiting to cooldown before jumping in.
     span:=step*Length(Pool);
     ii:=start;
     for i:=0 to high(pool) do begin

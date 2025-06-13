@@ -378,22 +378,21 @@ end;
 
 const thresh = 0.45;
     NMS =0.45;
-    M = 10;
-    N = 20;
-    K =30;
+    //M = 10;
+    //N = 20;
+    //K =30;
 var
   //ocl  : TOpenCL;
   a, b: TSingleTensor;
   //kernel : cl_kernel;
   off, gws, lws : TArray<SizeInt>;
   //AA, BB, CC: cl_mem;
-  NN ,R, j: Integer;
+  NN ,R, j, useBLAS: Integer;
 
   conv : TConvolutionalLayer;
   state:TNNetState;
 
 begin
-
 
   //write(#$1B'[1J');
   //TSingleTensor.computingDevice := cdOpenCL;
@@ -442,9 +441,12 @@ begin
   end;
 
 
-  {$ifdef USE_OPENCL}
+  {$if defined(USE_OPENCL)}
   initOpenCL(0, 0);
   ocl.useBLAS := 2;
+  {$elseif defined(USE_CUDART)}
+  initCUDART(0);
+  cuda.useBLAS := 1;
   {$endif}
 
   t := clock;
@@ -458,7 +460,7 @@ begin
   readln();
   classNames := fromFile(imageRoot+classNamesFile);
 
-  sDigits := 3;
+  sDigits := 6;
 
   //darknet.Neural.OnForward := OnForward();
   darknet.Neural.fuseBatchNorm;

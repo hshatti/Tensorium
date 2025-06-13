@@ -82,14 +82,15 @@ procedure TDropoutLayer.forward(var state: TNNetState);
 var
     i: SizeInt;
     r: single;
+label done ;
 begin
   {$ifdef USE_TELEMETRY}
   if benchmark then metrics.forward.start(layerType);
   {$endif}
 
   output := state.input^;
-  if not state.isTraining then
-      exit();
+  if not state.isTraining then goto done;
+
   //rand.UniformDistribution(0,1);
   for i := 0 to batch * inputs -1 do
       begin
@@ -101,6 +102,7 @@ begin
           else
               state.input.Data[i] := state.input.Data[i] * scale
       end ;
+done:
   {$ifdef USE_TELEMETRY}
   if benchmark then metrics.forward.finish(layerType);
   {$endif}
@@ -154,10 +156,9 @@ procedure TDropoutLayer.forwardGPU(var state: TNNetState);
 begin
   if not state.input.wasGPU() then state.input.pushToDevice;
   output := state.input^;
+  if not state.isTraining then
+    exit();
   cuda.forwardDropout(output.size(), output.devData, probability, scale, rand.devData, output.devData);
-  //rand.pullFromDevice();
-  //rand.print(psGray);
-  //readln
 end;
 
 procedure TDropoutLayer.backwardGPU(var state: TNNetState);

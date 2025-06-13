@@ -7,10 +7,10 @@ uses
   cthreads,
   {$ENDIF}
   SysUtils, ntensors, ntypes, nDatasets, nBaseLayer, nConnectedlayer
-  , nLogisticLayer, nSoftmaxLayer, nCostLayer, nnet, nChrono, nConvolutionLayer, nUpSampleLayer
-  , nModels, Keyboard, nNormalizationLayer, nParser, termesc, steroids
+  , nLogisticLayer, nSoftmaxLayer, nCostLayer, nnet, nChrono, nConvolutionLayer, nUpSampleLayer, nDropOutLayer
+  , nModels, Keyboard, nParser, termesc, steroids
   {$if defined(MSWINDOWS)}
-  , ShellApi
+  , ShellApi, uTokenizer
   //, cudnn_graph
   //, cudnn_adv
   //, cudnn_ops
@@ -77,7 +77,9 @@ end;
 var
   img : TImageData;
   coor : TArray<SizeInt>;
-  trainingHistory : TSingleTensor;
+  trainingHistory , bmp: TSingleTensor;
+  drop: TDropoutLayer;
+  sn : TNNetState;
   {$ifdef USE_OPENCL}
   dev : TArray<cl_device_id>;
   res1, res2 : single;
@@ -133,7 +135,7 @@ begin
 {$elseif defined(USE_CUDART)}
   initCUDART(0);
   writeln(cuda.properties.name);
-  cuda.useBLAS := 0;
+  cuda.useBLAS :=1;
 
 {$endif}
   sDigits := 6;
@@ -167,8 +169,28 @@ begin
   {$endif}
   CF10 := TCIFAR10Data.Create('');
 
+  speedOverSize:=false;
   Neural:=TNNet.Create(deepCIFAR10);
   //Neural:=TNNet.Create(leNetCIFAR10);
+
+(* //testing pseudorandom gen for dropout
+  bmp := TSingleTensor.Create([80, 80]);
+  drop := TDropoutLayer.Create(1, 0.2, 80*80);
+  sn.input:=@bmp;
+  sn.isTraining:=true;
+  while true do begin
+    bmp.fill(1);
+    bmp.setCPU;
+    drop.forwardGPU(sn);
+    drop.output.pullFromDevice();
+    cursorHome();
+    drop.output.print(psGray);
+    readln;
+  end;
+
+  drop.free();
+  exit;
+*)
 
   Neural.setTraining(true);
   Neural.batch       := READ_BATCH;
@@ -198,11 +220,11 @@ begin
   truth.resize([READ_MEASURE * Neural.batch]);
   termesc.cursorClearScreen();
   InitKeyboard;
+  //write(#27'[8;80;200t'); // resize terminal to (80 row, 200 col)?
 
   while true do begin
 
     //i := random(CF10.DATA_COUNT div Neural.batch)-1;
-
     if not CF10.read(j) then break;
 
     CF10.TrainingData.toSingles(data.X.Data);
@@ -232,8 +254,8 @@ begin
 
       trainingHistory.resize([l]);
       trainingHistory.Data[l-1] := cost;
-
       cursorAbsPos();
+      cursorClearDown();
       writeln('Batch [',j:4,'], epoch[',i {j*Neural.batch div CF10.DATA_COUNT}:5,'], Cost [',cost:1:8,']',widechar($2191 +2*ord(costDelta>0)),' speed [', s*Neural.batch :5,'] Sample per second, '
         ,'Accuracy [', 100*truth.similarity(predicted.Data):3:2,'%], learningRate [',Neural.computeCurrentLearningRate:1:3,']', sLineBreak);
       //writeln('Conv[1] ');
@@ -262,8 +284,8 @@ begin
 
       coor := trainingHistory.plot;
       {$ifdef USE_TELEMETRY}
-      termesc.cursorAbsPos(10, 24);
-      writeln(sLineBreak, metrics.print(TELEMETRY_OPS {or TELEMETRY_FWD or TELEMETRY_BWD or TELEMETRY_UPD}));
+      termesc.cursorAbsPos(1, 24);
+      writeln(sLineBreak, metrics.print(TELEMETRY_OPS or TELEMETRY_FWD or TELEMETRY_BWD or TELEMETRY_UPD));
       metrics.reset;
       {$endif}
       //writeln(sLineBreak, 'Predicted :');

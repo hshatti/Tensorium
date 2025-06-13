@@ -48,6 +48,7 @@ constructor TConnectedLayer.Create(const ABatch, ASteps, AInputs,
   AIsBatchNormalized: boolean);
 var randomRange:Single;
 begin
+  bnMomentum            := 0.05;
   batch                 := ABatch; // note split to steps in case of RNN
   Steps                 := ASteps;
   layerType             := ltCONNECTED;
@@ -173,13 +174,13 @@ begin
           output.MeansAndVars(mean, variance, offset, outputStep);
           //scal_cpu(outputs, 0.95, rolling_mean, 1);
           //axpy_cpu(outputs, 0.05, mean, 1, rolling_mean, 1);
-          rolling_mean.Multiply(0.95);
-          rolling_mean.axpy(0.05, mean);
+          rolling_mean.Multiply(1-bnMomentum);
+          rolling_mean.axpy(bnMomentum, mean);
 
           //scal_cpu(outputs, 0.95, rolling_variance, 1);
           //axpy_cpu(outputs, 0.05, variance, 1, rolling_variance, 1);
-          rolling_variance.Multiply(0.95);
-          rolling_variance.axpy(0.05, variance);
+          rolling_variance.Multiply(1-bnMomentum);
+          rolling_variance.axpy(bnMomentum, variance);
 
           //copy_cpu(l.outputs * l.batch, l.output, 1, l.x, 1);
           output.CopyTo(x, offset, 1, offset, 1, outputStep);
@@ -421,11 +422,11 @@ begin
       if not rolling_variance.wasGPU() then rolling_variance.pushToDevice;
 
       if state.isTraining then begin
-          ocl.meanAndVars(outputStep, mean.Size(), output.Groups, output.devData, offset, mean.devData, variance.devData);
-          ocl.scale(rolling_mean.size(), 0.95, rolling_mean.devData, 1);
-          ocl.axpy(rolling_mean.Size(), 0.05, mean.devData, 0, 1, rolling_mean.devData, 0, 1);
-          ocl.scale(rolling_variance.Size(), 0.95, rolling_variance.devData, 1);
-          ocl.axpy(rolling_variance.size(), 0.05, variance.devData, 0, 1, rolling_variance.devData, 0, 1);
+          ocl.meansAndVars(outputStep, mean.Size(), output.Groups, output.devData, offset, mean.devData, variance.devData);
+          ocl.scale(rolling_mean.size(), 1-bnMomentum, rolling_mean.devData, 1);
+          ocl.axpy(rolling_mean.Size(), bnMomentum, mean.devData, 0, 1, rolling_mean.devData, 0, 1);
+          ocl.scale(rolling_variance.Size(), 1-bnMomentum, rolling_variance.devData, 1);
+          ocl.axpy(rolling_variance.size(), bnMomentum, variance.devData, 0, 1, rolling_variance.devData, 0, 1);
           ocl.copy(outputStep, output.devData, offset, 1, x.devData, offset, 1);
           ocl.normalize(mean.Size(), outputStep, output.groups, mean.devData, 1, variance.devData, 1, output.devData, offset);
           ocl.copy(outputStep, output.devData, offset, 1, x_norm.devData, offset, 1);
@@ -733,14 +734,14 @@ begin
 
 //output.MeansAndVars(mean, variance, offset, outputStep);
 
-          cuda.scale(rolling_mean.size(), 0.95, rolling_mean.devData, 1);
-//rolling_mean.Multiply(0.95);
-          cuda.axpy(rolling_mean.Size(), 0.05, mean.devData, 0, 1, rolling_mean.devData, 0, 1);
-//rolling_mean.axpy(0.05, mean);
-          cuda.scale(rolling_variance.Size(), 0.95, rolling_variance.devData, 1);
-//rolling_variance.Multiply(0.95);
-          cuda.axpy(rolling_variance.size(), 0.05, variance.devData, 0, 1, rolling_variance.devData, 0, 1);
-//rolling_variance.axpy(0.05, variance);
+          cuda.scale(rolling_mean.size(), 1-bnMomentum, rolling_mean.devData, 1);
+//rolling_mean.Multiply(1-bnMomentum);
+          cuda.axpy(rolling_mean.Size(), bnMomentum, mean.devData, 0, 1, rolling_mean.devData, 0, 1);
+//rolling_mean.axpy(bnMomentum, mean);
+          cuda.scale(rolling_variance.Size(), 1-bnMomentum, rolling_variance.devData, 1);
+//rolling_variance.Multiply(1-bnMomentum);
+          cuda.axpy(rolling_variance.size(), bnMomentum, variance.devData, 0, 1, rolling_variance.devData, 0, 1);
+//rolling_variance.axpy(bnMomentum, variance);
           cuda.copy(outputStep, output.devData, offset, 1, x.devData, offset, 1);
 //output.CopyTo(x, offset, 1, offset, 1, outputStep);
           cuda.normalize(mean.Size(), outputStep, output.groups, mean.devData, 1, variance.devData, 1, output.devData, offset);
@@ -911,33 +912,20 @@ begin
   if not weight_updates.wasGPU() then weight_updates.pushToDevice;
 
   cuda.axpy(biases.size(), args.learningRate / args.batch, bias_updates.devData, 0, 1, biases.devData, 0, 1);
-  //cuda.waitForEvents(batch, pointer(events));
-  //cuda.finish();
 
   cuda.scale(bias_updates.size(), args.momentum, bias_updates.devData, 1);
-  //cuda.waitForEvents(batch, pointer(events));
-  //cuda.finish();
 
   cuda.axpy(weight_updates.size(), -args.decay * args.batch, weights.devData, 0, 1, weight_updates.devData, 0, 1);
-  //cuda.waitForEvents(batch, pointer(events));
-  //cuda.finish();
 
   cuda.axpy(weights.size(), args.learningRate / args.batch, weight_updates.devData, 0, 1, weights.devData, 0, 1);
-  //cuda.waitForEvents(batch, pointer(events));
-  //cuda.finish();
 
   cuda.scale(weight_updates.size(), args.momentum, weight_updates.devData, 1);
-  //cuda.waitForEvents(batch, pointer(events));
-  //cuda.finish();
 
   if isBatchNormalized {and (batch > 1)} then begin
-      //scales.axpy(args.learningRate / args.batch, scale_updates);
-      //scale_updates.Multiply(args.momentum);
       cuda.axpy(scales.size(), args.learningRate / args.batch, scale_updates.devData, 0, 1, scales.devData, 0, 1);
       cuda.scale(scale_updates.size(), args.momentum, scale_updates.devData, 1);
   end;
 
-  //update(args);
   inherited ;
 
   {$ifdef USE_TELEMETRY}

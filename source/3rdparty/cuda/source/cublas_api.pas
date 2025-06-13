@@ -80,6 +80,9 @@ const
 {$if not defined(PPSingles)}
   PPDouble = ^PDouble;
 {$endif}
+{$if not declared(size_t)}
+  size_t = UIntPtr;
+{$endif}
 
   { CUBLAS status type returns  }
     PcublasStatus_t = ^cublasStatus_t;
@@ -3150,7 +3153,8 @@ end;
 
   procedure Freecublas_api;
     begin
-      FreeLibrary(hlib);
+      if hlib<>0 then
+        FreeLibrary(hlib);
       cublasGetProperty:=nil;
       cublasGetCudartVersion:=nil;
       cublasGetAtomicsMode:=nil;
@@ -3998,7 +4002,11 @@ end;
       Freecublas_api;
       hlib:=LoadLibrary(lib);
       if hlib=0 then
-        raise Exception.Create(format('Could not load library: %s',[lib]));
+ begin
+        if isConsole then
+	writeln(format('Could not load library: %s',[lib]));    
+	raise Exception.Create(format('Could not load library: %s',[lib]));
+      end;
 
       //cublasInit := GetProcAddress(hlib,'cublasInit');
       //cublasShutdown := GetProcAddress(hlib,'cublasShutdown');
