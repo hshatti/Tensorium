@@ -44,18 +44,16 @@
           </Linking>
           <Other>
             <CustomOptions Value="-dUSE_TELEMETRY
--dUSE_AVX2
--dUSE_OPENCL"/>
-            <OtherDefines Count="9">
+-dUSE_AVX2"/>
+            <OtherDefines Count="8">
               <Define0 Value="USE_TELEMETRY"/>
               <Define1 Value="USE_AVX2"/>
               <Define2 Value="USE_MULTITHREADING"/>
               <Define3 Value="USE_OPENCL"/>
-              <Define4 Value="CL_EVENTS"/>
-              <Define5 Value="USE_MKL"/>
-              <Define6 Value="BIG_MATRECIES"/>
-              <Define7 Value="USE_OPENBLAS"/>
-              <Define8 Value="USE_CUDART"/>
+              <Define4 Value="USE_MKL"/>
+              <Define5 Value="BIG_MATRECIES"/>
+              <Define6 Value="USE_OPENBLAS"/>
+              <Define7 Value="USE_CUDART"/>
             </OtherDefines>
           </Other>
         </CompilerOptions>
@@ -111,17 +109,16 @@
       <CustomOptions Value="-dUSE_TELEMETRY
 -dUSE_AVX2
 -dUSE_MULTITHREADING
--dUSE_OPENCL"/>
-      <OtherDefines Count="9">
+-dUSE_CUDART"/>
+      <OtherDefines Count="8">
         <Define0 Value="USE_TELEMETRY"/>
         <Define1 Value="USE_AVX2"/>
         <Define2 Value="USE_MULTITHREADING"/>
         <Define3 Value="USE_OPENCL"/>
-        <Define4 Value="CL_EVENTS"/>
-        <Define5 Value="USE_MKL"/>
-        <Define6 Value="BIG_MATRECIES"/>
-        <Define7 Value="USE_OPENBLAS"/>
-        <Define8 Value="USE_CUDART"/>
+        <Define4 Value="USE_MKL"/>
+        <Define5 Value="BIG_MATRECIES"/>
+        <Define6 Value="USE_OPENBLAS"/>
+        <Define7 Value="USE_CUDART"/>
       </OtherDefines>
     </Other>
   </CompilerOptions>

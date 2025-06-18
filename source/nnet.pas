@@ -276,26 +276,21 @@ begin
     state.index := i;
     currentLayer := layers[i];
     if state.isTraining and assigned(currentLayer.delta.Data) and currentLayer.train then begin
-      //currentLayer.delta.Multiply(0);
-    {$if defined(USE_OPENCL)}
-      ocl.fill(currentLayer.delta.size(), currentLayer.delta.devData, 0, 0, 1
-      {$IFDEF CL_EVENTS}
-      , state.events, nil);
-      ocl.waitForEvents(1, pointer(state.events));
-      {$ELSE}
-      );
-      {$ENDIF}
-    {$elseif defined(USE_CUDART)}
-    cuda.fill(currentLayer.delta.size(), currentLayer.delta.devData, 0, 0, 1);
-    {$else}
-      currentLayer.delta.fill(0);
-    {$endif}
+      {$if defined(USE_OPENCL)}
+      ocl.scale(currentLayer.delta.size(), 0, currentLayer.delta.devData, 1);
+      {$elseif defined(USE_CUDART)}
+      cuda.scale(currentLayer.delta.size(), 0, currentLayer.delta.devData, 1);
+      {$else}
+      currentLayer.delta.Multiply(0);
+      {$endif}
     end;
     if assigned(OnForward) then OnForward(state);
 
     {$if defined(USE_OPENCL)}
+    {$if defined(CL_EVENTS)}
     currentLayer.events := state.events;
     currentLayer.ev     := state.ev;
+    {$endif}
     currentLayer.forwardGPU(state);
     ocl.finish();
     {$elseif defined(USE_CUDART)}
@@ -305,6 +300,7 @@ begin
     {$endif}
     // todo temporary OpenCL output workaroundB
     state.input := @currentLayer.output;
+    state.prevLayer := currentLayer;
     //writeln(#10, 'Forward ', 100*i/ High(Layers):2:0, '%')
   end;
 end;
@@ -327,8 +323,10 @@ begin
     if i = 0 then begin
       state.input := original_input;
       state.delta := original_delta;
+      state.prevLayer := nil
     end else begin
       prev := Layers[i - 1];
+      state.prevLayer := prev;
       state.input := @prev.output;
       state.delta := @prev.delta;
     end;
@@ -336,8 +334,10 @@ begin
     if current.backwardStop then break;
     if current.forwardOnly then continue;
     {$if defined(USE_OPENCL)}
+    {$if defined(CL_EVENTS)}
     current.events := state.events;
     current.ev     := state.ev;
+    {$endif}
     current.backwardGPU(state);
     ocl.finish();
     {$elseif defined(USE_CUDART)}

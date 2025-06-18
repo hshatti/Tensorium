@@ -754,7 +754,99 @@ begin
   {$endif}
 end;
 
-{$if defined(USE_CUDART)}
+{$if defined(USE_OPENCL)}
+procedure TAddLayer.forwardGPU(var state: TNNetState);
+var
+    lOutput: TBaseLayer;
+    a,b:PSingle;
+    i: longint;
+    net : TNNet;
+begin
+    {$ifdef USE_TELEMETRY}
+    if benchmark then metrics.forward.start(layerType);
+    {$endif}
+    output.setOCL;
+    net := TNNet(state.net);
+    assert(length(inputLayers)=1, '[AddLayerGPU] multiple layer add is not yet implemented');
+    lOutput := net.layers[inputLayers[0]];
+    if {(length(inputLayers)=1) and} (lOutput.output.Size()=Output.Size()) then
+        for i:=0 to high(inputLayers) do begin
+          if not lOutput.output.wasGPU() then lOutput.output.pushToDevice;
+          ocl.addvv(state.input.size(), state.input.devData, 0, 1, lOutput.output.devData, 0, 1, output.devData, 0, 1);
+          //state.input.copyTo(output);
+          //output.Add(lOutput.output);
+        end
+    else
+        add_multilayer(layersOutput, state.input^, output, weights, weightsNormalization, weightSums, weightMaxes);
+
+    case ActivationType of
+      acSWISH :
+        ocl.activateArraySWISH(output.size(), output.devData, 0, activationInput.devData, output.devData);
+      acMISH : ;
+        //activate_array_mish(output, output.Size(), activationInput, output)
+    else
+      ocl.ActivateArray(output.size(), output.devData, 0, longint(ActivationType));
+      //activate()
+    end;
+    {$ifdef USE_TELEMETRY}
+    ocl.finish();
+    if benchmark then metrics.forward.finish(layerType);
+    {$endif}
+end;
+
+
+procedure TAddLayer.backwardGPU(var state: TNNetState);
+var i:SizeInt;
+begin
+  {$ifdef USE_TELEMETRY}
+  if benchmark then metrics.backward.start(layerType);
+  {$endif}
+  if not delta.wasGPU() then delta.pushToDevice;
+  if not state.delta.wasGPU() then state.delta.pushToDevice;
+
+  case ActivationType of
+    acSWISH :  ;
+      //gradient_array_swish(output, outputs * batch, activationInput, delta);
+    acMISH :    ;
+      //gradient_array_mish(outputs * batch, activationInput, delta)
+  else
+      ocl.DeriveArray(output.size(), output.devData, 0, longint(ActivationType), delta.devData)
+  end;
+  ocl.addvv(state.delta.size(), delta.devData, 0, 1, state.delta.devData, 0, 1, state.delta.devData, 0, 1);
+  for i := 0 to high(layersDelta) do begin
+    if not layersDelta[i].wasGPU() then
+      layersDelta[i].pushToDevice;
+    ocl.addvv(delta.size(), layersDelta[i].devData, 0, 1, delta.devData, 0, 1, layersDelta[i].devData, 0, 1);
+  end;
+  //backward_add_multilayer(layersDelta, state.delta^, delta, weights, weight_updates, state.input^, layersOutput, weightsNormalization, weightMaxes, weightSums)
+  {$ifdef USE_TELEMETRY}
+  ocl.finish();
+  if benchmark then metrics.backward.finish(layerType);
+  {$endif}
+end;
+
+procedure TAddLayer.updateGPU(const args: TUpdateArgs);
+var
+  learning_rate: single;
+begin
+  {$ifdef USE_TELEMETRY}
+  if benchmark then metrics.update.start(layerType);
+  {$endif}
+  if assigned(weights.data) then begin
+      learning_rate := args.learningRate * learningRateScale;
+      ocl.axpy(weight_updates.size(), -args.decay * args.batch, weights.devData, 0, 1, weight_updates.devData, 0, 1);
+      ocl.axpy(weights.size(), args.learningRate, weight_updates.devData, 0, 1, weights.devData, 0, 1);
+      ocl.scale(weight_updates.size(), args.momentum, weight_updates.devData, 1);
+  end;
+  inherited updateGPU(args);
+  {$ifdef USE_TELEMETRY}
+  ocl.finish();
+  if benchmark then metrics.update.finish(layerType);
+  {$endif}
+end;
+
+{$elseif defined(USE_CUDART)}
+
 procedure TAddLayer.forwardGPU(var state: TNNetState);
 var
   lOutput: TBaseLayer;
@@ -846,97 +938,6 @@ begin
   inherited updateGPU(args);
   {$ifdef USE_TELEMETRY}
   cuda.finish();
-  if benchmark then metrics.update.finish(layerType);
-  {$endif}
-end;
-
-{$elseif defined(USE_OPENCL)}
-procedure TAddLayer.forwardGPU(var state: TNNetState);
-var
-    lOutput: TBaseLayer;
-    a,b:PSingle;
-    i: longint;
-    net : TNNet;
-begin
-    {$ifdef USE_TELEMETRY}
-    if benchmark then metrics.forward.start(layerType);
-    {$endif}
-    output.setOCL;
-    net := TNNet(state.net);
-    assert(length(inputLayers)=1, '[AddLayerGPU] multiple layer add is not yet implemented');
-    lOutput := net.layers[inputLayers[0]];
-    if {(length(inputLayers)=1) and} (lOutput.output.Size()=Output.Size()) then
-        for i:=0 to high(inputLayers) do begin
-          if not lOutput.output.wasGPU() then lOutput.output.pushToDevice;
-          ocl.addvv(state.input.size(), state.input.devData, 0, 1, lOutput.output.devData, 0, 1, output.devData, 0, 1);
-          //state.input.copyTo(output);
-          //output.Add(lOutput.output);
-        end
-    else
-        add_multilayer(layersOutput, state.input^, output, weights, weightsNormalization, weightSums, weightMaxes);
-
-    case ActivationType of
-      acSWISH :
-        ocl.activateArraySWISH(output.size(), output.devData, 0, activationInput.devData, output.devData);
-      acMISH : ;
-        //activate_array_mish(output, output.Size(), activationInput, output)
-    else
-      ocl.ActivateArray(output.size(), output.devData, 0, longint(ActivationType));
-      //activate()
-    end;
-    {$ifdef USE_TELEMETRY}
-    ocl.finish();
-    if benchmark then metrics.forward.finish(layerType);
-    {$endif}
-end;
-
-
-procedure TAddLayer.backwardGPU(var state: TNNetState);
-var i:SizeInt;
-begin
-  {$ifdef USE_TELEMETRY}
-  if benchmark then metrics.backward.start(layerType);
-  {$endif}
-  if not delta.wasGPU() then delta.pushToDevice;
-  if not state.delta.wasGPU() then state.delta.pushToDevice;
-
-  case ActivationType of
-    acSWISH :  ;
-      //gradient_array_swish(output, outputs * batch, activationInput, delta);
-    acMISH :    ;
-      //gradient_array_mish(outputs * batch, activationInput, delta)
-  else
-      ocl.DeriveArray(output.size(), output.devData, 0, longint(ActivationType), delta.devData)
-  end;
-  ocl.addvv(state.delta.size(), delta.devData, 0, 1, state.delta.devData, 0, 1, state.delta.devData, 0, 1);
-  for i := 0 to high(layersDelta) do begin
-    if not layersDelta[i].wasGPU() then
-      layersDelta[i].pushToDevice;
-    ocl.addvv(delta.size(), layersDelta[i].devData, 0, 1, delta.devData, 0, 1, layersDelta[i].devData, 0, 1);
-  end;
-  //backward_add_multilayer(layersDelta, state.delta^, delta, weights, weight_updates, state.input^, layersOutput, weightsNormalization, weightMaxes, weightSums)
-  {$ifdef USE_TELEMETRY}
-  ocl.finish();
-  if benchmark then metrics.backward.finish(layerType);
-  {$endif}
-end;
-
-procedure TAddLayer.updateGPU(const args: TUpdateArgs);
-var
-  learning_rate: single;
-begin
-  {$ifdef USE_TELEMETRY}
-  if benchmark then metrics.update.start(layerType);
-  {$endif}
-  if assigned(weights.data) then begin
-      learning_rate := args.learningRate * learningRateScale;
-      ocl.axpy(weight_updates.size(), -args.decay * args.batch, weights.devData, 0, 1, weight_updates.devData, 0, 1);
-      ocl.axpy(weights.size(), args.learningRate, weight_updates.devData, 0, 1, weights.devData, 0, 1);
-      ocl.scale(weight_updates.size(), args.momentum, weight_updates.devData, 1);
-  end;
-  inherited updateGPU(args);
-  {$ifdef USE_TELEMETRY}
-  ocl.finish();
   if benchmark then metrics.update.finish(layerType);
   {$endif}
 end;

@@ -11,7 +11,7 @@ uses
   , cudnn_cnn, cudnn_ops, cudnn_graph, cudnn_adv
   {$endif}
   {$ifdef USE_OPENCL}
-    {$ifdef CL_BLAST} , clblast {$endif}
+  , nnOpenCL
   {$endif}
   {$ifdef USE_TELEMETRY}
   , nOpMetrics
@@ -458,7 +458,7 @@ procedure TConvolutionalLayer.forward(var state: TNNetState);
 var
     s: TNNetState;
     workspacePtr: PSingleTensor;
-    q:string;
+    //q:string;
 begin
     {$ifdef USE_TELEMETRY}
     if benchmark then metrics.forward.start(layerType);
@@ -571,16 +571,16 @@ end;
 procedure TConvolutionalLayer.backward(var state: TNNetState);
 var
     //nweights,
-    b, m, n, k, colSize: SizeInt;
+    b, i_m, i_n, i_k, colSize: SizeInt;
     //_A, _B, _C, im: Pointer;
     workspacePtr :PSingleTensor;
 begin
   {$ifdef USE_TELEMETRY}
   if benchmark then metrics.backward.start(layerType);
   {$endif}
-  m := filters div groups;
-  n := kernelSize * kernelSize * c div groups;
-  k := outH * outW;
+  i_m := filters div groups;
+  i_n := kernelSize * kernelSize * c div groups;
+  i_k := outH * outW;
 
   colSize := getWorkspaceSize div batch;
 
@@ -607,29 +607,29 @@ begin
   //for i := 0 to batch -1 do
   //    for j := 0 to groups -1 do
   //        begin
-  //            _A := delta.Data+(i * groups+j) * m * k;
+  //            _A := delta.Data+(i * groups+j) * i_m * i_k;
   //            _B := pointer(state.workspace.data);
   //            _C := weight_updates.data  + j * nweights div groups;
   //            im := state.input.data +(i * groups+j) * (c div groups) * h * w;
   //            im2col_cpu_ext(im, c div groups, h, w, kernelSize, kernelSize, padding * dilation, padding * dilation, stride_y, stride_x, dilation, dilation, _B);
-  //            TSingleTensor.gemm(CblasRowMajor, CblasNoTrans, CblasTrans, m, n, k, 1, _A, k, _B, k, 1, _C, n);
+  //            TSingleTensor.gemm(CblasRowMajor, CblasNoTrans, CblasTrans, i_m, i_n, i_k, 1, _A, i_k, _B, i_k, 1, _C, i_n);
   //            if assigned(state.delta.Data) then
   //                begin
   //                    _A := weights.Data+j * nweights div groups;
-  //                    _B := delta.Data + (i * groups+j) * m * k;
+  //                    _B := delta.Data + (i * groups+j) * i_m * i_k;
   //                    _C := pointer(state.workspace.data);
-  //                    TSingleTensor.gemm(CblasRowMajor, CblasTrans, CblasNoTrans, n, k, m, 1, _A, n, _B, k, 0, _C, k);
+  //                    TSingleTensor.gemm(CblasRowMajor, CblasTrans, CblasNoTrans, i_n, i_k, i_m, 1, _A, i_n, _B, i_k, 0, _C, i_k);
   //                    col2im_cpu_ext(pointer(state.workspace.data), c div groups, h, w, kernelSize, kernelSize, padding * dilation, padding * dilation, stride_y, stride_x, dilation, dilation, pointer(state.delta.data +(i * groups+j) * (c div groups) * h * w))
   //                end
   //        end ;
 
   //for i:= 0 to batch -1 do begin
-  //  _A := delta.Data+i * m * k;
+  //  _A := delta.Data+i * i_m * i_k;
   //  _B := pointer(state.workspace.data + i*imcolSize);
   //  _C := weight_updates.data ;
   //  im := state.input.data + c * h * w;
   //  im2col_cpu_ext(im, c div groups, h, w, kernelSize, kernelSize, padding * dilation, padding * dilation, stride_y, stride_x, dilation, dilation, _B);
-  //  TSingleTensor.gemm(CblasRowMajor, CblasNoTrans, CblasTrans, m, n, k, 1, _A, k, _B, k, 1, _C, n);
+  //  TSingleTensor.gemm(CblasRowMajor, CblasNoTrans, CblasTrans, i_m, i_n, i_k, 1, _A, i_k, _B, i_k, 1, _C, i_n);
   //end;
 
   if speedOverSize then
@@ -643,10 +643,10 @@ begin
   if benchmark then tensorMetrics.start(opGemm);
   {$endif}
   for b:= 0 to batch -1 do
-    TSingleTensor.gemm(CblasRowMajor, CblasNoTrans, CblasTrans, m, n, k, 1
-      , delta.data + b*m*k, k
-      , workspacePtr^.data + b*ColSize, k
-      , 1, weight_updates.data, n);
+    TSingleTensor.gemm(CblasRowMajor, CblasNoTrans, CblasTrans, i_m, i_n, i_k, 1
+      , delta.data + b*i_m*i_k, i_k
+      , workspacePtr^.data + b*ColSize, i_k
+      , 1, weight_updates.data, i_n);
   {$ifdef USE_TELEMETRY}
   if benchmark then tensorMetrics.finish(opGemm);
   {$endif}
@@ -655,10 +655,10 @@ begin
     if benchmark then tensorMetrics.start(opGemm);
     {$endif}
     TSingleTensor.gemmStridedBatched(
-      CblasRowMajor, CblasTrans, CblasNoTrans, n, k, m, 1
-      , weights.Data, n, 0
-      , delta.Data, k, m * k
-      , 0, workspacePtr^.data, k, colSize, Batch);
+      CblasRowMajor, CblasTrans, CblasNoTrans, i_n, i_k, i_m, 1
+      , weights.Data, i_n, 0
+      , delta.Data, i_k, i_m * i_k
+      , 0, workspacePtr^.data, i_k, colSize, Batch);
     {$ifdef USE_TELEMETRY}
       if benchmark then tensorMetrics.finish(opGemm);
     {$endif}
@@ -713,8 +713,8 @@ end;
 procedure TConvolutionalLayer.forwardGPU(var state: TNNetState);
 var
     b, aOffset, bOffset , outImgSize, kSize, k, imColSize,
-    strideA, strideB, strideC :SizeInt;
-    _A, _B, _C : pointer;
+      strideA, strideB, strideC :SizeInt;
+    _A, _B, _C : TCLMemory;
     s : TNNetState;
 begin
   {$ifdef USE_TELEMETRY}
@@ -731,50 +731,51 @@ begin
   //filters := weights.c();
   k := c * kSize;
   imColSize := c * kSize * outImgSize;
+  _C := output.devData;
   strideC := outImgSize * filters;
-  //setLength(ev, length(events));
   if (kSize <> 1) or (Stride_y * Stride_x <> 1) or (Dilation * Dilation <> 1) then begin
-    _A := state.input.devData;
-    _B := state.workspace.devData;
     strideA := state.input.volume();
     strideB := imColSize;
-  end else begin;
+    _B := state.workspace.devData;
+    for b := 0 to batch - 1 do
+      begin
+        aOffset := b * strideA;
+        bOffset := b * strideB;
+        ocl.im2col(c, h, w, kernelSize, kernelSize, Padding, Padding, stride_y, stride_x, Dilation, Dilation, state.input.devData, aOffset, _B, bOffset);
+        //ocl.gemm(false, false, filters, outImgSize, k, 1, weights.devData, 0, k, state.workspace.devData, bOffset, outImgSize, 0, _C, b * strideC, outImgSize);
+        //batchesWeights[b] := weights.devData;
+        //workSpaces[b] := state.workspace.devData + bOffset;
+        //batchesOut[b] := _C + b * outImgSize * filters;
+      end
+  end else begin
+    strideB := state.input.volume();
     _B := state.input.devData;
-    strideB := state.input.volume()
+    //for b := 0 to batch - 1 do
+    //  begin
+    //    bOffset := b * strideB;
+    //    ocl.gemm(false, false, filters, outImgSize, k, 1, weights.devData, 0, k, _B, bOffset, outImgSize, 0, _C, b * strideC, outImgSize);
+    //    //batchesWeights[b] := weights.devData;
+    //    //workSpaces[b] := _B + bOffset;
+    //    //batchesOut[b] := _C + b * outImgSize * filters;
+    //  end;
+
   end;
 
-  for b := 0 to batch - 1 do
-  begin
-    aOffset := b * strideA;
-    bOffset := b * strideB;
-    if (kSize <> 1) or (Stride_y * Stride_x <> 1) or (Dilation * Dilation <> 1) then
-        ocl.im2col(c, h, w, kernelSize, kernelSize, Padding, Padding, stride_y, stride_x, Dilation, Dilation, _A, aOffset, _B, bOffset);
-    _C := output.devData;
-    //ocl.gemm(false, false, filters, outImgSize, k, 1, weights.devData, 0, k, _B, bOffset, outImgSize, 0, _C, b * outImgSize * filters, outImgSize);
-  end;
+  //ocl.WriteBuffer(workSpacesDev,     batch*sizeOf(pointer), Pointer(workSpaces));
+  //ocl.WriteBuffer(batchesOutDev,     batch*sizeOf(pointer), Pointer(batchesOut));
+  //ocl.WriteBuffer(batchesWeightsDev, batch*sizeOf(pointer), Pointer(batchesWeights));
+  //ocl.gemmBatched(false, false, filters, outImgSize, k, 1, ppsingle(batchesWeightsDev), 0, k, ppsingle(workspacesDev), 0, outImgSize, 0, ppsingle(batchesOutDev), 0, outImgSize, batch);
+  ocl.gemmStridedBatched(false, false, filters, outImgSize, k, 1, weights.devData, 0,k, 0, _B, 0, outImgSize, strideB, 0, _C, 0, outImgSize, strideC, batch);
 
-  ocl.gemmStridedBatched(false, false, filters, outImgSize, k, 1, weights.devData, 0, k, 0, _B, 0, outImgSize, strideB, 0, _C, 0, outImgSize, strideC, batch);
-
-  //state.input.Conv2D(weights, output, Padding, Padding, stride_x, stride_y, Dilation, Dilation);
-  //for b:=0 to high(events) do
-  //  clGetEventInfo(events[b], CL_EVENT_COMMAND_EXECUTION_STATUS, sizeof(cl_int), @ev[b], o);
-
+//state.input.Conv2D(weights, output, Padding, Padding, stride_x, stride_y, Dilation, Dilation);
+//output.printGpuSumSqrDiff();
 
   if isBatchNormalized then
     batchNormGPU(state)
   else begin
-    //output.add(biases);
-    ocl.forwardBias(output.Size(), output.devData, 0, biases.size(), biases.devData,1, Batch)
+    ocl.forwardBias(output.Size(), output.devData, 0, biases.size(), biases.devData,1, Batch);
+//output.forwardBias(biases);
   end;
-
-  //state.input.Conv2D(weights, output, Padding, Padding, stride_x, stride_y, Dilation, Dilation);
-  //batchNorm(state);
-  //
-  //output.pullFromDevice(t);
-  //output.printStat;
-  //t.printStat;
-  //writeln('sumSqrDiff : ', t.sumSqrDiff(output):1:6);
-  //readln();
 
   {$ifdef USE_TELEMETRY}
   if benchmark then metrics.act.start(ActivationType);
@@ -784,12 +785,7 @@ begin
        if train then
          ocl.activateArraySWISH(output.size(), output.devData, 0, ActivationInput.devData, output.devData)
        else
-         ocl.ActivateArray(output.size(), output.devData, 0, longint(ActivationType)
-       {$IFDEF CL_EVENTS}
-       , 1, pointer(state.events), pointer(state.events));
-       {$ELSE}
-       );
-       {$ENDIF}
+         ocl.ActivateArray(output.size(), output.devData, 0, longint(ActivationType));
      //acMISH :
      //   activate_array_mish(output, outputs * batch, activationInput, output);
      //acHARD_MISH :
@@ -799,17 +795,13 @@ begin
      //acNORM_CHAN_SOFTMAX, acNORM_CHAN_SOFTMAX_MAXVAL :
      //     activate_array_normalize_channels_softmax(output, outputs * batch, batch, outC, outW * outH, output, activationType = acNORM_CHAN_SOFTMAX_MAXVAL);
      else
-       ocl.ActivateArray(output.size(), output.devData, 0, longint(ActivationType)
-       {$IFDEF CL_EVENTS}
-       , 1, pointer(state.events), pointer(state.events));
-       {$ELSE}
-       );
-       {$ENDIF}
+       ocl.ActivateArray(output.size(), output.devData, 0, longint(ActivationType));
   end;
   {$ifdef USE_TELEMETRY}
   ocl.finish();
   if benchmark then metrics.act.finish(ActivationType);
   {$endif}
+//Activate();
 
   if (assistedExcitation<>0) and state.isTraining then
       assistedForward(state);
@@ -821,9 +813,9 @@ begin
       inputLayer.forwardGPU(s);
       ocl.copy(output.Size(), inputLayer.output.devData, 0, 1, output.devData, 0, 1);
   end;
-  //ocl.finish();
-  //ocl.waitForEvents(1, pointer(events));
 
+//write(LayerTypeStr,' ');
+//output.printGpuSumSqrDiff();
   {$ifdef USE_TELEMETRY}
   ocl.finish();
   if benchmark then metrics.forward.finish(layerType);
@@ -832,14 +824,14 @@ end;
 
 procedure TConvolutionalLayer.backwardGPU(var state: TNNetState);
 var
-    b, m, n, k, colSize, _vol, imSize: SizeInt;
+    b, i_m, i_n, i_k, colSize, _vol, imSize: SizeInt;
 begin
   {$ifdef USE_TELEMETRY}
   if benchmark then metrics.backward.start(layerType);
   {$endif}
-  m := filters div groups;
-  n := kernelSize * kernelSize * c div groups;
-  k := outH * outW;
+  i_m := filters div groups;
+  i_n := kernelSize * kernelSize * c div groups;
+  i_k := outH * outW;
 
   colSize := c * outH * outW * kernelSize * kernelSize;
   //colSize := getWorkspaceSize div batch;
@@ -860,78 +852,86 @@ begin
     //acNORM_CHAN :
     //  gradient_array_normalize_channels(output, outputs * batch, batch, outC, outW * outW, delta) ;
     else
-      ocl.DeriveArray(output.size(), output.devData, 0, longint(ActivationType), delta.devData
-      {$IFDEF CL_EVENTS}
-      , batch, pointer(state.events), pointer(state.events));
-      {$ELSE}
-      );
-      {$ENDIF}
+      ocl.DeriveArray(output.size(), output.devData, 0, longint(ActivationType), delta.devData);
   end;
-  //ocl.waitForEvents(1, pointer(events));
-  //ocl.finish();
+//Derivative();
+//delta.printGpuSumSqrDiff();
   if isBatchNormalized then
     batchNormBackGPU(state)
-  else
-    ocl.backwardBias(bias_updates.size(), bias_updates.devData, delta.size, delta.devData, 0, 1, batch
-    {$IFDEF CL_EVENTS}
-    , 1, pointer(state.events), pointer(state.events));
-    {$ELSE}
-    );
-    {$ENDIF}
+  else begin
+    ocl.backwardBias(bias_updates.size(), bias_updates.devData, delta.size, delta.devData, 0, 1, batch);
+//bias_updates.addSums(delta);
+  end;
 
-  //ocl.waitForEvents(1, pointer(events));
-  //ocl.finish();
   state.workspace.setOCL;
-
   for b:=0 to batch-1 do begin
     ocl.im2col(c, h, w, kernelSize, kernelSize, Padding, Padding,
       stride_y, stride_x, dilation, dilation, state.input.devData , b*_vol, state.workspace.devData, b*colSize);
   end;
-  //state.input.im2Col(kernelSize, kernelSize, padding * dilation, padding * dilation, stride_y, stride_x, dilation, dilation, state.workspace, 1);
-  //ocl.waitForEvents(batch, pointer(events));
-  //ocl.finish();
+//state.input.im2Col(kernelSize, kernelSize, padding * dilation, padding * dilation, stride_y, stride_x, dilation, dilation, state.workspace, 1);
+
   if not weight_updates.wasGPU() then weight_updates.pushToDevice;
 
   //for b:= 0 to batch -1 do begin
-  //  ocl.gemm(false, true,
-  //          m, n, k, 1
-  //          , delta.devData , b*m*k, k
-  //          , state.workspace.devData, b*ColSize, k
-  //          , 1, weight_updates.devData, 0, n)
+    //ocl.gemm(false, true,
+    //        i_m, i_n, i_k, 1
+    //        , delta.devData , b*i_m*i_k, i_k
+    //        , state.workspace.devData, b*ColSize, i_k
+    //        , 1, weight_updates.devData, 0, i_n);
   //end;
-  ocl.gemmStridedBatched(false, true,
-          m, n, k, 1
-          , delta.devData , 0, k, m*k
-          , state.workspace.devData, 0, k, ColSize
-          , 1, weight_updates.devData, 0, n, 0, batch);
 
+  ocl.gemmStridedBatched(false, true,
+          i_m, i_n, i_k, 1
+          , delta.devdata, 0, i_k, i_m*i_k
+          , state.workspace.devData, 0, i_k, colSize
+          , 1, weight_updates.devData, 0, i_n, 0, batch);
+
+
+//for b:= 0 to batch -1 do
+//TSingleTensor.gemm(CblasRowMajor, CblasNoTrans, CblasTrans, i_m, i_n, i_k, 1
+//, delta.data + b*i_m*i_k, i_k
+//, state.workspace.data + b*ColSize, i_k
+//, 1, weight_updates.data, i_n);
 
   if assigned(state.delta) and assigned(state.delta.devdata) then begin
     if not weights.wasGPU() then weights.pushToDevice;
     //if not state.delta.wasGPU then state.delta.pushToDevice;
 
     //for b := 0 to batch -1 do begin
-    //    ocl.gemm(true, false,
-    //      n, k, m, 1,
-    //      weights.devData, 0    , n,
-    //      delta.devData  , b*m*k, k,
-    //      0, state.workspace.devData, b*colSize, k);
+    //  ocl.gemm(true, false,
+    //      i_n, i_k, i_m, 1,
+    //      weights.devData, 0    , i_n,
+    //      delta.devData  , b*i_m*i_k, i_k,
+    //      0, state.workspace.devData, b*colSize, i_k);
     //end;
+
     ocl.gemmStridedBatched(true, false,
-      n, k, m, 1,
-      weights.devData, 0, n, 0,
-      delta.devData  , 0, k, m*k,
-      0, state.workspace.devData, 0, k, colSize, batch);
+        i_n, i_k, i_m, 1
+        , weights.devData, 0, i_n, 0
+        , delta.devData, 0, i_k, i_m*i_k
+        , 0, state.workspace.devData, 0, i_k, colSize, batch);
+
+//for b := 0 to batch -1 do begin
+//    TSingleTensor.gemm(
+//      CblasRowMajor, CblasTrans, CblasNoTrans, i_n, i_k, i_m, 1
+//      , weights.Data, i_n
+//      , delta.Data + b * i_m * i_k, i_k
+//      , 0, state.workspace.data + b*colSize, i_k);
+//end;
+
 
     imSize := state.delta.Volume();
     for b := 0 to batch-1 do begin
       ocl.col2im(state.delta.c, state.delta.h, state.delta.w, kernelSize, kernelSize, Padding, Padding
-              , stride_y, stride_x, dilation, dilation, state.workspace.devData, b*colSize, state.delta.devData, b*imSize)
+              , stride_y, stride_x, dilation, dilation, state.workspace.devData, b*colSize, state.delta.devData, b*imSize);
     end;
-    //state.delta.col2Im(kernelSize, kernelSize, padding*Dilation, padding*Dilation, stride_x, stride_y, dilation, dilation, state.workspace, 1);
+//state.delta.col2Im(kernelSize, kernelSize, padding*Dilation, padding*Dilation, stride_x, stride_y, dilation, dilation, state.workspace);
 
   end ;
 
+//bias_updates.printGpuSumSqrDiff();
+//weight_updates.printGpuSumSqrDiff();
+//state.delta.printGpuSumSqrDiff();
   {$ifdef USE_TELEMETRY}
   ocl.finish();
   if benchmark then metrics.backward.finish(layerType);
@@ -953,48 +953,23 @@ begin
 
   learning_rate := args.learningRate * learningRateScale;
 
-  ocl.axpy(biases.size(), learning_rate / args.batch, bias_updates.devData, 0, 1, biases.devData, 0, 1
-  {$IFDEF CL_EVENTS}
-  , batch, pointer(events),  pointer(events));
-  {$ELSE}
-  );
-  {$ENDIF}
+  ocl.axpy(biases.size(), learning_rate / args.batch, bias_updates.devData, 0, 1, biases.devData, 0, 1);
   //ocl.waitForEvents(batch, pointer(events));
   //ocl.finish();
 
-  ocl.scale(bias_updates.size(), args.momentum, bias_updates.devData, 1
-  {$IFDEF CL_EVENTS}
-  , 1 ,pointer(events),  pointer(events));
-  {$ELSE}
-  );
-  {$ENDIF}
+  ocl.scale(bias_updates.size(), args.momentum, bias_updates.devData, 1);
   //ocl.waitForEvents(batch, pointer(events));
   //ocl.finish();
 
-  ocl.axpy(weight_updates.size(), -args.decay * args.batch, weights.devData, 0, 1, weight_updates.devData, 0, 1
-  {$IFDEF CL_EVENTS}
-  , 1, @events[1],  @events[1]);
-  {$ELSE}
-  );
-  {$ENDIF}
+  ocl.axpy(weight_updates.size(), -args.decay * args.batch, weights.devData, 0, 1, weight_updates.devData, 0, 1);
   //ocl.waitForEvents(batch, pointer(events));
   //ocl.finish();
 
-  ocl.axpy(weights.size(), learning_Rate / args.batch, weight_updates.devData, 0, 1, weights.devData, 0, 1
-  {$IFDEF CL_EVENTS}
-  , 1, @events[1],  @events[1]);
-  {$ELSE}
-  );
-  {$ENDIF}
+  ocl.axpy(weights.size(), learning_Rate / args.batch, weight_updates.devData, 0, 1, weights.devData, 0, 1);
   //ocl.waitForEvents(batch, pointer(events));
   //ocl.finish();
 
-  ocl.scale(weight_updates.size(), args.momentum, weight_updates.devData, 1
-  {$IFDEF CL_EVENTS}
-  , 1, @events[1],  @events[1]);
-  {$ELSE}
-  );
-  {$ENDIF}
+  ocl.scale(weight_updates.size(), args.momentum, weight_updates.devData, 1);
   //ocl.waitForEvents(batch, pointer(events));
   //ocl.finish();
 
@@ -1131,14 +1106,14 @@ end;
 
 procedure TConvolutionalLayer.backwardGPU(var state: TNNetState);
 var
-    b, m, n, k, colSize, _vol, imSize: SizeInt;
+    b, i_m, i_n, i_k, colSize, _vol, imSize: SizeInt;
 begin
   {$ifdef USE_TELEMETRY}
   if benchmark then metrics.backward.start(layerType);
   {$endif}
-  m := filters div groups;
-  n := kernelSize * kernelSize * c div groups;
-  k := outH * outW;
+  i_m := filters div groups;
+  i_n := kernelSize * kernelSize * c div groups;
+  i_k := outH * outW;
 
   colSize := c * outH * outW * kernelSize * kernelSize;
   //colSize := getWorkspaceSize div batch;
@@ -1181,24 +1156,24 @@ begin
 
   //for b:= 0 to batch -1 do begin
     //cuda.gemm(false, true,
-    //        m, n, k, 1
-    //        , delta.devData , b*m*k, k
-    //        , state.workspace.devData, b*ColSize, k
-    //        , 1, weight_updates.devData, 0, n);
+    //        i_m, i_n, i_k, 1
+    //        , delta.devData , b*i_m*i_k, i_k
+    //        , state.workspace.devData, b*ColSize, i_k
+    //        , 1, weight_updates.devData, 0, i_n);
   //end;
 
   cuda.gemmStridedBatched(false, true,
-          m, n, k, 1
-          , delta.devdata, 0, k, m*k
-          , state.workspace.devData, 0, k, colSize
-          , 1, weight_updates.devData, 0, n, 0, batch);
+          i_m, i_n, i_k, 1
+          , delta.devdata, 0, i_k, i_m*i_k
+          , state.workspace.devData, 0, i_k, colSize
+          , 1, weight_updates.devData, 0, i_n, 0, batch);
 
 
 //for b:= 0 to batch -1 do
-//TSingleTensor.gemm(CblasRowMajor, CblasNoTrans, CblasTrans, m, n, k, 1
-//, delta.data + b*m*k, k
-//, state.workspace.data + b*ColSize, k
-//, 1, weight_updates.data, n);
+//TSingleTensor.gemm(CblasRowMajor, CblasNoTrans, CblasTrans, i_m, i_n, i_k, 1
+//, delta.data + b*i_m*i_k, i_k
+//, state.workspace.data + b*ColSize, i_k
+//, 1, weight_updates.data, i_n);
 
   if assigned(state.delta) and assigned(state.delta.devdata) then begin
     if not weights.wasGPU() then weights.pushToDevice;
@@ -1206,24 +1181,24 @@ begin
 
     //for b := 0 to batch -1 do begin
     //  cuda.gemm(true, false,
-    //      n, k, m, 1,
-    //      weights.devData, 0    , n,
-    //      delta.devData  , b*m*k, k,
-    //      0, state.workspace.devData, b*colSize, k);
+    //      i_n, i_k, i_m, 1,
+    //      weights.devData, 0    , i_n,
+    //      delta.devData  , b*i_m*i_k, i_k,
+    //      0, state.workspace.devData, b*colSize, i_k);
     //end;
 
     cuda.gemmStridedBatched(true, false,
-        n, k, m, 1
-        , weights.devData, 0, n, 0
-        , delta.devData, 0, k, m*k
-        , 0, state.workspace.devData, 0, k, colSize, batch);
+        i_n, i_k, i_m, 1
+        , weights.devData, 0, i_n, 0
+        , delta.devData, 0, i_k, i_m*i_k
+        , 0, state.workspace.devData, 0, i_k, colSize, batch);
 
 //for b := 0 to batch -1 do begin
 //    TSingleTensor.gemm(
-//      CblasRowMajor, CblasTrans, CblasNoTrans, n, k, m, 1
-//      , weights.Data, n
-//      , delta.Data + b * m * k, k
-//      , 0, state.workspace.data + b*colSize, k);
+//      CblasRowMajor, CblasTrans, CblasNoTrans, i_n, i_k, i_m, 1
+//      , weights.Data, i_n
+//      , delta.Data + b * i_m * i_k, i_k
+//      , 0, state.workspace.data + b*colSize, i_k);
 //end;
 
 

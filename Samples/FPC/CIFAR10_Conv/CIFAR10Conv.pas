@@ -8,7 +8,7 @@ uses
   {$ENDIF}
   SysUtils, ntensors, ntypes, nDatasets, nBaseLayer, nConnectedlayer
   , nLogisticLayer, nSoftmaxLayer, nCostLayer, nnet, nChrono, nConvolutionLayer, nUpSampleLayer, nDropOutLayer
-  , nModels, Keyboard, nParser, termesc, steroids
+  , nAttentionLayer, nModels, Keyboard, nParser, termesc, steroids
   {$if defined(MSWINDOWS)}
   , ShellApi, uTokenizer
   //, cudnn_graph
@@ -25,7 +25,7 @@ uses
 
 const
   READ_BATCH   : SizeInt = 32;
-  READ_MEASURE : SizeInt = 4;
+  READ_MEASURE : SizeInt = 8;
   READ_TEST    : SizeInt = 3;
 var
   Neural:TNNet;
@@ -135,7 +135,7 @@ begin
 {$elseif defined(USE_CUDART)}
   initCUDART(0);
   writeln(cuda.properties.name);
-  cuda.useBLAS :=1;
+  cuda.useBLAS := 1;
 
 {$endif}
   sDigits := 6;
@@ -169,7 +169,7 @@ begin
   {$endif}
   CF10 := TCIFAR10Data.Create('');
 
-  speedOverSize:=false;
+  speedOverSize:=true;
   Neural:=TNNet.Create(deepCIFAR10);
   //Neural:=TNNet.Create(leNetCIFAR10);
 
@@ -255,7 +255,7 @@ begin
       trainingHistory.resize([l]);
       trainingHistory.Data[l-1] := cost;
       cursorAbsPos();
-      cursorClearDown();
+      //cursorClearDown();
       writeln('Batch [',j:4,'], epoch[',i {j*Neural.batch div CF10.DATA_COUNT}:5,'], Cost [',cost:1:8,']',widechar($2191 +2*ord(costDelta>0)),' speed [', s*Neural.batch :5,'] Sample per second, '
         ,'Accuracy [', 100*truth.similarity(predicted.Data):3:2,'%], learningRate [',Neural.computeCurrentLearningRate:1:3,']', sLineBreak);
       //writeln('Conv[1] ');

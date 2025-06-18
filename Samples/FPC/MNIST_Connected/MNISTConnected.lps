@@ -9,16 +9,16 @@
         <Filename Value="MNISTConnected.pas"/>
         <IsPartOfProject Value="True"/>
         <IsVisibleTab Value="True"/>
-        <TopLine Value="26"/>
-        <CursorPos X="17" Y="41"/>
+        <TopLine Value="27"/>
+        <CursorPos X="62" Y="55"/>
         <UsageCount Value="201"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\ntensors.pas"/>
         <EditorIndex Value="7"/>
-        <TopLine Value="10668"/>
-        <CursorPos Y="10687"/>
+        <TopLine Value="8354"/>
+        <CursorPos X="68" Y="8389"/>
         <UsageCount Value="101"/>
         <Loaded Value="True"/>
       </Unit>
@@ -26,23 +26,23 @@
         <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
         <UnitName Value="nConnectedlayer"/>
         <EditorIndex Value="11"/>
-        <TopLine Value="199"/>
-        <CursorPos X="30" Y="226"/>
+        <TopLine Value="981"/>
+        <CursorPos X="14" Y="1005"/>
         <UsageCount Value="101"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\nnet.pas"/>
-        <EditorIndex Value="17"/>
-        <TopLine Value="148"/>
-        <CursorPos Y="167"/>
+        <EditorIndex Value="18"/>
+        <TopLine Value="247"/>
+        <CursorPos Y="280"/>
         <UsageCount Value="101"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\nlogisticlayer.pas"/>
         <UnitName Value="nLogisticLayer"/>
-        <EditorIndex Value="19"/>
+        <EditorIndex Value="20"/>
         <TopLine Value="59"/>
         <CursorPos Y="84"/>
         <UsageCount Value="101"/>
@@ -63,15 +63,15 @@
         <WindowIndex Value="-1"/>
         <TopLine Value="744"/>
         <CursorPos X="30" Y="766"/>
-        <UsageCount Value="99"/>
+        <UsageCount Value="98"/>
         <DefaultSyntaxHighlighter Value="C++"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\nbaselayer.pas"/>
         <UnitName Value="nBaseLayer"/>
         <EditorIndex Value="15"/>
-        <TopLine Value="22"/>
-        <CursorPos X="5" Y="43"/>
+        <TopLine Value="767"/>
+        <CursorPos X="154" Y="806"/>
         <UsageCount Value="100"/>
         <Loaded Value="True"/>
       </Unit>
@@ -79,26 +79,23 @@
         <Filename Value="..\..\..\source\nactivation.pas"/>
         <UnitName Value="nActivation"/>
         <EditorIndex Value="16"/>
-        <TopLine Value="506"/>
-        <CursorPos Y="522"/>
+        <CursorPos X="11" Y="19"/>
         <UsageCount Value="100"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\ntypes.pas"/>
         <UnitName Value="NTypes"/>
-        <EditorIndex Value="24"/>
-        <TopLine Value="1390"/>
-        <CursorPos Y="1428"/>
-        <UsageCount Value="99"/>
+        <EditorIndex Value="25"/>
+        <UsageCount Value="100"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\nConvolutionLayer.pas"/>
-        <EditorIndex Value="21"/>
+        <EditorIndex Value="22"/>
         <TopLine Value="216"/>
         <CursorPos X="22" Y="227"/>
-        <UsageCount Value="95"/>
+        <UsageCount Value="100"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
@@ -106,16 +103,16 @@
         <EditorIndex Value="13"/>
         <TopLine Value="544"/>
         <CursorPos X="35" Y="564"/>
-        <UsageCount Value="95"/>
+        <UsageCount Value="100"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\nmodels.pas"/>
         <UnitName Value="nModels"/>
         <EditorIndex Value="6"/>
-        <TopLine Value="11"/>
-        <CursorPos X="53" Y="42"/>
-        <UsageCount Value="95"/>
+        <TopLine Value="23"/>
+        <CursorPos X="10" Y="29"/>
+        <UsageCount Value="100"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
@@ -124,7 +121,7 @@
         <EditorIndex Value="5"/>
         <TopLine Value="30"/>
         <CursorPos X="15" Y="45"/>
-        <UsageCount Value="95"/>
+        <UsageCount Value="100"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
@@ -132,23 +129,23 @@
         <EditorIndex Value="-1"/>
         <TopLine Value="111"/>
         <CursorPos X="17" Y="124"/>
-        <UsageCount Value="4"/>
+        <UsageCount Value="3"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\opencl.pas"/>
         <UnitName Value="OpenCL"/>
         <EditorIndex Value="10"/>
         <CursorPos X="46" Y="27"/>
-        <UsageCount Value="79"/>
+        <UsageCount Value="85"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\nsoftmaxlayer.pas"/>
         <UnitName Value="nSoftmaxLayer"/>
-        <EditorIndex Value="20"/>
-        <TopLine Value="307"/>
-        <CursorPos X="19" Y="325"/>
-        <UsageCount Value="76"/>
+        <EditorIndex Value="21"/>
+        <TopLine Value="28"/>
+        <CursorPos X="8" Y="51"/>
+        <UsageCount Value="82"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
@@ -157,29 +154,23 @@
         <EditorIndex Value="12"/>
         <TopLine Value="41"/>
         <CursorPos X="35" Y="83"/>
-        <UsageCount Value="76"/>
+        <UsageCount Value="82"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\nMaxPoolLayer.pas"/>
-        <EditorIndex Value="23"/>
+        <EditorIndex Value="24"/>
         <TopLine Value="307"/>
         <CursorPos X="10" Y="573"/>
-        <UsageCount Value="76"/>
+        <UsageCount Value="82"/>
         <Loaded Value="True"/>
-      </Unit>
-      <Unit>
-        <Filename Value="..\..\..\..\..\..\..\..\..\lazarus\fpc\3.2.2\source\rtl\win\sysosh.inc"/>
-        <EditorIndex Value="-1"/>
-        <CursorPos X="3" Y="26"/>
-        <UsageCount Value="1"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\..\..\..\..\..\..\lazarus\fpc\3.2.2\source\rtl\win\sysutils.pp"/>
         <UnitName Value="SysUtils"/>
         <EditorIndex Value="-1"/>
         <CursorPos X="5" Y="229"/>
-        <UsageCount Value="38"/>
+        <UsageCount Value="37"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\nchrono.pas"/>
@@ -187,7 +178,7 @@
         <EditorIndex Value="14"/>
         <TopLine Value="82"/>
         <CursorPos X="30" Y="99"/>
-        <UsageCount Value="44"/>
+        <UsageCount Value="50"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
@@ -195,40 +186,40 @@
         <EditorIndex Value="-1"/>
         <TopLine Value="313"/>
         <CursorPos X="3" Y="329"/>
-        <UsageCount Value="5"/>
+        <UsageCount Value="4"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\..\..\..\..\..\..\lazarus\fpc\3.2.2\source\packages\odata\src\msgraph.pp"/>
         <EditorIndex Value="-1"/>
         <TopLine Value="7286"/>
-        <UsageCount Value="5"/>
+        <UsageCount Value="4"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\..\..\..\..\..\..\lazarus\fpc\3.2.2\source\packages\fcl-fpcunit\src\testdecorator.pp"/>
         <EditorIndex Value="-1"/>
-        <UsageCount Value="5"/>
+        <UsageCount Value="4"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\..\..\..\..\..\..\lazarus\fpc\3.2.2\source\packages\fcl-res\src\coffreader.pp"/>
         <EditorIndex Value="-1"/>
         <TopLine Value="93"/>
         <CursorPos X="24" Y="8"/>
-        <UsageCount Value="28"/>
+        <UsageCount Value="27"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\..\..\..\..\..\..\lazarus\fpc\3.2.2\source\packages\winunits-base\src\mmsystem.pp"/>
         <UnitName Value="MMSystem"/>
-        <EditorIndex Value="22"/>
+        <EditorIndex Value="23"/>
         <TopLine Value="2438"/>
         <CursorPos X="25" Y="2467"/>
-        <UsageCount Value="41"/>
+        <UsageCount Value="47"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\..\..\..\..\..\..\lazarus\fpc\3.2.2\source\packages\paszlib\src\adler.pas"/>
         <EditorIndex Value="-1"/>
         <CursorPos X="65" Y="7"/>
-        <UsageCount Value="5"/>
+        <UsageCount Value="4"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\..\..\..\..\..\..\lazarus\fpc\3.2.2\source\packages\winunits-base\src\dwmapi.pp"/>
@@ -236,69 +227,69 @@
         <EditorIndex Value="-1"/>
         <TopLine Value="332"/>
         <CursorPos Y="138"/>
-        <UsageCount Value="5"/>
+        <UsageCount Value="4"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\..\..\..\..\..\..\lazarus\fpc\3.2.2\source\rtl\objpas\sysutils\sysutilh.inc"/>
         <EditorIndex Value="-1"/>
         <CursorPos X="10" Y="28"/>
-        <UsageCount Value="8"/>
+        <UsageCount Value="7"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\..\..\..\..\..\..\lazarus\fpc\3.2.2\source\packages\rtl-console\src\inc\keybrdh.inc"/>
         <EditorIndex Value="-1"/>
         <TopLine Value="157"/>
         <CursorPos X="10" Y="179"/>
-        <UsageCount Value="15"/>
+        <UsageCount Value="14"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\..\..\..\..\..\..\lazarus\fpc\3.2.2\source\packages\rtl-console\src\inc\keyboard.inc"/>
         <EditorIndex Value="-1"/>
         <TopLine Value="43"/>
         <CursorPos X="3" Y="45"/>
-        <UsageCount Value="15"/>
+        <UsageCount Value="14"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\quickchart.pas"/>
-        <EditorIndex Value="18"/>
+        <EditorIndex Value="19"/>
         <TopLine Value="2617"/>
         <CursorPos X="26" Y="2637"/>
-        <UsageCount Value="23"/>
+        <UsageCount Value="29"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\nnOpenCL.pas"/>
-        <IsVisibleTab Value="True"/>
         <WindowIndex Value="1"/>
-        <TopLine Value="50"/>
-        <CursorPos X="15" Y="68"/>
-        <UsageCount Value="21"/>
+        <TopLine Value="479"/>
+        <CursorPos X="21" Y="50"/>
+        <UsageCount Value="27"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\nncuda.pas"/>
         <UnitName Value="nnCuda"/>
+        <IsVisibleTab Value="True"/>
         <EditorIndex Value="1"/>
-        <TopLine Value="231"/>
-        <CursorPos X="41" Y="250"/>
-        <UsageCount Value="18"/>
+        <WindowIndex Value="1"/>
+        <TopLine Value="68"/>
+        <CursorPos X="15" Y="90"/>
+        <UsageCount Value="24"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\cuda_sgemm.cuda"/>
-        <EditorIndex Value="1"/>
+        <EditorIndex Value="-1"/>
         <WindowIndex Value="1"/>
         <TopLine Value="1156"/>
         <CursorPos X="23" Y="1188"/>
-        <UsageCount Value="18"/>
-        <Loaded Value="True"/>
+        <UsageCount Value="17"/>
         <DefaultSyntaxHighlighter Value="None"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\3rdparty\cuda\source\cudarttypes.pas"/>
         <EditorIndex Value="4"/>
         <CursorPos Y="14"/>
-        <UsageCount Value="18"/>
+        <UsageCount Value="24"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
@@ -306,15 +297,14 @@
         <EditorIndex Value="3"/>
         <TopLine Value="4002"/>
         <CursorPos Y="4024"/>
-        <UsageCount Value="18"/>
+        <UsageCount Value="24"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\3rdparty\cuda\source\cublas_api.pas"/>
         <EditorIndex Value="2"/>
-        <TopLine Value="85"/>
-        <CursorPos X="22" Y="107"/>
-        <UsageCount Value="18"/>
+        <CursorPos X="78" Y="7"/>
+        <UsageCount Value="24"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
@@ -322,7 +312,7 @@
         <EditorIndex Value="9"/>
         <TopLine Value="866"/>
         <CursorPos Y="886"/>
-        <UsageCount Value="16"/>
+        <UsageCount Value="22"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
@@ -330,7 +320,7 @@
         <EditorIndex Value="-1"/>
         <TopLine Value="72"/>
         <CursorPos X="3" Y="92"/>
-        <UsageCount Value="9"/>
+        <UsageCount Value="8"/>
       </Unit>
       <Unit>
         <Filename Value="FileDifference.diff"/>
@@ -338,149 +328,153 @@
         <WindowIndex Value="1"/>
         <TopLine Value="307"/>
         <CursorPos X="28" Y="323"/>
-        <UsageCount Value="10"/>
+        <UsageCount Value="9"/>
         <DefaultSyntaxHighlighter Value="Diff"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\ntensors.bak"/>
         <EditorIndex Value="2"/>
         <WindowIndex Value="1"/>
-        <UsageCount Value="15"/>
+        <UsageCount Value="21"/>
         <Loaded Value="True"/>
         <DefaultSyntaxHighlighter Value="None"/>
       </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\nrnnlayer.pas"/>
+        <UnitName Value="nRNNLayer"/>
+        <EditorIndex Value="17"/>
+        <CursorPos X="21" Y="25"/>
+        <UsageCount Value="12"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\nopmetrics.pas"/>
+        <UnitName Value="nOpMetrics"/>
+        <EditorIndex Value="26"/>
+        <TopLine Value="16"/>
+        <CursorPos X="52" Y="33"/>
+        <UsageCount Value="12"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\termesc.pas"/>
+        <EditorIndex Value="1"/>
+        <TopLine Value="58"/>
+        <CursorPos X="10" Y="82"/>
+        <UsageCount Value="11"/>
+        <Loaded Value="True"/>
+      </Unit>
     </Units>
-    <OtherDefines Count="9">
+    <OtherDefines Count="8">
       <Define0 Value="USE_TELEMETRY"/>
       <Define1 Value="USE_AVX2"/>
       <Define2 Value="USE_MULTITHREADING"/>
       <Define3 Value="USE_OPENCL"/>
-      <Define4 Value="CL_EVENTS"/>
-      <Define5 Value="USE_MKL"/>
-      <Define6 Value="BIG_MATRECIES"/>
-      <Define7 Value="USE_OPENBLAS"/>
-      <Define8 Value="USE_CUDART"/>
+      <Define4 Value="USE_MKL"/>
+      <Define5 Value="BIG_MATRECIES"/>
+      <Define6 Value="USE_OPENBLAS"/>
+      <Define7 Value="USE_CUDART"/>
     </OtherDefines>
-    <JumpHistory HistoryIndex="29">
+    <JumpHistory HistoryIndex="24">
+      <Position>
+        <Filename Value="..\..\..\source\nncuda.pas"/>
+        <Caret Line="93" Column="17" TopLine="54"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\nncuda.pas"/>
+        <Caret Line="1221" TopLine="1211"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\nncuda.pas"/>
+        <Caret Line="90" Column="15" TopLine="71"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\nncuda.pas"/>
+        <Caret Line="1153" TopLine="1141"/>
+      </Position>
       <Position>
         <Filename Value="..\..\..\source\ntensors.pas"/>
-        <Caret Line="10687" TopLine="10668"/>
+        <Caret Line="736" Column="51" TopLine="728"/>
       </Position>
       <Position>
-        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
-        <Caret Line="218" TopLine="188"/>
+        <Filename Value="MNISTConnected.pas"/>
+        <Caret Line="56" Column="14" TopLine="44"/>
       </Position>
       <Position>
-        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
-        <Caret Line="167" TopLine="138"/>
+        <Filename Value="MNISTConnected.pas"/>
+        <Caret Line="102" Column="20" TopLine="62"/>
       </Position>
       <Position>
-        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
-        <Caret Line="174" Column="15" TopLine="155"/>
+        <Filename Value="..\..\..\source\ntensors.pas"/>
+        <Caret Line="682" Column="15" TopLine="659"/>
       </Position>
       <Position>
-        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
-        <Caret Line="167" TopLine="155"/>
+        <Filename Value="..\..\..\source\ntensors.pas"/>
+        <Caret Line="8370" Column="14" TopLine="8356"/>
       </Position>
       <Position>
-        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
-        <Caret Line="169" TopLine="155"/>
+        <Filename Value="..\..\..\source\ntensors.pas"/>
+        <Caret Line="11472" Column="67" TopLine="11431"/>
       </Position>
       <Position>
-        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
-        <Caret Line="170" TopLine="155"/>
+        <Filename Value="..\..\..\source\ntensors.pas"/>
+        <Caret Line="254" Column="14" TopLine="231"/>
       </Position>
       <Position>
-        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
-        <Caret Line="173" TopLine="155"/>
+        <Filename Value="..\..\..\source\ntensors.pas"/>
+        <Caret Line="6855" Column="46" TopLine="6816"/>
       </Position>
       <Position>
-        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
-        <Caret Line="174" Column="29" TopLine="155"/>
+        <Filename Value="..\..\..\source\ntensors.pas"/>
+        <Caret Line="6860" Column="16" TopLine="6821"/>
       </Position>
       <Position>
-        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
-        <Caret Line="167" TopLine="155"/>
+        <Filename Value="..\..\..\source\ntensors.pas"/>
+        <Caret Line="8367" Column="44" TopLine="8327"/>
       </Position>
       <Position>
-        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
-        <Caret Line="169" TopLine="155"/>
+        <Filename Value="MNISTConnected.pas"/>
+        <Caret Line="99" Column="30" TopLine="66"/>
       </Position>
       <Position>
-        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
-        <Caret Line="170" TopLine="155"/>
+        <Filename Value="..\..\..\source\ntensors.pas"/>
+        <Caret Line="630" Column="15" TopLine="12514"/>
       </Position>
       <Position>
-        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
-        <Caret Line="173" TopLine="155"/>
+        <Filename Value="..\..\..\source\ntensors.pas"/>
+        <Caret Line="629" Column="15" TopLine="629"/>
       </Position>
       <Position>
-        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
-        <Caret Line="174" TopLine="155"/>
+        <Filename Value="..\..\..\source\ntensors.pas"/>
+        <Caret Line="682" Column="27" TopLine="643"/>
       </Position>
       <Position>
-        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
-        <Caret Line="175" TopLine="155"/>
+        <Filename Value="..\..\..\source\ntensors.pas"/>
+        <Caret Line="8363" Column="3" TopLine="8356"/>
       </Position>
       <Position>
-        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
-        <Caret Line="189" Column="9" TopLine="161"/>
+        <Filename Value="..\..\..\source\ntensors.pas"/>
+        <Caret Line="8801" Column="45" TopLine="8768"/>
       </Position>
       <Position>
-        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
-        <Caret Line="167" TopLine="160"/>
+        <Filename Value="..\..\..\source\ntensors.pas"/>
+        <Caret Line="8386" Column="19" TopLine="8351"/>
       </Position>
       <Position>
-        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
-        <Caret Line="169" TopLine="160"/>
+        <Filename Value="..\..\..\source\ntensors.pas"/>
+        <Caret Line="8358" Column="12" TopLine="8350"/>
       </Position>
       <Position>
-        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
-        <Caret Line="170" TopLine="160"/>
+        <Filename Value="..\..\..\source\ntensors.pas"/>
+        <Caret Line="8388" Column="52" TopLine="8356"/>
       </Position>
       <Position>
-        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
-        <Caret Line="173" TopLine="160"/>
+        <Filename Value="..\..\..\source\ntensors.pas"/>
+        <Caret Line="8389" Column="68" TopLine="8356"/>
       </Position>
       <Position>
-        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
-        <Caret Line="176" TopLine="160"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
-        <Caret Line="177" TopLine="160"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
-        <Caret Line="181" TopLine="160"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
-        <Caret Line="182" TopLine="160"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
-        <Caret Line="185" TopLine="160"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
-        <Caret Line="187" TopLine="160"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
-        <Caret Line="188" TopLine="160"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
-        <Caret Line="189" TopLine="160"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
-        <Caret Line="191" TopLine="160"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
-        <Caret Line="194" TopLine="166"/>
+        <Filename Value="MNISTConnected.pas"/>
+        <Caret Line="55" Column="65" TopLine="30"/>
       </Position>
     </JumpHistory>
     <RunParams>
@@ -496,20 +490,6 @@
         <WatchKind Value="wpkWrite"/>
         <Source Value="..\..\..\source\nlogisticlayer.pas"/>
         <Line Value="84"/>
-      </Item>
-      <Item>
-        <Kind Value="bpkSource"/>
-        <WatchScope Value="wpsLocal"/>
-        <WatchKind Value="wpkWrite"/>
-        <Source Value="..\..\..\source\ntensors.pas"/>
-        <Line Value="9741"/>
-      </Item>
-      <Item>
-        <Kind Value="bpkSource"/>
-        <WatchScope Value="wpsLocal"/>
-        <WatchKind Value="wpkWrite"/>
-        <Source Value="..\..\..\source\nconnectedlayer.pas"/>
-        <Line Value="168"/>
       </Item>
     </BreakPoints>
     <Watches>

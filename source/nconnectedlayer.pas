@@ -7,7 +7,7 @@ interface
 
 uses
   SysUtils, Math
-  ,ntensors, NTypes, nBaseLayer
+  ,ntensors, NTypes, nBaseLayer, termesc
 {$if defined (USE_OPENCL)}
   , OpenCL
   {$ifdef CL_BLAST} , clblast {$endif}
@@ -29,14 +29,35 @@ type
     procedure setTrain(ATrain: boolean); override;
     procedure forward(var state: TNNetState); override;
     procedure backward(var state: TNNetState); override;
-    procedure DeNormalize;
     procedure update(const args: TUpdateArgs); override;
+    procedure DeNormalize;
     function getWorkspaceShape: TArray<SizeInt>; override;
     {$if defined(USE_OPENCL) or defined(USE_CUDART)}
     procedure forwardGPU(var state: TNNetState);  override;
     procedure backwardGPU(var state: TNNetState); override;
     procedure updateGPU(const args: TUpdateArgs); override;
     {$endif}
+  end;
+
+  { TFeedForwardLayer }
+
+  TFeedForwardLayer = class(TBaseLayer)
+    hiddenLayers : TArray<TConnectedLayer>;
+    constructor Create(const aBatch, aSteps, aInputs: SizeInt; const aHiddenOutputs:TArray<SizeInt>; const aActivationTypes: TArray<TActivationType>; const aIsBatchNormalized: TArray<boolean> = nil);   overload;
+    constructor Create(const aBatch, aSteps, aInputs, aOutputs, aNumHiddenLayers, aHiddenOutputs: SizeInt; const aActivationType: TActivationType = acLINEAR; const aIsBatchNormalized: boolean = false); overload;
+    function layerCount():SizeInt;
+    procedure setBatch(ABatch:SizeInt); override;
+    procedure setTrain(ATrain: boolean); override;
+    procedure forward(var state: TNNetState); override;
+    procedure backward(var state: TNNetState); override;
+    procedure update(const args: TUpdateArgs); override;
+    {$if defined(USE_OPENCL) or defined(USE_CUDART)}
+    procedure forwardGPU(var state: TNNetState);  override;
+    procedure backwardGPU(var state: TNNetState); override;
+    procedure updateGPU(const args: TUpdateArgs); override;
+    {$endif}
+    destructor destroy; override;
+
   end;
 
 implementation
@@ -230,7 +251,7 @@ begin
      metrics.backward.start(layerType);
   {$endif}
   outStepSize := batch * outputs;
-  inStepSize := batch * inputs;
+  inStepSize  := batch * inputs;
   outOffset   := state.step * outStepSize;
   //write(#13, 'BW [',state.index,'] ', state.step);
   assert((state.inputStep>=0) and (state.step>=0), '[TConnectedLayer.backward] state step values must be positive!');
@@ -298,24 +319,6 @@ begin
   {$endif}
 end;
 
-procedure TConnectedLayer.DeNormalize;
-var
-    i, j: SizeInt;
-    _scale: single;
-begin
-    // tofdo SIMDfy and GPU
-    for i := 0 to outputs -1 do
-        begin
-            _scale := scales.data[i] / max(sqrt(rolling_variance.data[i]), sEPSILON);
-            for j := 0 to inputs -1 do
-                weights.data[i * inputs+j] := weights.data[i * inputs+j] * _scale;
-            biases.data[i] := biases.data[i] - (rolling_mean.data[i] * _scale);
-            scales.data[i] := 1;
-            rolling_mean.data[i] := 0;
-            rolling_variance.data[i] := 1
-        end
-end;
-
 procedure TConnectedLayer.update(const args: TUpdateArgs);
 begin
   {$ifdef USE_TELEMETRY}
@@ -349,6 +352,24 @@ begin
   {$ifdef USE_TELEMETRY}
   if benchmark then metrics.update.finish(layerType);
   {$endif}
+end;
+
+procedure TConnectedLayer.DeNormalize;
+var
+    i, j: SizeInt;
+    _scale: single;
+begin
+    // tofdo SIMDfy and GPU
+    for i := 0 to outputs -1 do
+        begin
+            _scale := scales.data[i] / max(sqrt(rolling_variance.data[i]), sEPSILON);
+            for j := 0 to inputs -1 do
+                weights.data[i * inputs+j] := weights.data[i * inputs+j] * _scale;
+            biases.data[i] := biases.data[i] - (rolling_mean.data[i] * _scale);
+            scales.data[i] := 1;
+            rolling_mean.data[i] := 0;
+            rolling_variance.data[i] := 1
+        end
 end;
 
 function TConnectedLayer.getWorkspaceShape: TArray<SizeInt>;
@@ -386,31 +407,13 @@ begin
   end;
   output.setOCL;
 
-  {$IFDEF CL_BLAST}
-  ocl.FErr := integer(CLBlastSgemm(CLBlastLayoutRowMajor, CLBlastTransposeNo, CLBlastTransposeYes
-          , batch, outputs, inputs, 1
-          , state.input.devData, 0, inputs
-          , weights.devData    , 0, inputs
-          , 0, output.devData  , 0, outputs
-          , @ocl.ActiveQueue
-          {$IFDEF CL_EVENTS}
-          , pointer(state.events));
-          {$ELSE}
-           , nil));
-          {$ENDIF}
-          ocl.checkError();
-  {$ELSE}
+
   ocl.gemm(false, true
           , batch, outputs, inputs, 1
           , state.input.devData, state.inputStep*inputStep, inputs
           , weights.devData    , 0, inputs
           , 0, output.devData  , offset, outputs
-          {$IFDEF CL_EVENTS}
-          , 1, pointer(state.events), pointer(state.events));
-          {$ELSE}
           );
-          {$ENDIF}
-  {$ENDIF}
 
   if isBatchNormalized then begin
       {$ifdef USE_TELEMETRY}
@@ -445,14 +448,7 @@ begin
     ocl.forwardBias(outputStep, output.devData, offset, biases.size(), biases.devData, 1, output.groups);
   end;
 
-  {$ifdef USE_TELEMETRY}
-  if benchmark then metrics.act.start(ActivationType);
-  {$endif}
   ocl.ActivateArray(outputStep, output.devData, offset, longint(ActivationType));
-  {$ifdef USE_TELEMETRY}
-  ocl.finish();
-  if benchmark then metrics.act.finish(ActivationType);
-  {$endif}
 
   {$ifdef USE_TELEMETRY}
   if benchmark
@@ -488,19 +484,8 @@ begin
   if not weight_updates.wasGPU() then weight_updates.pushToDevice;
 
 
-  {$ifdef USE_TELEMETRY}
-  if benchmark then metrics.grad.start(ActivationType);
-  {$endif}
-  ocl.DeriveArray(outStepSize, output.devData, outOffset, longint(ActivationType), delta.devData
-  {$IFDEF CL_EVENTS}
-  , 1, pointer(state.events), pointer(state.events));
-  {$ELSE}
-  );
-  {$ENDIF}
-  {$ifdef USE_TELEMETRY}
-  ocl.finish();
-  if benchmark then metrics.grad.finish(ActivationType);
-  {$endif}
+  ocl.DeriveArray(outStepSize, output.devData, outOffset, longint(ActivationType), delta.devData);
+
   //ocl.waitForEvents(batch, pointer(events));
   //ocl.finish();
 
@@ -532,30 +517,13 @@ begin
   end;
 
 //
-  {$IFDEF CL_BLAST}
-  ocl.FErr := integer(CLBlastSgemm(CLBlastLayoutRowMajor, CLBlastTransposeYes, CLBlastTransposeNo
-      , outputs, inputs, batch, 1
-      , delta.devData, 0, outputs
-      , state.input.devData, 0, inputs
-      , 1, weight_updates.devData, 0, inputs, @ocl.ActiveQueue
-      {$IFDEF CL_EVENTS}
-      , pointer(state.events));
-      {$ELSE}
-       , nil));
-      {$ENDIF}
-      ocl.checkError();
-  {$ELSE}
+
   ocl.gemm(true, false
     , outputs, inputs, batch, 1
     , delta.devData, outOffset, outputs
     , state.input.devData, state.inputStep*inStepSize, inputs
     , 1, weight_updates.devData, 0, inputs
-    {$IFDEF CL_EVENTS}
-    , 1, pointer(state.events), pointer(state.events));
-    {$ELSE}
     );
-    {$ENDIF}
-  {$ENDIF}
   //weight_updates.pullFromDevice(t1);
   //n1 := t1.findNaNs;
   //if n1.size>0 then begin
@@ -567,30 +535,13 @@ begin
 
       if not weights.wasGPU then weights.pushToDevice;
       //if not state.delta.wasGPU() then state.delta.pushToDevice;
-   {$IFDEF CL_BLAST}
-   ocl.FErr := integer(CLBlastSgemm(CLBlastLayoutRowMajor, CLBlastTransposeNo, CLBlastTransposeNo
-          , batch, inputs, outputs, 1
-          , delta.devData, 0, outputs
-          , weights.devData, 0, inputs
-          , 1, state.delta.devData, 0, inputs, @ocl.ActiveQueue
-          {$IFDEF CL_EVENTS}
-          , pointer(state.events));
-          {$ELSE}
-           , nil));
-          {$ENDIF}
-      ocl.checkError();
-   {$ELSE}
+
       ocl.gemm( false, false
           , batch, inputs, outputs, 1
           , delta.devData, outOffset, outputs
           , weights.devData, 0, inputs
           , 1, state.delta.devData, state.deltaStep*inStepSize, inputs
-          {$IFDEF CL_EVENTS}
-          , 1, pointer(state.events), pointer(state.events));
-          {$ELSE}
           );
-          {$ENDIF}
-   {$ENDIF}
       //ocl.waitForEvents(batch, pointer(events));
       //ocl.finish();
 
@@ -617,48 +568,23 @@ begin
   if not weights.wasGPU() then weights.pushToDevice;
   if not weight_updates.wasGPU() then weight_updates.pushToDevice;
 
-  ocl.axpy(biases.size(), args.learningRate / args.batch, bias_updates.devData, 0, 1, biases.devData, 0, 1
-  {$IFDEF CL_EVENTS}
-  , 1, pointer(events), pointer(events) );
-  {$ELSE}
-  );
-  {$ENDIF}
+  ocl.axpy(biases.size(), args.learningRate / args.batch, bias_updates.devData, 0, 1, biases.devData, 0, 1);
   //ocl.waitForEvents(batch, pointer(events));
   //ocl.finish();
 
-  ocl.scale(bias_updates.size(), args.momentum, bias_updates.devData, 1
-  {$IFDEF CL_EVENTS}
-  , 1, pointer(events), pointer(events) );
-  {$ELSE}
-  );
-  {$ENDIF}
+  ocl.scale(bias_updates.size(), args.momentum, bias_updates.devData, 1);
   //ocl.waitForEvents(batch, pointer(events));
   //ocl.finish();
 
-  ocl.axpy(weight_updates.size(), -args.decay * args.batch, weights.devData, 0, 1, weight_updates.devData, 0, 1
-  {$IFDEF CL_EVENTS}
-  , 1, pointer(events), pointer(events) );
-  {$ELSE}
-  );
-  {$ENDIF}
+  ocl.axpy(weight_updates.size(), -args.decay * args.batch, weights.devData, 0, 1, weight_updates.devData, 0, 1);
   //ocl.waitForEvents(batch, pointer(events));
   //ocl.finish();
 
-  ocl.axpy(weights.size(), args.learningRate / args.batch, weight_updates.devData, 0, 1, weights.devData, 0, 1
-  {$IFDEF CL_EVENTS}
-  , 1, pointer(events), pointer(events) );
-  {$ELSE}
-  );
-  {$ENDIF}
+  ocl.axpy(weights.size(), args.learningRate / args.batch, weight_updates.devData, 0, 1, weights.devData, 0, 1);
   //ocl.waitForEvents(batch, pointer(events));
   //ocl.finish();
 
-  ocl.scale(weight_updates.size(), args.momentum, weight_updates.devData, 1
-  {$IFDEF CL_EVENTS}
-  , 1, pointer(events), pointer(events) );
-  {$ELSE}
-  );
-  {$ENDIF}
+  ocl.scale(weight_updates.size(), args.momentum, weight_updates.devData, 1);
   //ocl.waitForEvents(batch, pointer(events));
   //ocl.finish();
 
@@ -764,15 +690,8 @@ begin
 //output.forwardBias(biases, offset, outputStep);
   end;
 
-  {$ifdef USE_TELEMETRY}
-  if benchmark then metrics.act.start(ActivationType);
-  {$endif}
   cuda.ActivateArray(outputStep, output.devData, offset, longint(ActivationType));
 //activate();
-  {$ifdef USE_TELEMETRY}
-  cuda.finish();
-  if benchmark then metrics.act.finish(ActivationType);
-  {$endif}
 //output.printGpuSumSqrDiff();
   {$ifdef USE_TELEMETRY}
   if benchmark
@@ -808,19 +727,11 @@ begin
   if not weight_updates.wasGPU() then weight_updates.pushToDevice;
 
 
-  {$ifdef USE_TELEMETRY}
-  if benchmark then metrics.grad.start(ActivationType);
-  {$endif}
   cuda.DeriveArray(outStepSize, output.devData, outOffset, longint(ActivationType), delta.devData);
 
 //Derivative(outOffset);
 //output.printGpuSumSqrDiff();
 //delta.printGpuSumSqrDiff();
-
-  {$ifdef USE_TELEMETRY}
-  cuda.finish();
-  if benchmark then metrics.grad.finish(ActivationType);
-  {$endif}
 
   cuda.backwardBias(bias_updates.size(), bias_updates.devData, outStepSize, delta.devData, outOffset, 1, batch);
 //bias_updates.addSums(delta, outOffset, outStepSize);
@@ -934,6 +845,208 @@ begin
   {$endif}
 end;
 {$endif}
+
+{ TFeedForwardLayer }
+
+constructor TFeedForwardLayer.Create(const aBatch, aSteps, aInputs:SizeInt; const aHiddenOutputs: TArray<SizeInt>; const aActivationTypes: TArray<TActivationType>; const aIsBatchNormalized: TArray<boolean>);
+var
+  lastOutputs, i:SizeInt;
+  currentActvation:TActivationType;
+  currentIsBN:boolean;
+begin
+  assert(assigned(aHiddenOutputs), '[TFeedForwardLayer.Create] must provide hidden outputs array [aHiddenOutputs]!');
+  for i:=0 to high(aHiddenOutputs) do
+    assert(aHiddenOutputs[i]>0, format('[TFeedForwardLayer.Create] incorrect output size at index: %d!', [i]));
+  if assigned(aActivationTypes) then
+    assert(length(aHiddenOutputs)=length(aActivationTypes), '[TFeedForwardLayer.Create] aActivationTypes array lenngth must be equal to number of layers or nil (acLINEAR is default)');
+  if assigned(AIsBatchNormalized) then
+    assert(length(aHiddenOutputs)=length(aIsBatchNormalized), '[TFeedForwardLayer.Create] aIsBatchNormalized array lenngth must be equal to number of layers or nil (false is default)');
+  inputs  := aInputs;
+  steps := aSteps;
+  batch := ABatch;
+  inputShape           := [steps * batch, inputs];
+  setLength(hiddenLayers, length(aHiddenOutputs));
+  lastOutputs          := aInputs;
+  currentActvation     := acLINEAR;
+  currentIsBN          := false;
+  for i:=0 to Length(aHiddenOutputs)-1 do begin
+    if assigned(aActivationTypes)   then currentActvation := aActivationTypes[i];
+    if assigned(aIsBatchNormalized) then currentIsBN      := aIsBatchNormalized[i];
+    hiddenLayers[i] := TConnectedLayer.Create(ABatch, aSteps, lastOutputs, aHiddenOutputs[i], currentActvation, currentIsBN);
+    lastOutputs     := aHiddenOutputs[i];
+  end;
+  outputs := lastOutputs;
+  output  := hiddenLayers[high(hiddenLayers)].output;
+
+end;
+
+constructor TFeedForwardLayer.Create(const aBatch, aSteps, aInputs, aOutputs, aNumHiddenLayers, aHiddenOutputs: SizeInt; const aActivationType: TActivationType; const aIsBatchNormalized: boolean);
+var
+  lastOutputs, i:SizeInt;
+begin
+  assert(aNumHiddenLayers>0, '[TFeedForward.Create] must provide hidden [aNumHiddenLayers]!');
+  assert(aHiddenOutputs>0, '[TFeedForward.Create] incorrect [aHiddenOutputs]!');
+
+  inputs  := aInputs;
+  steps   := aSteps;
+  batch   := ABatch;
+  inputShape           := [steps * batch, inputs];
+  setLength(hiddenLayers, aNumHiddenLayers + 1);
+  lastOutputs        := aInputs;
+  for i:=0 to aNumHiddenLayers-1 do begin
+    hiddenLayers[i] := TConnectedLayer.Create(ABatch, aSteps, lastOutputs, aHiddenOutputs, aActivationType, aIsBatchNormalized);
+    lastOutputs     := aHiddenOutputs;
+  end;
+  hiddenLayers[aNumHiddenLayers] := TConnectedLayer.Create(ABatch, aSteps, lastOutputs, aOutputs, aActivationType, aIsBatchNormalized); ;
+  outputs := aOutputs;
+  output  := hiddenLayers[high(hiddenLayers)].output;
+
+end;
+
+function TFeedForwardLayer.layerCount: SizeInt;
+begin
+  result := length(hiddenLayers)
+end;
+
+procedure TFeedForwardLayer.setBatch(ABatch: SizeInt);
+var i:SizeInt;
+begin
+  if batch=ABatch then exit;
+  batch := ABatch;
+  for i:=0 to high(hiddenLayers) do
+    hiddenLayers[i].setBatch(ABatch);
+  inputShape[0] := steps*Batch;
+  output  := hiddenLayers[high(hiddenLayers)].output;
+  if FTrain then
+    delta := hiddenLayers[high(hiddenLayers)].delta;
+end;
+
+procedure TFeedForwardLayer.setTrain(ATrain: boolean);
+var i:SizeInt;
+begin
+  if FTrain=ATrain then exit;
+  for i:=0 to high(hiddenLayers) do
+    hiddenLayers[i].setTrain(ATrain);
+  FTrain := ATrain;
+  if FTrain then
+    delta := hiddenLayers[high(hiddenLayers)].delta
+  else
+    delta.free
+end;
+
+procedure TFeedForwardLayer.forward(var state: TNNetState);
+var
+  i:SizeInt;
+  s:TNNetState;
+  currentLayer : TBaseLayer;
+begin
+  s            := default(TNNetState);
+  s.input      := state.input;
+  s.isTraining := state.isTraining;
+  s.net        := state.net;
+  for i:=0 to high(hiddenLayers) do begin
+    currentLayer   := hiddenLayers[i];
+    s.index        :=i;
+    if state.isTraining and assigned(currentLayer.delta.Data) then
+      currentLayer.delta.Multiply(0);
+    currentLayer.forward(s);
+    s.input    :=@currentLayer.output;
+  end;
+end;
+
+procedure TFeedForwardLayer.backward(var state: TNNetState);
+var i:SizeInt;
+  s    : TNNetState;
+  prev : TBaseLayer;
+begin
+  s            := default(TNNetState);
+  s.isTraining := state.isTraining;
+  s.net        := state.net;
+  for i:=high(hiddenLayers) downto 0 do begin
+    s.index := i;
+    if i=0 then begin
+      s.input:=state.input;
+      s.delta:=state.delta;
+    end else begin
+      prev := hiddenLayers[i-1];
+      s.input:=@prev.output;
+      s.delta:=@prev.delta;
+    end;
+    hiddenLayers[i].backward(s);
+  end;
+end;
+
+procedure TFeedForwardLayer.update(const args: TUpdateArgs);
+var i:SizeInt;
+begin
+  for i:=0 to high(hiddenLayers) do
+    hiddenLayers[i].update(args);
+  inherited;
+end;
+
+{$if defined(USE_OPENCL) or defined(USE_CUDART)}
+procedure TFeedForwardLayer.forwardGPU(var state: TNNetState);
+var
+  i:SizeInt;
+  s:TNNetState;
+  currentLayer : TBaseLayer;
+begin
+  s            := default(TNNetState);
+  s.input      := state.input;
+  s.isTraining := state.isTraining;
+  s.net        := state.net;
+  for i:=0 to high(hiddenLayers) do begin
+    currentLayer   := hiddenLayers[i];
+    s.index        :=i;
+    if state.isTraining and assigned(currentLayer.delta.Data) then
+      {$if defined(USE_OPENCL)}
+      ocl.scale(currentLayer.delta.size(), 0, currentLayer.delta.devData, 1);
+      {$elseif defined(USE_CUDART)}
+      cuda.scale(currentLayer.delta.size(), 0, currentLayer.delta.devData, 1);
+      {$endif}
+    currentLayer.forwardGPU(s);
+    s.input    :=@currentLayer.output;
+  end;
+end;
+
+procedure TFeedForwardLayer.backwardGPU(var state: TNNetState);
+var i:SizeInt;
+  s    : TNNetState;
+  prev : TBaseLayer;
+begin
+  s            := default(TNNetState);
+  s.isTraining := state.isTraining;
+  s.net        := state.net;
+  for i:=high(hiddenLayers) downto 0 do begin
+    s.index := i;
+    if i=0 then begin
+      s.input:=state.input;
+      s.delta:=state.delta;
+    end else begin
+      prev := hiddenLayers[i-1];
+      s.input:=@prev.output;
+      s.delta:=@prev.delta;
+    end;
+    hiddenLayers[i].backwardGPU(s);
+  end;
+end;
+
+procedure TFeedForwardLayer.updateGPU(const args: TUpdateArgs);
+var i:SizeInt;
+begin
+  for i:=0 to high(hiddenLayers) do
+    hiddenLayers[i].updateGPU(args);
+  inherited;
+end;
+{$endif}
+
+destructor TFeedForwardLayer.destroy;
+var i:SizeInt;
+begin
+  for i := 0 to high(hiddenLayers) do
+      freeAndNil(hiddenLayers[i]);
+  inherited destroy;
+end;
 
 end.
 

@@ -83,7 +83,7 @@ type
     cost                     : TArray<Single>;
     index                    : SizeInt;
     net                      : TObject;
-    {$ifdef USE_OPENCL}
+    {$if defined(USE_OPENCL) and defined(CL_EVENTS)}
     events                   : TArray<cl_event>;
     ev                       : TArray<cl_int>;
     {$endif}
@@ -101,7 +101,7 @@ type
     procedure backward(var state : TNNetState); virtual; abstract;
     procedure update(const args : TUpdateArgs); virtual;
     procedure fuseBatchNorm; virtual;
-    function getWorkspaceShape:TArray<SizeInt>; virtual; abstract;
+    function getWorkspaceShape:TArray<SizeInt>; virtual;
     property train:boolean read FTrain write setTrain;
     property workspaceSize:SizeInt read getWorkspaceSize;
 
@@ -333,6 +333,11 @@ end;
 procedure TBaseLayer.fuseBatchNorm;
 begin
 
+end;
+
+function TBaseLayer.getWorkspaceShape: TArray<SizeInt>;
+begin
+  result:= nil
 end;
 
 procedure TBaseLayer.batchNorm(var state: TNNetState);
@@ -758,8 +763,8 @@ var
   j :TActivationType;
   k :TLayerType;
 begin
-  if not benchmark then exit;
   result :='';
+  if not benchmark then exit;
 
   if (telemetry and TELEMETRY_OPS>0) and (ops.total<>0) then begin
     result := result + 'Operations :' + cursorMove(cmDown, 1)+cursorMove(cmBackward, 12);//+ sLineBreak;
@@ -771,7 +776,7 @@ begin
   end;
 
   if (telemetry and TELEMETRY_ACT>0) and (act.total<>0) then begin
-    result := result + cursorMove(cmDown, 2)+cursorMove(cmBackward, 29) + 'Activations :'  + cursorMove(cmDown, 1)+cursorMove(cmBackward, 13);//+ sLineBreak;
+    result := result + cursorMove(cmDown, 2)+{cursorMove(cmBackward, 29) +} 'Activations :'  + cursorMove(cmDown, 1)+cursorMove(cmBackward, 13);//+ sLineBreak;
     for j:= low(act.all) to high(act.all) do
       if act.all[j]<>0 then
         result := result + format('%-15s%10.3f[ms]',[copy(GetEnumName(TypeInfo(TActivationType),ord(j)),3), act.all[j]/uSecPerSec] ) + cursorMove(cmDown, 1)+cursorMove(cmBackward, 29);//+ sLineBreak;
@@ -780,7 +785,7 @@ begin
   end;
 
   if (telemetry and TELEMETRY_FWD>0) and (forward.total<>0) then begin
-    result := result + sLineBreak + 'Forwards :' + cursorMove(cmDown, 1)+cursorMove(cmBackward, 10);//+ sLineBreak;
+    result := result + cursorMove(cmDown, 2)+{cursorMove(cmBackward, 29) +} 'Forwards :' + cursorMove(cmDown, 1)+cursorMove(cmBackward, 10);//+ sLineBreak;
     for k:= low(forward.all) to high(forward.all) do
       if forward.all[k]<>0 then
         result := result + format('%-15s%10.3f[ms]',[copy(GetEnumName(TypeInfo(TLayerType),ord(k)),3), forward.all[k]/uSecPerSec] ) + cursorMove(cmDown, 1)+cursorMove(cmBackward, 29);//+ sLineBreak;
@@ -789,7 +794,7 @@ begin
   end;
 
   if (telemetry and TELEMETRY_GRD>0) and (grad.total<>0) then begin
-    result := result + cursorMove(cmDown, 2)+cursorMove(cmBackward, 29) + 'Gradients :' + cursorMove(cmDown, 1)+cursorMove(cmBackward, 13);//+ sLineBreak;
+    result := result + cursorMove(cmDown, 2)+{cursorMove(cmBackward, 29) +} 'Gradients :' + cursorMove(cmDown, 1)+cursorMove(cmBackward, 13);//+ sLineBreak;
     for j:= low(grad.all) to high(grad.all) do
       if grad.all[j]<>0 then
         result := result + format('%-15s%10.3f[ms]',[copy(GetEnumName(TypeInfo(TActivationType),ord(j)),3), grad.all[j]/uSecPerSec] ) + cursorMove(cmDown, 1)+cursorMove(cmBackward, 29);//+ sLineBreak;
@@ -798,7 +803,7 @@ begin
   end;
 
   if (telemetry and TELEMETRY_BWD>0) and (backward.total<>0) then begin
-    result := result + cursorMove(cmDown, 2)+cursorMove(cmBackward, 29) + 'Backwards :' + cursorMove(cmDown, 1)+cursorMove(cmBackward, 11);//+ sLineBreak;
+    result := result + cursorMove(cmDown, 2)+{cursorMove(cmBackward, 29) +} 'Backwards :' + cursorMove(cmDown, 1)+cursorMove(cmBackward, 11);//+ sLineBreak;
     for k:= low(backward.all) to high(backward.all) do
       if backward.all[k]<>0 then
         result := result + format('%-15s%10.3f[ms]',[copy(GetEnumName(TypeInfo(TLayerType),ord(k)),3), backward.all[k]/uSecPerSec] ) + cursorMove(cmDown, 1)+cursorMove(cmBackward, 29);//+ sLineBreak;
@@ -807,7 +812,7 @@ begin
   end;
 
   if (telemetry and TELEMETRY_UPD>0) and (update.total<>0) then begin
-    result := result + cursorMove(cmDown, 2)+cursorMove(cmBackward, 29) + 'Updats :' +cursorMove(cmDown, 1)+cursorMove(cmBackward, 8);//+ sLineBreak;
+    result := result + cursorMove(cmDown, 2)+{cursorMove(cmBackward, 29) +} 'Updats :' +cursorMove(cmDown, 1)+cursorMove(cmBackward, 8);//+ sLineBreak;
     for k:= low(update.all) to high(update.all) do
       if update.all[k]<>0 then
         result := result + format('%-15s%10.3f[ms]',[copy(GetEnumName(TypeInfo(TLayerType),ord(k)),3), update.all[k]/uSecPerSec] ) + cursorMove(cmDown, 1)+cursorMove(cmBackward, 29);//+ sLineBreak;

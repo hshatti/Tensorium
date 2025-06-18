@@ -204,19 +204,19 @@ begin
   {$ifdef USE_TELEMETRY}
   tensorMetrics.start(opActivate);
   {$endif}
-  if activation= 4{longint(acLINEAR)} then exit;
-  SetGlobalWorkGroupSizes(N);
-  SetGlobalOffsets(0);
-  //NN:=LSize(N);
-  //SetLocalWorkGroupSizes(NN);
-  FErr := clSetKernelArg(Kernels[kernelId], 0, SizeOf(x)          , @x);         CheckError();
-  FErr := clSetKernelArg(Kernels[kernelId], 1, SizeOf(offset)     , @offset);      CheckError();
-  FErr := clSetKernelArg(Kernels[kernelId], 2, SizeOf(activation) , @activation);   CheckError();
-  FErr := clEnqueueNDRangeKernel(ActiveQueue, Kernels[kernelId]
-    , WorkItemDimensions, @GlobalOffsets[0], @GlobalWorkGroupSizes[0], nil{@LocalWorkGroupSizes[0]}
-    , length(events), pointer(events), event); CheckError();
-  //inc(eventsCount) ;
-  //FErr := clFinish(ActiveQueue); CheckError();
+  if activation <> 4{longint(acLINEAR)} then begin
+    SetGlobalWorkGroupSizes(N);
+    SetGlobalOffsets(0);
+    //NN:=LSize(N);
+    //SetLocalWorkGroupSizes(NN);
+    FErr := clSetKernelArg(Kernels[kernelId], 0, SizeOf(x)          , @x);         CheckError();
+    FErr := clSetKernelArg(Kernels[kernelId], 1, SizeOf(offset)     , @offset);      CheckError();
+    FErr := clSetKernelArg(Kernels[kernelId], 2, SizeOf(activation) , @activation);   CheckError();
+    FErr := clEnqueueNDRangeKernel(ActiveQueue, Kernels[kernelId]
+      , WorkItemDimensions, @GlobalOffsets[0], @GlobalWorkGroupSizes[0], nil{@LocalWorkGroupSizes[0]}
+      , length(events), pointer(events), event); CheckError();
+
+  end;
   {$ifdef USE_TELEMETRY}
   finish();
   tensorMetrics.finish(opActivate);
@@ -261,19 +261,20 @@ begin
   {$ifdef USE_TELEMETRY}
   tensorMetrics.start(opDerive);
   {$endif}
-  if activation=4{longint(acLINEAR)} then exit;
-  SetGlobalWorkGroupSizes(N);
-  SetGlobalOffsets(0);
-  //NN:=LSize(N);
-  //SetLocalWorkGroupSizes(NN);
-  FErr := clSetKernelArg(Kernels[kernelId], 0, SizeOf(x)          , @x);           CheckError();
-  FErr := clSetKernelArg(Kernels[kernelId], 1, SizeOf(offset)     , @offset);      CheckError();
-  FErr := clSetKernelArg(Kernels[kernelId], 2, SizeOf(activation) , @activation);  CheckError();
-  FErr := clSetKernelArg(Kernels[kernelId], 3, SizeOf(delta)      , @delta);       CheckError();
-  FErr := clEnqueueNDRangeKernel(ActiveQueue, Kernels[kernelId]
-  , WorkItemDimensions, @GlobalOffsets[0], @GlobalWorkGroupSizes[0]
-  , nil{@LocalWorkGroupSizes[0]}
-  , length(events), pointer(events), event); CheckError();
+  if activation <>4{longint(acLINEAR)} then begin
+    SetGlobalWorkGroupSizes(N);
+    SetGlobalOffsets(0);
+    //NN:=LSize(N);
+    //SetLocalWorkGroupSizes(NN);
+    FErr := clSetKernelArg(Kernels[kernelId], 0, SizeOf(x)          , @x);           CheckError();
+    FErr := clSetKernelArg(Kernels[kernelId], 1, SizeOf(offset)     , @offset);      CheckError();
+    FErr := clSetKernelArg(Kernels[kernelId], 2, SizeOf(activation) , @activation);  CheckError();
+    FErr := clSetKernelArg(Kernels[kernelId], 3, SizeOf(delta)      , @delta);       CheckError();
+    FErr := clEnqueueNDRangeKernel(ActiveQueue, Kernels[kernelId]
+    , WorkItemDimensions, @GlobalOffsets[0], @GlobalWorkGroupSizes[0]
+    , nil{@LocalWorkGroupSizes[0]}
+    , length(events), pointer(events), event); CheckError();
+  end;
   //inc(eventsCount);
   //FErr := clFinish(ActiveQueue); CheckError();
   {$ifdef USE_TELEMETRY}
@@ -513,10 +514,15 @@ begin
         clBlasSgemm:= getproc(hlib, 'clblasSgemm');
       end;
       // todo implement clblasSGemmStridedBatched
-      clBlasSGemm(
-        clblasRowMajor, TCLblasTranspose(transA), TCLblasTranspose(transB),
-        M, N, K, alpha, A, aOffset, lda, B, bOffset, ldb, beta, C, cOffset, ldc, 1, @ActiveQueue, length(events), pointer(events), event
-      );
+      for i:= 0 to batchCount-1 do begin;
+        clBlasSGemm(
+          clblasRowMajor, TCLblasTranspose(transA), TCLblasTranspose(transB),
+          M, N, K, alpha, A, aOffset, lda, B, bOffset, ldb, beta, C, cOffset, ldc, 1, @ActiveQueue, length(events), pointer(events), event
+        );
+        inc(aOffset, strideA);
+        inc(bOffset, strideB);
+        inc(cOffset, strideC);
+      end;
       goto done
   end;
 

@@ -30,8 +30,8 @@ type
     {$endif}
     destructor Destroy; override;
   private
-    procedure rnnStepForward(var s, state: TNNetState; const hiddenStep, i: SizeInt);
-    procedure rnnStepBackward(var s, state: TNNetState; const hiddenStep, i: SizeInt);
+    procedure rnnStepForward(var s, state: TNNetState; const hiddenStepSize, i: SizeInt);
+    procedure rnnStepBackward(var s, state: TNNetState; const hiddenStepSize, i: SizeInt);
   end;
 
 implementation
@@ -143,8 +143,7 @@ type
     input, output, Delta: TSingleTensor
   end;
 
-procedure TRNNLayer.rnnStepForward(var s, state: TNNetState; const hiddenStep,
-  i: SizeInt);
+procedure TRNNLayer.rnnStepForward(var s, state: TNNetState; const hiddenStepSize, i: SizeInt);
 var j:SizeInt;
 begin
     j := i;
@@ -160,12 +159,12 @@ begin
         inc(j);
     end;
     if isShortcut then
-      self.state.copyTo(self.state, j*hiddenStep, 1, i*hiddenStep, 1, hiddenStep)
+      self.state.copyTo(self.state, j*hiddenStepSize, 1, i*hiddenStepSize, 1, hiddenStepSize)
     else
-      self.state.FillExt(0, j*hiddenStep, hiddenStep);
+      self.state.FillExt(0, j*hiddenStepSize, hiddenStepSize);
 
-    self.state.add(inputLayer.output, j*hiddenStep, i*hiddenStep, hiddenStep);
-    self.state.add(selfLayer.output, j*hiddenStep, i*hiddenStep, hiddenStep);
+    self.state.add(inputLayer.output, j*hiddenStepSize, i*hiddenStepSize, hiddenStepSize);
+    self.state.add(selfLayer.output, j*hiddenStepSize, i*hiddenStepSize, hiddenStepSize);
     //s.input := @state;
 
     s.inputStep:=j;
@@ -175,15 +174,14 @@ begin
 
 end;
 
-procedure TRNNLayer.rnnStepBackward(var s, state: TNNetState; const hiddenStep,
-  i: SizeInt);
+procedure TRNNLayer.rnnStepBackward(var s, state: TNNetState; const hiddenStepSize, i: SizeInt);
 var
   offset: SizeInt;
 begin
-  offset := i*hiddenStep;
-  TSingleTensor.addvv(hiddenStep, inputLayer.output.data+offset, 1, selfLayer.output.data+offset, 1, self.state.data+(i+1)*hiddenStep, 1);
-  //inputLayer.output.CopyTo(self.state, (i+1)*hiddenStep, 1, offset, 1, hiddenStep);
-  //self.state.add(selfLayer.output, (i+1)*hiddenStep, offset, hiddenStep);
+  offset := i*hiddenStepSize;
+  TSingleTensor.addvv(hiddenStepSize, inputLayer.output.data+offset, 1, selfLayer.output.data+offset, 1, self.state.data+(i+1)*hiddenStepSize, 1);
+  //inputLayer.output.CopyTo(self.state, (i+1)*hiddenStepSize, 1, offset, 1, hiddenStepSize);
+  //self.state.add(selfLayer.output, (i+1)*hiddenStepSize, offset, hiddenStepSize);
 
   s.step := i;
   s.inputStep := i+1;
@@ -199,9 +197,9 @@ begin
       s.delta := nil;
   selfLayer.backward(s);
 
-  selfLayer.delta.CopyTo(inputLayer.delta, offset, 1, offset, 1, hiddenStep);
+  selfLayer.delta.CopyTo(inputLayer.delta, offset, 1, offset, 1, hiddenStepSize);
   if (i > 0) and isShortcut then
-      selfLayer.delta.add(selfLayer.delta, (i-1)*hiddenStep, offset, hiddenStep);
+      selfLayer.delta.add(selfLayer.delta, (i-1)*hiddenStepSize, offset, hiddenStepSize);
 
   s.input := state.input;
   if assigned(state.delta) then begin
@@ -218,7 +216,7 @@ end;
 procedure TRNNLayer.forward(var state: TNNetState);
 var
     s: TNNetState;
-    i, j, inputStep, hiddenStep, outputStep: SizeInt;
+    i, j, inputStepSize, hiddenStepSize, outputStepSize: SizeInt;
     //old_state: PSingle;
 begin
     {$ifdef USE_TELEMETRY}
@@ -230,21 +228,23 @@ begin
     s.net := state.net;
     s.index := state.index;
 
-    inputStep := inputs*batch;
-    hiddenStep := hidden*batch;
-    outputStep := outputs*batch;
+    inputStepSize := inputs*batch;
+    hiddenStepSize := hidden*batch;
+    outputStepSize := outputs*batch;
 
     InputLayer .reGroup(batch);
     selfLayer  .reGroup(batch);
     outputLayer.reGroup(batch);
 
-    outputLayer.delta.fill(0);
-    selfLayer.delta.fill(0);
-    inputLayer.delta.fill(0);
-    if state.isTraining then
-        self.state.FillExt(0, 0, hiddenStep);
+    if state.isTraining then begin
+        outputLayer.delta.multiply(0);
+        selfLayer.delta.multiply(0);
+        inputLayer.delta.multiply(0);
+        self.state.FillExt(0, 0, hiddenStepSize);
+    end;
+
     for i := 0 to steps -1 do
-      rnnStepForward(s, state, hiddenStep, i);
+      rnnStepForward(s, state, hiddenStepSize, i);
 
     InputLayer .reGroup(steps*batch);
     selfLayer  .reGroup(steps*batch);
@@ -343,7 +343,7 @@ end;
 procedure TRNNLayer.backward(var state: TNNetState);
 var
     s: TNNetState;
-    i, inputStep, hiddenStep, outputStep: SizeInt;
+    i, inputStepSize, hiddenStepSize, outputStepSize: SizeInt;
 begin
 {$ifdef USE_TELEMETRY}
 if benchmark then metrics.backward.start(layerType);
@@ -354,9 +354,9 @@ if benchmark then metrics.backward.start(layerType);
     s.net := state.net;
     s.index:= state.index;;
 
-    inputStep  := batch*inputs;
-    hiddenStep := Batch*hidden;
-    outputStep := Batch*outputs;
+    inputStepSize  := batch*inputs;
+    hiddenStepSize := Batch*hidden;
+    outputStepSize := Batch*outputs;
 
     InputLayer .reGroup(batch);
     selfLayer  .reGroup(batch);
@@ -367,10 +367,10 @@ if benchmark then metrics.backward.start(layerType);
     //
     //if pointer(l.state.data)<>pointer(l.state.DynData) then
     //    l.state.resetReference;
-    //l.state.data := l.state.data + (hiddenStep * l.steps);
+    //l.state.data := l.state.data + (hiddenStepSize * l.steps);
     try
     for i := steps-1 downto 0 do begin
-      rnnStepBackward(s, state, hiddenStep, i);
+      rnnStepBackward(s, state, hiddenStepSize, i);
     end;
     finally
       InputLayer .reGroup(steps*batch);
@@ -410,10 +410,10 @@ end;
 procedure TRNNLayer.forwardGPU(var state: TNNetState);
 var
     s: TNNetState;
-    i, j, inputStep, hiddenStep, outputStep: SizeInt;
+    i, j, inputStepSize, hiddenStepSize, outputStepSize: SizeInt;
 
-    gpuERR : Single;
-    tmp :TSingleTensor;
+    //gpuERR : Single;
+    //tmp :TSingleTensor;
     //t1, t2, t3 :TSingleTensor;
     //old_state: PSingle;
 begin
@@ -441,21 +441,22 @@ begin
   s.net := state.net;
   s.index := state.index;
 
-  inputStep  := inputs *batch;
-  hiddenStep := hidden *batch;
-  outputStep := outputs*batch;
+  inputStepSize  := inputs *batch;
+  hiddenStepSize := hidden *batch;
+  outputStepSize := outputs*batch;
 
   InputLayer .reGroup(batch);
   selfLayer  .reGroup(batch);
   outputLayer.reGroup(batch);
 
-  ocl.fill(InputLayer.delta.Size(), InputLayer.delta.devData, 0, 0, 1);
-  ocl.fill(selfLayer.delta.Size(), selfLayer.delta.devData, 0, 0, 1);
-  ocl.fill(outputLayer.delta.Size(), outputLayer.delta.devData, 0, 0, 1);
 
   if state.isTraining then begin
-      ocl.fill(hiddenStep, self.state.devData, 0, 0, 1);
+      ocl.scale(InputLayer.delta.Size(), 0, InputLayer.delta.devData, 1);
+      ocl.scale(selfLayer.delta.Size(), 0, selfLayer.delta.devData, 1);
+      ocl.scale(outputLayer.delta.Size(), 0, outputLayer.delta.devData, 1);
+      ocl.fill(hiddenStepSize, self.state.devData, 0, 0, 1);
   end;
+
 
   for i := 0 to steps -1 do begin
 
@@ -473,14 +474,14 @@ begin
               inc(j);
           end;
           if isShortcut then begin
-            ocl.copy(hiddenStep, self.state.devData, i*hiddenStep, 1, self.state.devData, j*hiddenStep, 1);
+            ocl.copy(hiddenStepSize, self.state.devData, i*hiddenStepSize, 1, self.state.devData, j*hiddenStepSize, 1);
           end else begin
-            ocl.fill(hiddenStep, self.state.devData, j*hiddenStep, 0, 1);
+            ocl.fill(hiddenStepSize, self.state.devData, j*hiddenStepSize, 0, 1);
           end;
 
 
-          ocl.addvv(hiddenStep, inputLayer.output.devData, i*hiddenStep, 1, self.state.devData, j*hiddenStep, 1, self.state.devData, j*hiddenStep, 1);
-          ocl.addvv(hiddenStep, selfLayer.output.devData, i*hiddenStep, 1, self.state.devData, j*hiddenStep, 1, self.state.devData, j*hiddenStep, 1);
+          ocl.addvv(hiddenStepSize, inputLayer.output.devData, i*hiddenStepSize, 1, self.state.devData, j*hiddenStepSize, 1, self.state.devData, j*hiddenStepSize, 1);
+          ocl.addvv(hiddenStepSize, selfLayer.output.devData, i*hiddenStepSize, 1, self.state.devData, j*hiddenStepSize, 1, self.state.devData, j*hiddenStepSize, 1);
 
           //s.input := @self.state;
           s.inputStep:=j;
@@ -516,7 +517,7 @@ end;
 procedure TRNNLayer.backwardGPU(var state: TNNetState);
 var
     s: TNNetState;
-    i, inputStep, hiddenStep, outputStep: SizeInt;
+    i, inputStepSize, hiddenStepSize, outputStepSize: SizeInt;
 begin
   {$ifdef USE_TELEMETRY}
   if benchmark then metrics.backward.start(layerType);
@@ -526,9 +527,9 @@ begin
   s.workspace := state.workspace;
   s.net := state.net;
 
-  inputStep  := batch*inputs;
-  hiddenStep := Batch*hidden;
-  outputStep := Batch*outputs;
+  inputStepSize  := batch*inputs;
+  hiddenStepSize := Batch*hidden;
+  outputStepSize := Batch*outputs;
 
   InputLayer .reGroup(batch);
   selfLayer  .reGroup(batch);
@@ -539,19 +540,19 @@ begin
   //
   //if pointer(l.state.data)<>pointer(l.state.DynData) then
   //    l.state.resetReference;
-  //l.state.data := l.state.data + (hiddenStep * l.steps);
+  //l.state.data := l.state.data + (hiddenStepSize * l.steps);
 
   //try
   for i := steps-1 downto 0 do begin
-      ocl.copy(hiddenStep, InputLayer.output.devData, i*hiddenStep, 1, self.state.devData, (1+i)*hiddenStep, 1);
-      //inputLayer.output.CopyTo(self.state, (i+1)*hiddenStep, 1, i*hiddenStep, 1, hiddenStep);
+      ocl.copy(hiddenStepSize, InputLayer.output.devData, i*hiddenStepSize, 1, self.state.devData, (1+i)*hiddenStepSize, 1);
+      //inputLayer.output.CopyTo(self.state, (i+1)*hiddenStepSize, 1, i*hiddenStepSize, 1, hiddenStepSize);
   //InputLayer.output.printStat;
   //
   //InputLayer.output.pullFromDevice(t1);
   //t1.printStat;
 
-      ocl.addvv(hiddenStep, selfLayer.output.devData, i*hiddenStep, 1, self.state.devData, (i+1)*hiddenStep, 1, self.state.devData, i*hiddenStep, 1);
-      //self.state.add(selfLayer.output, (i+1)*hiddenStep, i*hiddenStep, hiddenStep);
+      ocl.addvv(hiddenStepSize, selfLayer.output.devData, i*hiddenStepSize, 1, self.state.devData, (i+1)*hiddenStepSize, 1, self.state.devData, i*hiddenStepSize, 1);
+      //self.state.add(selfLayer.output, (i+1)*hiddenStepSize, i*hiddenStepSize, hiddenStepSize);
 
       s.step := i;
       s.inputStep := i+1;
@@ -571,12 +572,12 @@ begin
       selfLayer.backwardGPU(s);
       //selfLayer.backward(s);
 
-      ocl.copy(hiddenStep, selfLayer.delta.devData, i*hiddenStep, 1, inputLayer.delta.devData, i*hiddenStep, 1);
-      //selfLayer.delta.CopyTo(inputLayer.delta, i*hiddenStep, 1, i*hiddenStep, 1, hiddenStep);
+      ocl.copy(hiddenStepSize, selfLayer.delta.devData, i*hiddenStepSize, 1, inputLayer.delta.devData, i*hiddenStepSize, 1);
+      //selfLayer.delta.CopyTo(inputLayer.delta, i*hiddenStepSize, 1, i*hiddenStepSize, 1, hiddenStepSize);
 
       if (i > 0) and isShortcut then
-          ocl.addvv(hiddenStep, selfLayer.delta.devData, i*hiddenStep, 1, selfLayer.delta.devData, (i-1)*hiddenStep, 1, selfLayer.delta.devData, (i-1)*hiddenStep, 1);
-          //selfLayer.delta.add(selfLayer.delta, (i-1)*hiddenStep, i*hiddenStep, hiddenStep);
+          ocl.addvv(hiddenStepSize, selfLayer.delta.devData, i*hiddenStepSize, 1, selfLayer.delta.devData, (i-1)*hiddenStepSize, 1, selfLayer.delta.devData, (i-1)*hiddenStepSize, 1);
+          //selfLayer.delta.add(selfLayer.delta, (i-1)*hiddenStepSize, i*hiddenStepSize, hiddenStepSize);
 
       s.input := state.input;
       //r.input.data := r.input.data + i*inputStep;
@@ -629,7 +630,7 @@ end;
 procedure TRNNLayer.forwardGPU(var state: TNNetState);
 var
     s: TNNetState;
-    i, j, inputStep, hiddenStep, outputStep: SizeInt;
+    i, j, inputStepSize, hiddenStepSize, outputStepSize: SizeInt;
 
     gpuERR : Single;
     tmp :TSingleTensor;
@@ -660,9 +661,9 @@ begin
   s.net := state.net;
   s.index := state.index;
 
-  inputStep  := inputs *batch;
-  hiddenStep := hidden *batch;
-  outputStep := outputs*batch;
+  inputStepSize  := inputs *batch;
+  hiddenStepSize := hidden *batch;
+  outputStepSize := outputs*batch;
 
   InputLayer .reGroup(batch);
   selfLayer  .reGroup(batch);
@@ -670,10 +671,10 @@ begin
 
 
   if state.isTraining then begin
-      cuda.fill(InputLayer.delta.Size(), InputLayer.delta.devData, 0, 0, 1);
-      cuda.fill(selfLayer.delta.Size(), selfLayer.delta.devData, 0, 0, 1);
-      cuda.fill(outputLayer.delta.Size(), outputLayer.delta.devData, 0, 0, 1);
-      cuda.fill(hiddenStep, self.state.devData, 0, 0, 1);
+      cuda.scale(InputLayer.delta.Size(), 0, InputLayer.delta.devData, 1);
+      cuda.scale(selfLayer.delta.Size(), 0, selfLayer.delta.devData, 1);
+      cuda.scale(outputLayer.delta.Size(), 0, outputLayer.delta.devData, 1);
+      cuda.fill(hiddenStepSize, self.state.devData, 0, 0, 1);
   end;
 
   for i := 0 to steps -1 do begin
@@ -692,14 +693,14 @@ begin
               inc(j);
           end;
           if isShortcut then begin
-            cuda.copy(hiddenStep, self.state.devData, i*hiddenStep, 1, self.state.devData, j*hiddenStep, 1);
+            cuda.copy(hiddenStepSize, self.state.devData, i*hiddenStepSize, 1, self.state.devData, j*hiddenStepSize, 1);
           end else begin
-            cuda.fill(hiddenStep, self.state.devData, j*hiddenStep, 0, 1);
+            cuda.fill(hiddenStepSize, self.state.devData, j*hiddenStepSize, 0, 1);
           end;
 
 
-          cuda.addvv(hiddenStep, inputLayer.output.devData, i*hiddenStep, 1, self.state.devData, j*hiddenStep, 1, self.state.devData, j*hiddenStep, 1);
-          cuda.addvv(hiddenStep, selfLayer.output.devData, i*hiddenStep, 1, self.state.devData, j*hiddenStep, 1, self.state.devData, j*hiddenStep, 1);
+          cuda.addvv(hiddenStepSize, inputLayer.output.devData, i*hiddenStepSize, 1, self.state.devData, j*hiddenStepSize, 1, self.state.devData, j*hiddenStepSize, 1);
+          cuda.addvv(hiddenStepSize, selfLayer.output.devData, i*hiddenStepSize, 1, self.state.devData, j*hiddenStepSize, 1, self.state.devData, j*hiddenStepSize, 1);
 
           //s.input := @self.state;
           s.inputStep:=j;
@@ -735,7 +736,7 @@ end;
 procedure TRNNLayer.backwardGPU(var state: TNNetState);
 var
     s: TNNetState;
-    i, inputStep, hiddenStep, outputStep: SizeInt;
+    i, inputStepSize, hiddenStepSize, outputStepSize: SizeInt;
 begin
   {$ifdef USE_TELEMETRY}
   if benchmark then metrics.backward.start(layerType);
@@ -745,9 +746,9 @@ begin
   s.workspace := state.workspace;
   s.net := state.net;
 
-  inputStep  := batch*inputs;
-  hiddenStep := Batch*hidden;
-  outputStep := Batch*outputs;
+  inputStepSize  := batch*inputs;
+  hiddenStepSize := Batch*hidden;
+  outputStepSize := Batch*outputs;
 
   InputLayer .reGroup(batch);
   selfLayer  .reGroup(batch);
@@ -758,19 +759,19 @@ begin
   //
   //if pointer(l.state.data)<>pointer(l.state.DynData) then
   //    l.state.resetReference;
-  //l.state.data := l.state.data + (hiddenStep * l.steps);
+  //l.state.data := l.state.data + (hiddenStepSize * l.steps);
 
   //try
   for i := steps-1 downto 0 do begin
-      cuda.copy(hiddenStep, InputLayer.output.devData, i*hiddenStep, 1, self.state.devData, (1+i)*hiddenStep, 1);
-      //inputLayer.output.CopyTo(self.state, (i+1)*hiddenStep, 1, i*hiddenStep, 1, hiddenStep);
+      cuda.copy(hiddenStepSize, InputLayer.output.devData, i*hiddenStepSize, 1, self.state.devData, (1+i)*hiddenStepSize, 1);
+      //inputLayer.output.CopyTo(self.state, (i+1)*hiddenStepSize, 1, i*hiddenStepSize, 1, hiddenStepSize);
   //InputLayer.output.printStat;
   //
   //InputLayer.output.pullFromDevice(t1);
   //t1.printStat;
 
-      cuda.addvv(hiddenStep, selfLayer.output.devData, i*hiddenStep, 1, self.state.devData, (i+1)*hiddenStep, 1, self.state.devData, i*hiddenStep, 1);
-      //self.state.add(selfLayer.output, (i+1)*hiddenStep, i*hiddenStep, hiddenStep);
+      cuda.addvv(hiddenStepSize, selfLayer.output.devData, i*hiddenStepSize, 1, self.state.devData, (i+1)*hiddenStepSize, 1, self.state.devData, i*hiddenStepSize, 1);
+      //self.state.add(selfLayer.output, (i+1)*hiddenStepSize, i*hiddenStepSize, hiddenStepSize);
 
       s.step := i;
       s.inputStep := i+1;
@@ -790,12 +791,12 @@ begin
       selfLayer.backwardGPU(s);
       //selfLayer.backward(s);
 
-      cuda.copy(hiddenStep, selfLayer.delta.devData, i*hiddenStep, 1, inputLayer.delta.devData, i*hiddenStep, 1);
-      //selfLayer.delta.CopyTo(inputLayer.delta, i*hiddenStep, 1, i*hiddenStep, 1, hiddenStep);
+      cuda.copy(hiddenStepSize, selfLayer.delta.devData, i*hiddenStepSize, 1, inputLayer.delta.devData, i*hiddenStepSize, 1);
+      //selfLayer.delta.CopyTo(inputLayer.delta, i*hiddenStepSize, 1, i*hiddenStepSize, 1, hiddenStepSize);
 
       if (i > 0) and isShortcut then
-          cuda.addvv(hiddenStep, selfLayer.delta.devData, i*hiddenStep, 1, selfLayer.delta.devData, (i-1)*hiddenStep, 1, selfLayer.delta.devData, (i-1)*hiddenStep, 1);
-          //selfLayer.delta.add(selfLayer.delta, (i-1)*hiddenStep, i*hiddenStep, hiddenStep);
+          cuda.addvv(hiddenStepSize, selfLayer.delta.devData, i*hiddenStepSize, 1, selfLayer.delta.devData, (i-1)*hiddenStepSize, 1, selfLayer.delta.devData, (i-1)*hiddenStepSize, 1);
+          //selfLayer.delta.add(selfLayer.delta, (i-1)*hiddenStepSize, i*hiddenStepSize, hiddenStepSize);
 
       s.input := state.input;
       //r.input.data := r.input.data + i*inputStep;

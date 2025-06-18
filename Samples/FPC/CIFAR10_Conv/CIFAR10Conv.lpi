@@ -51,21 +51,20 @@
           <Other>
             <CustomOptions Value="-CfAVX2
 -OpCOREAVX2
+-dUSE_AVX2
+-dUSE_MKL
 -dUSE_MULTITHREADING
--dUSE_TELEMETRY"/>
-            <OtherDefines Count="12">
+-dBIG_MATRECIES"/>
+            <OtherDefines Count="9">
               <Define0 Value="USE_OPENCL"/>
               <Define1 Value="USE_AVX2"/>
               <Define2 Value="USE_OPENBLAS"/>
               <Define3 Value="USE_MKL"/>
               <Define4 Value="USE_MULTITHREADING"/>
-              <Define5 Value="CLBLASTCONV"/>
-              <Define6 Value="USE_TELEMETRY"/>
-              <Define7 Value="CL_EVENTS"/>
-              <Define8 Value="CL_BLAST"/>
-              <Define9 Value="BIG_MATRECIES"/>
-              <Define10 Value="USE_CUDNN"/>
-              <Define11 Value="USE_CUDART"/>
+              <Define5 Value="USE_TELEMETRY"/>
+              <Define6 Value="BIG_MATRECIES"/>
+              <Define7 Value="USE_CUDNN"/>
+              <Define8 Value="USE_CUDART"/>
             </OtherDefines>
           </Other>
         </CompilerOptions>
@@ -123,6 +122,11 @@
         <IsPartOfProject Value="True"/>
         <UnitName Value="uTokenizer"/>
       </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\nattentionlayer.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="nAttentionLayer"/>
+      </Unit>
     </Units>
   </ProjectOptions>
   <CompilerOptions>
@@ -154,28 +158,27 @@
       <Debugging>
         <DebugInfoType Value="dsDwarf3"/>
         <TrashVariables Value="True"/>
-        <UseValgrind Value="True"/>
+        <UseExternalDbgSyms Value="True"/>
       </Debugging>
     </Linking>
     <Other>
       <CustomOptions Value="-CfAVX2
 -OpCOREAVX2
+-dUSE_AVX2
+-dUSE_MKL
 -dUSE_MULTITHREADING
--dUSE_TELEMETRY
+-dBIG_MATRECIES
 -dUSE_CUDART"/>
-      <OtherDefines Count="12">
+      <OtherDefines Count="9">
         <Define0 Value="USE_OPENCL"/>
         <Define1 Value="USE_AVX2"/>
         <Define2 Value="USE_OPENBLAS"/>
         <Define3 Value="USE_MKL"/>
         <Define4 Value="USE_MULTITHREADING"/>
-        <Define5 Value="CLBLASTCONV"/>
-        <Define6 Value="USE_TELEMETRY"/>
-        <Define7 Value="CL_EVENTS"/>
-        <Define8 Value="CL_BLAST"/>
-        <Define9 Value="BIG_MATRECIES"/>
-        <Define10 Value="USE_CUDNN"/>
-        <Define11 Value="USE_CUDART"/>
+        <Define5 Value="USE_TELEMETRY"/>
+        <Define6 Value="BIG_MATRECIES"/>
+        <Define7 Value="USE_CUDNN"/>
+        <Define8 Value="USE_CUDART"/>
       </OtherDefines>
     </Other>
   </CompilerOptions>

@@ -7,11 +7,11 @@ interface
 type
 
   TMeasureOps = (
-    opIncFill, opFill, opCopy, opMaxNorm, opRMSNorm, opBatchAddvs, opAddvs, opBatchMulvs,
+    opIncFill, opFill, opCopy, opMaxNorm, opStdDevNorm, opRMSNorm, opBatchAddvs, opAddvs, opBatchMulvs,
     opMulvs, opBatchSubvs, opSubvs, opBatchDivvs, opDivvs, opPow, opAxpy, opMulvv, opAddvv, opSubvv, opDivvv, opFmavv, opDot, opBatchFmavss, opFmavss, opGemm, opIm2col, opCol2im,
     opConv2D, opConcat, opAddConcat, opHostToDevice, opDeviceToHost, opMemAllocate, opMemRelease, opGPUAllocate, opArgMax, opArgMin, opConvert,
     opGPURelease, opIm2ColExt, opCol2ImExt, opMeans, opVariances,
-    opMeansVars, opNormalize, opMeansVarsDelta, opNormalizeDelta, opAddDots, opForwardBias, opBackwardBias, opForwardScale, opForwardScaleAdd,
+    opMeansVars, opNormalize,  opMeansVarsDelta, opNormalizeDelta, opAddDots, opForwardBias, opBackwardBias, opForwardScale, opForwardScaleAdd,
     opReduce , opFwDropout, opBwDropout, opL2,
     opInit, opActivate, opDerive
   );
@@ -29,6 +29,7 @@ type
   public
       elapsed: array[low(TMeasureOps)..high(TMeasureOps)] of int64;
       counts: array[low(TMeasureOps)..high(TMeasureOps)] of SizeInt;
+      //stackArray : TArray<TMeasureOps>;
       procedure start(const a:TMeasureOps);
       procedure finish(const a:TMeasureOps);
       function total():int64;
@@ -52,14 +53,16 @@ procedure TTensorMetrics.start(const a: TMeasureOps);
 begin
   m[stack]:=clock;
   inc(counts[a]);
-  inc(stack)
+  inc(stack);
+  //insert(a, stackArray, length(stackArray))
 end;
 
 procedure TTensorMetrics.finish(const a: TMeasureOps);
 begin
   dec(stack);
   dec(counts[a]);
-  elapsed[a] := elapsed[a] + clock()- m[stack]
+  elapsed[a] := elapsed[a] + clock()- m[stack];
+  //delete(stackArray, high(stackArray), 1)
 end;
 
 function TTensorMetrics.total(): int64;

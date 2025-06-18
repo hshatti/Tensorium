@@ -49,6 +49,7 @@ type
       label_smooth_eps : single;
       adversarial : boolean;
       step, inputStep, deltaStep : SizeInt;
+      prevLayer : TObject;
       {$ifdef USE_OPENCL}
       events: TArray<cl_event>;
       ev    : TArray<cl_int>;
@@ -76,7 +77,7 @@ type
       B1 : Single;
       B2 : Single;
       eps : Single;
-      t : SizeInt;
+      //t : SizeInt;
     end;
 
   PLayerType = ^TLayerType;

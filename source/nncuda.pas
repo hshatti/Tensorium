@@ -307,17 +307,18 @@ var
   num_grids: SizeInt;
   params : array of pointer;
 begin
-  //{$ifdef USE_TELEMETRY}
-  //tensorMetrics.start(opActivate);
-  //{$endif}
-  if activation= 4 then exit;
-  num_grids := (N + NUM_THREADS-1) div NUM_THREADS;
-  params := [@N, @x, @offset, @activation];
-  SAFE_CALL(cudaLaunchKernel(FKernels[kernelId], dim3.Create(num_grids), dim3.create(NUM_THREADS), ppointer(params), 0, stream));
-  //{$ifdef USE_TELEMETRY}
-  //finish();
-  //tensorMetrics.finish(opActivate);
-  //{$endif}
+  {$ifdef USE_TELEMETRY}
+  tensorMetrics.start(opActivate);
+  {$endif}
+  if activation <> 4 then begin
+    num_grids := (N + NUM_THREADS-1) div NUM_THREADS;
+    params := [@N, @x, @offset, @activation];
+    SAFE_CALL(cudaLaunchKernel(FKernels[kernelId], dim3.Create(num_grids), dim3.create(NUM_THREADS), ppointer(params), 0, stream));
+  end;
+  {$ifdef USE_TELEMETRY}
+  finish();
+  tensorMetrics.finish(opActivate);
+  {$endif}
 end;
 
 procedure TNNCuda.activateArraySWISH(const N: SizeInt; const x: TCUMem; const offset: SizeInt; const output_sigmoid, output: TCUMem);
@@ -326,16 +327,16 @@ var
   num_grids: SizeInt;
   params : array of pointer;
 begin
-  //{$ifdef USE_TELEMETRY}
-  //tensorMetrics.start(opActivate);
-  //{$endif}
+  {$ifdef USE_TELEMETRY}
+  tensorMetrics.start(opActivate);
+  {$endif}
   num_grids := (N + NUM_THREADS-1) div NUM_THREADS;
   params := [@N, @x, @offset, @output_sigmoid, @output];
   SAFE_CALL(cudaLaunchKernel(FKernels[kernelId], dim3.Create(num_grids), dim3.create(NUM_THREADS), ppointer(params), 0, stream));
-  //{$ifdef USE_TELEMETRY}
-  //finish();
-  //tensorMetrics.finish(opActivate);
-  //{$endif}
+  {$ifdef USE_TELEMETRY}
+  finish();
+  tensorMetrics.finish(opActivate);
+  {$endif}
 end;
 
 procedure TNNCuda.DeriveArray(const N: SizeInt; const x: TCUMem; const offset: SizeInt; const activation: longint; delta: TCUMem);
@@ -344,17 +345,18 @@ var
   num_grids: SizeInt;
   params : array of pointer;
 begin
-  //{$ifdef USE_TELEMETRY}
-  //tensorMetrics.start(opDerive);
-  //{$endif}
-  if activation= 4 then exit;   // keep as is if acLINEAR
-  num_grids := (N + NUM_THREADS-1) div NUM_THREADS;
-  params := [@N, @x, @offset, @activation, @delta];
-  SAFE_CALL(cudaLaunchKernel(FKernels[kernelId], dim3.Create(num_grids), dim3.create(NUM_THREADS), ppointer(params), 0, stream));
-  //{$ifdef USE_TELEMETRY}
-  //finish();
-  //tensorMetrics.finish(opDerive);
-  //{$endif}
+  {$ifdef USE_TELEMETRY}
+  tensorMetrics.start(opDerive);
+  {$endif}
+  if activation <> 4 then begin   // keep as is if acLINEAR
+    num_grids := (N + NUM_THREADS-1) div NUM_THREADS;
+    params := [@N, @x, @offset, @activation, @delta];
+    SAFE_CALL(cudaLaunchKernel(FKernels[kernelId], dim3.Create(num_grids), dim3.create(NUM_THREADS), ppointer(params), 0, stream));
+  end;
+  {$ifdef USE_TELEMETRY}
+  finish();
+  tensorMetrics.finish(opDerive);
+  {$endif}
 end;
 
 procedure TNNCuda.forwardBias(const dstSize: SizeInt; const dst: TCUMem; const offset: SizeInt; const srcSize: SizeInt; const src: TCUMem; const incb: SizeInt; const batch: SizeInt);
@@ -1305,7 +1307,7 @@ var
   paramsPtr : PPAnsiChar;
   log : ansistring;
 begin
-  writeln('NVRTC compile start');
+  //writeln('NVRTC compile start');
   SAFE_CALL_RTC(nvrtcCreateProgram(@prog, PAnsiChar(code), pAnsiChar(name), length(headers), Pointer(headers), Pointer(includeNames)));
 
   //params := [PAnsiChar('--gpu-architecture=sm_'+intToStr(devCapMajor)+intTostr(devCapMinor))];
@@ -1325,7 +1327,7 @@ begin
     SAFE_CALL_RTC(nvrtcGetCUBIN(prog, pointer(result)));
   end;
   SAFE_CALL_RTC(nvrtcDestroyProgram(@prog));
-  writeln('NVRTC compile end');
+  //writeln('NVRTC compile end');
 end;
 
 procedure TNNCuda.loadCUBIN(const cubin: RawByteString);

@@ -18,22 +18,22 @@ uses
 procedure activate_array(const x: PSingle; const N: SizeInt; const a: TActivationType; output:PSingle = nil; output2:PSingle =nil);
 procedure gradient_array(const x: PSingle; const N: SizeInt; const a:TActivationType; const delta:PSingle);
 
-procedure activate_array_swish(const x: Psingle; const n: SizeInt; output_sigmoid, output: Psingle);
-procedure activate_array_mish(const x: Psingle; const n: SizeInt; const activation_input, output: Psingle);
-procedure activate_array_hard_mish(const x: Psingle; const n: SizeInt; const activation_input, output: PSingle);
-procedure activate_array_normalize_channels(const x: Psingle; const n, batch, channels, wh_step: SizeInt; const output: Psingle);
-procedure activate_array_normalize_channels_softmax(const x: Psingle; const n, batch, channels, wh_step: SizeInt; const output: PSingle; const use_max_val: boolean);
+procedure activate_array_swish(const x: Psingle; const N: SizeInt; output_sigmoid, output: Psingle);
+procedure activate_array_mish(const x: Psingle; const N: SizeInt; const activation_input, output: Psingle);
+procedure activate_array_hard_mish(const x: Psingle; const N: SizeInt; const activation_input, output: PSingle);
+procedure activate_array_normalize_channels(const x: Psingle; const N, batch, channels, wh_step: SizeInt; const output: Psingle);
+procedure activate_array_normalize_channels_softmax(const x: Psingle; const N, batch, channels, wh_step: SizeInt; const output: PSingle; const use_max_val: boolean);
 
-procedure gradient_array_swish(const x: Psingle; const n: SizeInt; const sigmoid: Psingle; delta: Psingle);
-procedure gradient_array_mish(const n: SizeInt; const activation_input: Psingle; delta: Psingle);
-procedure gradient_array_hard_mish(const n: SizeInt; const activation_input, delta: Psingle);
-procedure gradient_array_normalize_channels(const x: Psingle; const n, batch, channels, wh_step: SizeInt; const delta: Psingle);
-procedure gradient_array_normalize_channels_softmax(const x: PSingle; const n, batch, channels, wh_step: SizeInt; const delta: Psingle);
+procedure gradient_array_swish(const x: Psingle; const N: SizeInt; const sigmoid: Psingle; delta: Psingle);
+procedure gradient_array_mish(const N: SizeInt; const activation_input: Psingle; delta: Psingle);
+procedure gradient_array_hard_mish(const N: SizeInt; const activation_input, delta: Psingle);
+procedure gradient_array_normalize_channels(const x: Psingle; const N, batch, channels, wh_step: SizeInt; const delta: Psingle);
+procedure gradient_array_normalize_channels_softmax(const x: PSingle; const N, batch, channels, wh_step: SizeInt; const delta: Psingle);
 
 implementation
 uses nBaseLayer;
 
-{$if defined(CPUX64)}
+{$if defined(CPUX64) and defined(USE_AVX2)}
 procedure logistic_array(const dst, src:PSingle; const N:SizeInt);
 const
   l2e :single = 1.442695041;// log2(e);
@@ -513,7 +513,7 @@ begin
 
       case a of
           acLOGISTIC:
-      {$ifdef CPUX64}
+      {$if defined(CPUX64) and defined(USE_AVX2)}
             if AVX2Support then
               logistic_array(x, x, N)
             else
@@ -553,7 +553,7 @@ begin
                 x[i] := plse_activate(x[i]);
 
           acREVLEAKY, acLEAKY:
-          {$ifdef CPUX64}
+          {$if defined(CPUX64) and defined(USE_AVX2)}
           if AVX2Support then
             leaky_array(x, N)
           else
@@ -727,7 +727,7 @@ begin
     output_sigmoid:=a.B;
     output := a.C;
 
-    {$if defined(CPUX64)}
+    {$if defined(CPUX64) and defined(USE_AVX2)}
     if AVX2Support then
       SiLU_array(output+f, output_sigmoid+f, x+f, t-f+1)
     else
@@ -750,7 +750,7 @@ begin
 end;
 
 // SWISH aka SiLU
-procedure activate_array_swish(const x: Psingle; const n: SizeInt;
+procedure activate_array_swish(const x: Psingle; const N: SizeInt;
   output_sigmoid, output: Psingle);
 var
   p:TMPParams;
@@ -760,8 +760,8 @@ begin
   p.A:=x;
   p.B:=output_sigmoid;
   p.C:=output;
-  {$if defined(_SE_MULTITHREADING)}
-  mp2.&for(swishMP, 0, n-1,@p);
+  {$if defined(_USE_MULTITHREADING)}
+  mp2.&for(swishMP, 0, N-1,@p);
   {$else}
   swishMP(0, N-1, @p);
   {$endif}
@@ -789,7 +789,7 @@ begin
       end
 end;
 
-procedure activate_array_mish(const x: Psingle; const n: SizeInt;
+procedure activate_array_mish(const x: Psingle; const N: SizeInt;
   const activation_input, output: Psingle);
 var
   p:TMPParams;
@@ -817,7 +817,7 @@ begin
   exit(0)
 end;
 
-procedure activate_array_hard_mish(const x: Psingle; const n: SizeInt;
+procedure activate_array_hard_mish(const x: Psingle; const N: SizeInt;
   const activation_input, output: PSingle);
 var
   i: SizeInt;
@@ -825,7 +825,7 @@ var
 begin
 // todo SIMDfy
   {$ifdef USE_TELEMETRY} if benchmark then metrics.act.start(acHARD_MISH);{$endif}
-  for i := 0 to n -1 do
+  for i := 0 to N -1 do
       begin
           x_val := x[i];
           activation_input[i] := x_val;
@@ -834,14 +834,14 @@ begin
   {$ifdef USE_TELEMETRY} if benchmark then metrics.act.finish(acHARD_MISH);{$endif}
 end;
 
-procedure activate_array_normalize_channels(const x: Psingle; const n, batch,
+procedure activate_array_normalize_channels(const x: Psingle; const N, batch,
   channels, wh_step: SizeInt; const output: Psingle);
 var
   size, i, wh_i, b, k: SizeInt;
   sum, val: single;
 begin
   {$ifdef USE_TELEMETRY} if benchmark then metrics.act.start(acNORM_CHAN);{$endif}
-  size := n div channels;
+  size := N div channels;
   // todo SIMDfy
   for i := 0 to size -1 do
       begin
@@ -870,7 +870,7 @@ begin
   {$ifdef USE_TELEMETRY} if benchmark then metrics.act.finish(acNORM_CHAN);{$endif}
 end;
 
-procedure activate_array_normalize_channels_softmax(const x: Psingle; const n,
+procedure activate_array_normalize_channels_softmax(const x: Psingle; const N,
   batch, channels, wh_step: SizeInt; const output: PSingle;
   const use_max_val: boolean);
 var
@@ -878,7 +878,7 @@ var
   sum, max_val, val: single;
 begin
   {$ifdef USE_TELEMETRY} if benchmark then metrics.act.start(acNORM_CHAN_SOFTMAX);{$endif}
-  size := n div channels;
+  size := N div channels;
   // todo SIMDFy
   for i := 0 to size -1 do
       begin
@@ -914,7 +914,7 @@ begin
 end;
 
 
-procedure gradient_array_swish(const x: Psingle; const n: SizeInt;
+procedure gradient_array_swish(const x: Psingle; const N: SizeInt;
   const sigmoid: Psingle; delta: Psingle);
 var
     i: SizeInt;
@@ -922,7 +922,7 @@ var
 begin
     {$ifdef USE_TELEMETRY} if benchmark then metrics.grad.start(acSWISH);{$endif}
     // todo SIMDfy
-    for i := 0 to n -1 do
+    for i := 0 to N -1 do
         begin
             swish := x[i];
             delta[i] := delta[i] * (swish+sigmoid[i] * (1-swish))
@@ -930,7 +930,7 @@ begin
     {$ifdef USE_TELEMETRY} if benchmark then metrics.grad.finish(acSWISH);{$endif}
 end;
 
-procedure gradient_array_mish(const n: SizeInt;
+procedure gradient_array_mish(const N: SizeInt;
   const activation_input: Psingle; delta: Psingle);
 const
     MISH_THRESHOLD: single = 20;
@@ -941,7 +941,7 @@ begin
     {$ifdef USE_TELEMETRY} if benchmark then metrics.grad.start(acMISH);{$endif}
 
     // todo SIMDfy
-    for i := 0 to n -1 do
+    for i := 0 to N -1 do
         begin
             inp := activation_input[i];
             sp := softplus_activate(inp, MISH_THRESHOLD);
@@ -963,7 +963,7 @@ begin
     exit(0)
 end;
 
-procedure gradient_array_hard_mish(const n: SizeInt; const activation_input,
+procedure gradient_array_hard_mish(const N: SizeInt; const activation_input,
   delta: Psingle);
 var
     i: SizeInt;
@@ -971,7 +971,7 @@ var
 begin
     {$ifdef USE_TELEMETRY} if benchmark then metrics.grad.start(acHARD_MISH);{$endif}
     // todo SIMDfy
-    for i := 0 to n -1 do
+    for i := 0 to N -1 do
         begin
             inp := activation_input[i];
             delta[i] := delta[i] * hard_mish_yashas_grad(inp)
@@ -979,14 +979,14 @@ begin
     {$ifdef USE_TELEMETRY} if benchmark then metrics.grad.finish(acHARD_MISH);{$endif}
 end;
 
-procedure gradient_array_normalize_channels(const x: Psingle; const n, batch,
+procedure gradient_array_normalize_channels(const x: Psingle; const N, batch,
   channels, wh_step: SizeInt; const delta: Psingle);
 var
     size, i, wh_i, b, k, index: SizeInt;
     grad, &out, d: single;
 begin
     {$ifdef USE_TELEMETRY} if benchmark then metrics.grad.start(acNORM_CHAN);{$endif}
-    size := n div channels;
+    size := N div channels;
     // todo SIMDfy
     for i := 0 to size -1 do
         begin
@@ -1017,14 +1017,14 @@ begin
     {$ifdef USE_TELEMETRY} if benchmark then metrics.grad.finish(acNORM_CHAN);{$endif}
 end;
 
-procedure gradient_array_normalize_channels_softmax(const x: PSingle; const n,
+procedure gradient_array_normalize_channels_softmax(const x: PSingle; const N,
   batch, channels, wh_step: SizeInt; const delta: Psingle);
 var
     size, i, wh_i, b, k, index: SizeInt;
     grad, &out, d: single;
 begin
     {$ifdef USE_TELEMETRY} if benchmark then metrics.grad.start(acNORM_CHAN_SOFTMAX);{$endif}
-    size := n div channels;
+    size := N div channels;
     // todo SIMDfy
     for i := 0 to size -1 do
         begin
