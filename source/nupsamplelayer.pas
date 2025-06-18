@@ -21,7 +21,7 @@ type
     procedure setTrain(ATrain: boolean); override;
     procedure forward(var state: TNNetState); override;
     procedure backward(var state: TNNetState); override;
-{$ifdef USE_OPENCL}
+{$if defined(USE_OPENCL) or defined(USE_CUDART)}
     procedure forwardGPU(var state: TNNetState); override;
     procedure backwardGPU(var state: TNNetState); override;
 {$endif}
@@ -142,8 +142,52 @@ begin
   if benchmark then metrics.backward.finish(layerType);
   {$endif}
 end;
+{$if defined(USE_CUDART)}
+procedure TUpSampleLayer.forwardGPU(var state: TNNetState);
+begin
+  {$ifdef USE_TELEMETRY}
+  if benchmark then metrics.forward.start(layerType);
+  {$endif}
+  output.setCUDA;
+  if not state.input.wasGPU() then state.input.pushToDevice;
+  if reverse then begin        // todo [forward_upsample_layer] why not using rverse as a parameter instead of [if else then]
+      //cuda.fill(output.as2dHeight(), output.as2dWidth(), output.devData, 0, 1);
+      cuda.upsample(batch, outC, outH, outW, output.devData, stride, 0, scale, state.input.devData, 1);
+//output.fill(0);
+//upsample(output.data, outW, outH, outC, batch, stride, false, scale, state.input.data)
+  end
+  else begin
+      cuda.upsample(batch, c, h, w, state.input.devData, stride, 1, scale, output.devData);
+//upsample(state.input.data, w, h, c, batch, stride, true, scale, output.data);
+  end;
 
-{$ifdef USE_OPENCL}
+//write(LayerTypeStr,' ');
+//output.printGpuSumSqrDiff();
+
+  {$ifdef USE_TELEMETRY}
+  cuda.finish();
+  if benchmark then metrics.forward.finish(layerType);
+  {$endif}
+end;
+
+procedure TUpSampleLayer.backwardGPU(var state: TNNetState);
+begin
+  {$ifdef USE_TELEMETRY}
+  if benchmark then metrics.backward.start(layerType);
+  {$endif}
+  if not delta.wasGPU() then delta.pushToDevice;
+  if not state.delta.wasGPU() then state.delta.pushToDevice;
+  if reverse then  // todo [backward_upsample] why not passing l.reverse to the function instead of [if then else]
+      cuda.upsample(batch, outC, outH, outW, delta.devData, stride, 1, scale, state.delta.devData)
+  else
+      cuda.upsample(batch, c, h, w, state.delta.devData, stride, 0, scale, delta.devData) ;
+  {$ifdef USE_TELEMETRY}
+  cuda.finish();
+  if benchmark then metrics.backward.finish(layerType);
+  {$endif}
+end;
+
+{$elseif defined(USE_OPENCL)}
 procedure TUpSampleLayer.forwardGPU(var state: TNNetState);
 begin
   {$ifdef USE_TELEMETRY}
@@ -157,7 +201,7 @@ begin
   end
   else
       ocl.upsample(batch, c, h, w, state.input.devData, stride, 1, scale, output.devData);
-  ocl.finish();
+
   {$ifdef USE_TELEMETRY}
   ocl.finish();
   if benchmark then metrics.forward.finish(layerType);

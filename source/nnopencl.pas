@@ -26,6 +26,7 @@ uses
     CL_LIB_NONE  = 0;
     CL_LIB_BLAS  = 1;
     CL_LIB_BLAST = 2;
+    OCL_BLOCK    = $100;
 type
 
   TCLMemAccess = OpenCLHelper.TCLMemAccess;
@@ -55,6 +56,11 @@ type
       const A:cl_mem; const aOffset:SizeInt; const lda:SizeInt;
       const B:cl_mem; const bOffset:SizeInt; const ldb:SizeInt;
       const BETA: single; const C:cl_mem; const cOffset:SizeInt; const ldc:SizeInt;
+      const events: TCLEvents = nil; event: PCLEvent = nil);
+    procedure gemmStridedBatched(const transA, transB :boolean; const M, N, K:SizeInt; const ALPHA:single;
+      const A:cl_mem; aOffset:SizeInt; const lda, strideA:SizeInt;
+      const B:cl_mem; bOffset:SizeInt; const ldb, strideB:SizeInt;
+      const BETA: single; const C:cl_mem; cOffset:SizeInt; const ldc, strideC:SizeInt; const batchCount : SizeInt;
       const events: TCLEvents = nil; event: PCLEvent = nil);
     procedure addvv(const N:SizeInt; const src1:cl_mem; const src1Offset, inca:SizeInt; const src2:cl_mem; const src2Offset, incb:SizeInt; dst:cl_mem; const dstOffset, incc:SizeInt; const events: TCLEvents = nil; event: PCLEvent = nil);
     procedure subvv(const N:SizeInt; const src1:cl_mem; const src1Offset, inca:SizeInt; const src2:cl_mem; const src2Offset, incb:SizeInt; dst:cl_mem; const dstOffset, incc:SizeInt; const events: TCLEvents = nil; event: PCLEvent = nil);
@@ -96,7 +102,7 @@ type
     procedure fmavss(const N: SizeInt; const src: cl_mem; const offset: SizeInt; const scalar,
       bias: single; dst : cl_mem;
       const events: TCLEvents = nil; event: PCLEvent = nil);
-    procedure meanAndVars(const srcSize, dstSize, groups:sizeInt; const src:cl_mem; const offset:sizeInt; means, vars:cl_mem;
+    procedure meansAndVars(const srcSize, dstSize, groups:sizeInt; const src:cl_mem; const offset:sizeInt; means, vars:cl_mem;
       const events: TCLEvents = nil; event: PCLEvent = nil);
     procedure normalize(const srcSize, dstSize, groups:SizeInt; means:cl_mem; const meansStride:sizeInt; vars:cl_mem; const varsStride:SizeInt; dst:cl_mem; const dstOffset :sizeInt;
       const events: TCLEvents = nil; event: PCLEvent = nil);
@@ -141,6 +147,10 @@ var
   clblasDgemm :function (const layout: TCLBlasOrder; const a_transpose: TCLBlasTranspose; const b_transpose: TCLBlasTranspose; const M: SizeInt; const N: SizeInt; const K: SizeInt; const alpha: double; const a_buffer: cl_mem; const a_offset: SizeInt; const lda: SizeInt; const b_buffer: cl_mem; const b_offset: SizeInt; const ldb: SizeInt; const beta: double; c_buffer: cl_mem; const c_offset: SizeInt; const ldc: SizeInt; queueCount: cl_int; queue: Pcl_command_queue; eventCount: cl_uint; const events: pcl_event; event: Pcl_event):cl_int; winapi;
   CLBlastSgemm :function (const layout: TCLBlastLayout; const a_transpose: TCLBlastTranspose; const b_transpose: TCLBlastTranspose; const m: SizeInt; const n: SizeInt; const k: SizeInt; const alpha: single; const a_buffer: cl_mem; const a_offset: SizeInt; const a_ld: SizeInt; const b_buffer: cl_mem; const b_offset: SizeInt; const b_ld: SizeInt; const beta: single; c_buffer: cl_mem; const c_offset: SizeInt; const c_ld: SizeInt; queue: Pcl_command_queue; event: Pcl_event):cl_int; winapi;
   CLBlastDgemm :function (const layout: TCLBlastLayout; const a_transpose: TCLBlastTranspose; const b_transpose: TCLBlastTranspose; const m: SizeInt; const n: SizeInt; const k: SizeInt; const alpha: double; const a_buffer: cl_mem; const a_offset: SizeInt; const a_ld: SizeInt; const b_buffer: cl_mem; const b_offset: SizeInt; const b_ld: SizeInt; const beta: double; c_buffer: cl_mem; const c_offset: SizeInt; const c_ld: SizeInt; queue: Pcl_command_queue; event: Pcl_event):cl_int; winapi;
+  CLBlastSgemmBatched :function (const layout: TCLBlastLayout; const a_transpose: TCLBlastTranspose; const b_transpose: TCLBlastTranspose; const m: SizeInt; const n: SizeInt; const k: SizeInt; const alphas: Psingle; const a_buffer: cl_mem; const a_offsets: PSizeInt; const a_ld: SizeInt; const b_buffer: cl_mem; const b_offsets: PSizeInt; const b_ld: SizeInt; const betas: Psingle; c_buffer: cl_mem; const c_offsets: PSizeInt; const c_ld: SizeInt; const batch_count: SizeInt; queue: Pcl_command_queue; event: Pcl_event):cl_int; winapi;
+  CLBlastDgemmBatched :function (const layout: TCLBlastLayout; const a_transpose: TCLBlastTranspose; const b_transpose: TCLBlastTranspose; const m: SizeInt; const n: SizeInt; const k: SizeInt; const alphas: PDouble; const a_buffer: cl_mem; const a_offsets: PSizeInt; const a_ld: SizeInt; const b_buffer: cl_mem; const b_offsets: PSizeInt; const b_ld: SizeInt; const betas: PDouble; c_buffer: cl_mem; const c_offsets: PSizeInt; const c_ld: SizeInt; const batch_count: SizeInt; queue: Pcl_command_queue; event: Pcl_event):cl_int; winapi;
+  CLBlastSgemmStridedBatched :function (const layout: TCLBlastLayout; const a_transpose: TCLBlastTranspose; const b_transpose: TCLBlastTranspose; const m: SizeInt; const n: SizeInt; const k: SizeInt; const alpha: single; const a_buffer: cl_mem; const a_offset: SizeInt; const a_ld: SizeInt; const a_stride: SizeInt; const b_buffer: cl_mem; const b_offset: SizeInt; const b_ld: SizeInt; const b_stride: SizeInt; const beta: single; c_buffer: cl_mem; const c_offset: SizeInt; const c_ld: SizeInt; const c_stride: SizeInt; const batch_count: SizeInt; queue: Pcl_command_queue; event: Pcl_event):cl_int; winapi;
+  CLBlastDgemmStridedBatched: function (const layout: TCLBlastLayout; const a_transpose: TCLBlastTranspose; const b_transpose: TCLBlastTranspose; const m: SizeInt; const n: SizeInt; const k: SizeInt; const alpha: double; const a_buffer: cl_mem; const a_offset: SizeInt; const a_ld: SizeInt; const a_stride: SizeInt; const b_buffer: cl_mem; const b_offset: SizeInt; const b_ld: SizeInt; const b_stride: SizeInt; const beta: double; c_buffer: cl_mem; const c_offset: SizeInt; const c_ld: SizeInt; const c_stride: SizeInt; const batch_count: SizeInt; queue: Pcl_command_queue; event: Pcl_event):cl_int; winapi;
 
 implementation
 
@@ -191,19 +201,26 @@ procedure TNNOpenCL.ActivateArray(const N: SizeInt; const x: cl_mem;
 const kernelId = 5;
 //var NN:SizeInt;
 begin
-  if activation= 4{longint(acLINEAR)} then exit;
-  SetGlobalWorkGroupSizes(N);
-  SetGlobalOffsets(0);
-  //NN:=LSize(N);
-  //SetLocalWorkGroupSizes(NN);
-  FErr := clSetKernelArg(Kernels[kernelId], 0, SizeOf(x)          , @x);         CheckError();
-  FErr := clSetKernelArg(Kernels[kernelId], 1, SizeOf(offset)     , @offset);      CheckError();
-  FErr := clSetKernelArg(Kernels[kernelId], 2, SizeOf(activation) , @activation);   CheckError();
-  FErr := clEnqueueNDRangeKernel(ActiveQueue, Kernels[kernelId]
-    , WorkItemDimensions, @GlobalOffsets[0], @GlobalWorkGroupSizes[0], nil{@LocalWorkGroupSizes[0]}
-    , length(events), pointer(events), event); CheckError();
-  //inc(eventsCount) ;
-  //FErr := clFinish(ActiveQueue); CheckError();
+  {$ifdef USE_TELEMETRY}
+  tensorMetrics.start(opActivate);
+  {$endif}
+  if activation <> 4{longint(acLINEAR)} then begin
+    SetGlobalWorkGroupSizes(N);
+    SetGlobalOffsets(0);
+    //NN:=LSize(N);
+    //SetLocalWorkGroupSizes(NN);
+    FErr := clSetKernelArg(Kernels[kernelId], 0, SizeOf(x)          , @x);         CheckError();
+    FErr := clSetKernelArg(Kernels[kernelId], 1, SizeOf(offset)     , @offset);      CheckError();
+    FErr := clSetKernelArg(Kernels[kernelId], 2, SizeOf(activation) , @activation);   CheckError();
+    FErr := clEnqueueNDRangeKernel(ActiveQueue, Kernels[kernelId]
+      , WorkItemDimensions, @GlobalOffsets[0], @GlobalWorkGroupSizes[0], nil{@LocalWorkGroupSizes[0]}
+      , length(events), pointer(events), event); CheckError();
+
+  end;
+  {$ifdef USE_TELEMETRY}
+  finish();
+  tensorMetrics.finish(opActivate);
+  {$endif}
 end;
 
 procedure TNNOpenCL.activateArraySWISH(const N: SizeInt; const x: cl_mem;
@@ -212,6 +229,10 @@ procedure TNNOpenCL.activateArraySWISH(const N: SizeInt; const x: cl_mem;
 const kernelId = 6;
 var NN:SizeInt;
 begin
+  {$ifdef USE_TELEMETRY}
+  tensorMetrics.start(opActivate);
+  {$endif}
+
   //NN:=LSize(N);
   SetGlobalWorkGroupSizes(N);
   SetGlobalOffsets(0);
@@ -225,6 +246,10 @@ begin
     , length(events), pointer(events), event); CheckError();
   //inc(eventsCount);
   //FErr := clFinish(ActiveQueue); CheckError();
+  {$ifdef USE_TELEMETRY}
+  finish();
+  tensorMetrics.finish(opActivate);
+  {$endif}
 end;
 
 procedure TNNOpenCL.DeriveArray(const N: SizeInt; const x: cl_mem;
@@ -233,21 +258,29 @@ procedure TNNOpenCL.DeriveArray(const N: SizeInt; const x: cl_mem;
 const kernelId = 7;
 var NN:SizeInt;
 begin
-  if activation=4{longint(acLINEAR)} then exit;
-  SetGlobalWorkGroupSizes(N);
-  SetGlobalOffsets(0);
-  //NN:=LSize(N);
-  //SetLocalWorkGroupSizes(NN);
-  FErr := clSetKernelArg(Kernels[kernelId], 0, SizeOf(x)          , @x);           CheckError();
-  FErr := clSetKernelArg(Kernels[kernelId], 1, SizeOf(offset)     , @offset);      CheckError();
-  FErr := clSetKernelArg(Kernels[kernelId], 2, SizeOf(activation) , @activation);  CheckError();
-  FErr := clSetKernelArg(Kernels[kernelId], 3, SizeOf(delta)      , @delta);       CheckError();
-  FErr := clEnqueueNDRangeKernel(ActiveQueue, Kernels[kernelId]
-  , WorkItemDimensions, @GlobalOffsets[0], @GlobalWorkGroupSizes[0]
-  , nil{@LocalWorkGroupSizes[0]}
-  , length(events), pointer(events), event); CheckError();
+  {$ifdef USE_TELEMETRY}
+  tensorMetrics.start(opDerive);
+  {$endif}
+  if activation <>4{longint(acLINEAR)} then begin
+    SetGlobalWorkGroupSizes(N);
+    SetGlobalOffsets(0);
+    //NN:=LSize(N);
+    //SetLocalWorkGroupSizes(NN);
+    FErr := clSetKernelArg(Kernels[kernelId], 0, SizeOf(x)          , @x);           CheckError();
+    FErr := clSetKernelArg(Kernels[kernelId], 1, SizeOf(offset)     , @offset);      CheckError();
+    FErr := clSetKernelArg(Kernels[kernelId], 2, SizeOf(activation) , @activation);  CheckError();
+    FErr := clSetKernelArg(Kernels[kernelId], 3, SizeOf(delta)      , @delta);       CheckError();
+    FErr := clEnqueueNDRangeKernel(ActiveQueue, Kernels[kernelId]
+    , WorkItemDimensions, @GlobalOffsets[0], @GlobalWorkGroupSizes[0]
+    , nil{@LocalWorkGroupSizes[0]}
+    , length(events), pointer(events), event); CheckError();
+  end;
   //inc(eventsCount);
   //FErr := clFinish(ActiveQueue); CheckError();
+  {$ifdef USE_TELEMETRY}
+  finish();
+  tensorMetrics.finish(opDerive);
+  {$endif}
 end;
 
 procedure TNNOpenCL.forwardBias(const dstSize: SizeInt; const dst: cl_mem;
@@ -346,6 +379,7 @@ procedure TNNOpenCL.gemm(const transA, transB: boolean; const M, N, K: SizeInt;
   const cOffset: SizeInt; const ldc: SizeInt; const events: TCLEvents;
   event: PCLEvent);
 var MM, KK, NN :SizeInt; kernelId:integer;
+label done;
 begin
   {$ifdef USE_TELEMETRY}
   tensorMetrics.start(opGemm);
@@ -376,15 +410,11 @@ begin
         clblasRowMajor, TCLblasTranspose(transA), TCLblasTranspose(transB),
         M, N, K, alpha, A, aOffset, lda, B, bOffset, ldb, beta, C, cOffset, ldc, 1, @ActiveQueue, length(events), pointer(events), event
       );
-      {$ifdef USE_TELEMETRY}
-      finish();
-      tensorMetrics.finish(opGemm);
-      {$endif}
-      exit;
+      goto done
   end;
 
   if useBLAS = CL_LIB_BLAST then begin
-      if not assigned(clBlasSGemm) then begin
+      if not assigned(clBlastSGemm) then begin
         {$if defined(MSWINDOWS)}
           hLib := LoadLibrary('clblast.dll');
           assert(hLib<>0, 'Cannot load [clBLAST] library!');
@@ -400,11 +430,7 @@ begin
         CLBlastLayoutRowMajor, TCLBlastTranspose(111+ord(transA)), TCLBlastTranspose(111+ord(transB)),
         M, N, K, alpha, A, aOffset, lda, B, bOffset, ldb, beta, C, cOffset, ldc, @ActiveQueue, pointer(events)
       );
-      {$ifdef USE_TELEMETRY}
-      finish();
-      tensorMetrics.finish(opGemm);
-      {$endif}
-      exit;
+      goto done
   end;
 
   if (not transA) and (not transB)then
@@ -446,12 +472,129 @@ begin
     , length(events), pointer(events), event); CheckError();
   //inc(eventsCount);
 
+done:
   {$ifdef USE_TELEMETRY}
   finish();
   tensorMetrics.finish(opGemm);
   {$endif}
+end;
+
+procedure TNNOpenCL.gemmStridedBatched(const transA, transB: boolean; const M,
+  N, K: SizeInt; const ALPHA: single; const A: cl_mem; aOffset: SizeInt;
+  const lda, strideA: SizeInt; const B: cl_mem; bOffset: SizeInt; const ldb,
+  strideB: SizeInt; const BETA: single; const C: cl_mem; cOffset: SizeInt;
+  const ldc, strideC: SizeInt; const batchCount: SizeInt;
+  const events: TCLEvents; event: PCLEvent);
+var MM, KK, NN :SizeInt; kernelId, i:integer;
+label done;
+begin
+  {$ifdef USE_TELEMETRY}
+  tensorMetrics.start(opGemm);
+  {$endif}
+  //     K          N          N
+  //   [...]      [...]      [...]
+  // M [.A.]  X K [.B.] => M [.C.]
+  //   [...]      [...]      [...]
+
+  //MM := LSize(M);
+  //NN := LSize(N);
 
 
+  if useBLAS = CL_LIB_BLAS then begin
+      if not assigned(clBlasSGemm) then begin
+        {$if defined(MSWINDOWS)}
+          hLib := LoadLibrary('clBLAS.dll');
+          assert(hLib<>0, 'Cannot load [clBLAS] library!');
+          getProc := getProcAddress;
+        {$elseif defined(ANDROID) or defined(LINUX)}
+          hLib := dlopen('libclBLAS.so',RTLD_NOW);
+          assert(assigned(hLib), 'Cannot load [libclBLAS] library!');
+          getProc := dlsym;
+        {$endif}
+        clBlasSgemm:= getproc(hlib, 'clblasSgemm');
+      end;
+      // todo implement clblasSGemmStridedBatched
+      for i:= 0 to batchCount-1 do begin;
+        clBlasSGemm(
+          clblasRowMajor, TCLblasTranspose(transA), TCLblasTranspose(transB),
+          M, N, K, alpha, A, aOffset, lda, B, bOffset, ldb, beta, C, cOffset, ldc, 1, @ActiveQueue, length(events), pointer(events), event
+        );
+        inc(aOffset, strideA);
+        inc(bOffset, strideB);
+        inc(cOffset, strideC);
+      end;
+      goto done
+  end;
+
+  if useBLAS = CL_LIB_BLAST then begin
+      if not assigned(clBlastSGemm) then begin
+        {$if defined(MSWINDOWS)}
+          hLib := LoadLibrary('clblast.dll');
+          assert(hLib<>0, 'Cannot load [clBLAST] library!');
+          getProc := getProcAddress;
+        {$elseif defined(ANDROID) or defined(LINUX)}
+          hLib := dlopen('libclblast.so', RTLD_NOW);
+          assert(assigned(hLib), 'Cannot load [libclBLAST] library!');
+          getProc := dlsym;
+        {$endif}
+        CLBlastSgemmStridedBatched:= getproc(hlib, 'CLBlastSgemmStridedBatched');
+      end;
+      CLBlastSgemmStridedBatched(
+        CLBlastLayoutRowMajor, TCLBlastTranspose(111+ord(transA)), TCLBlastTranspose(111+ord(transB)),
+        M, N, K, alpha, A, aOffset, lda, strideA, B, bOffset, ldb, strideB, beta, C, cOffset, ldc, strideC, batchCount, @ActiveQueue, pointer(events)
+      );
+    goto done
+  end;
+
+  if (not transA) and (not transB)then
+    if N > M then begin
+      SetGlobalWorkGroupSizes(N, M);
+      //SetLocalWorkGroupSizes(NN, MM);
+      kernelId :=1;
+    end else begin
+      SetGlobalWorkGroupSizes(M, N);
+    //  SetLocalWorkGroupSizes(MM, NN);
+      kernelId :=0;
+    end
+
+  else if (not transA) and transB then begin
+    SetGlobalWorkGroupSizes(M, N);
+    kernelId := 2;
+  end else if transA and (not transB) then begin
+    SetGlobalWorkGroupSizes(M, N);
+    kernelId := 3 ;
+  end;
+
+  FErr:=clSetKernelArg(Kernels[kernelId], 0, SizeOf(K)       , @K);CheckError();
+  FErr:=clSetKernelArg(Kernels[kernelId], 1, SizeOf(ALPHA)   , @ALPHA);CheckError();
+  FErr:=clSetKernelArg(Kernels[kernelId], 2, SizeOf(cl_mem)  , @A); CheckError();
+  FErr:=clSetKernelArg(Kernels[kernelId], 4, SizeOf(lda)     , @lda); CheckError();
+
+  FErr:=clSetKernelArg(Kernels[kernelId], 5, SizeOf(cl_mem)  , @B); CheckError();
+  FErr:=clSetKernelArg(Kernels[kernelId], 7, SizeOf(ldb)     , @ldb); CheckError();
+
+  FErr:=clSetKernelArg(Kernels[kernelId], 8, SizeOf(BETA)     , @BETA); CheckError();
+  FErr:=clSetKernelArg(Kernels[kernelId], 9, SizeOf(cl_mem)   , @C); CheckError();
+  FErr:=clSetKernelArg(Kernels[kernelId], 11, SizeOf(ldc)     , @ldc); CheckError();
+  for i:=0 to batchCount-1 do begin
+    FErr:=clSetKernelArg(Kernels[kernelId], 3, SizeOf(aOffset) , @aOffset); CheckError();
+    FErr:=clSetKernelArg(Kernels[kernelId], 6, SizeOf(bOffset) , @bOffset); CheckError();
+    FErr:=clSetKernelArg(Kernels[kernelId], 10, SizeOf(cOffset) , @cOffset); CheckError();
+
+    FErr:=clEnqueueNDRangeKernel(FQueue, Kernels[kernelId] ,WorkItemDimensions ,@GlobalOffsets[0]
+      , @GlobalWorkGroupSizes[0] ,nil{@FLocalWorkGroupSizes[0]}
+      , length(events), pointer(events), event); CheckError();
+    inc(aOffset, strideA);
+    inc(bOffset, strideB);
+    inc(cOffset, strideC);
+  end;
+  //inc(eventsCount);
+
+done:
+  {$ifdef USE_TELEMETRY}
+  finish();
+  tensorMetrics.finish(opGemm);
+  {$endif}
 end;
 
 procedure TNNOpenCL.addvv(const N: SizeInt; const src1: cl_mem;
@@ -1133,7 +1276,7 @@ begin
   {$endif}
 end;
 
-procedure TNNOpenCL.meanAndVars(const srcSize, dstSize, groups: sizeInt;
+procedure TNNOpenCL.meansAndVars(const srcSize, dstSize, groups: sizeInt;
   const src: cl_mem; const offset: sizeInt; means, vars: cl_mem;
   const events: TCLEvents; event: PCLEvent);
 const kernelId = 27;
@@ -1146,10 +1289,11 @@ begin
   {$endif}
 
   blockSize := srcSize div (dstSize*groups);
-  SetGlobalWorkGroupSizes(dstSize);
+  SetGlobalWorkGroupSizes(dstSize*OCL_BLOCK);
+  SetLocalWorkGroupSizes(OCL_BLOCK);
+
   SetGlobalOffsets(0);
   //NN:=LSize(N);
-  //SetLocalWorkGroupSizes(NN);
   FErr := clSetKernelarg(kernels[kernelId], 0, sizeOf(blockSize)   , @blockSize); CheckError();
   FErr := clSetKernelarg(kernels[kernelId], 1, sizeOf(groups)      , @groups);    CheckError();
   FErr := clSetKernelarg(kernels[kernelId], 2, sizeOf(src)         , @src);       CheckError();
@@ -1159,7 +1303,7 @@ begin
   FErr := clEnqueueNDRangeKernel(
      ActiveQueue, Kernels[kernelId],
      WorkItemDimensions, @GlobalOffsets[0],
-     @GlobalWorkGroupSizes[0], nil{@LocalWorkGroupSizes[0]}
+     @GlobalWorkGroupSizes[0], @LocalWorkGroupSizes[0]
      , length(events), pointer(events), event); CheckError();
 
   {$ifdef USE_TELEMETRY}
@@ -1219,10 +1363,10 @@ begin
 
 
   blockSize := srcSize div (dstSize * groups);
-  SetGlobalWorkGroupSizes(dstSize);
+  SetGlobalWorkGroupSizes(dstSize*OCL_BLOCK);
   SetGlobalOffsets(0);
   //NN:=LSize(N);
-  //SetLocalWorkGroupSizes(NN);
+  SetLocalWorkGroupSizes(OCL_BLOCK);
   FErr := clSetKernelarg(kernels[kernelId], 0, sizeOf(groups)         , @groups);          CheckError();
   FErr := clSetKernelarg(kernels[kernelId], 1, sizeOf(blockSize)      , @blockSize);       CheckError();
   FErr := clSetKernelarg(kernels[kernelId], 2, sizeOf(delta)          , @delta);           CheckError();
@@ -1235,7 +1379,7 @@ begin
   FErr := clEnqueueNDRangeKernel(
      ActiveQueue, Kernels[kernelId],
      WorkItemDimensions, @GlobalOffsets[0],
-     @GlobalWorkGroupSizes[0], nil{@LocalWorkGroupSizes[0]}
+     @GlobalWorkGroupSizes[0], @LocalWorkGroupSizes[0]
      , length(events), pointer(events), event); CheckError();
 
   {$ifdef USE_TELEMETRY}
@@ -1295,10 +1439,11 @@ begin
   {$endif}
 
   blockSize := N div (nDst * groups);
-  SetGlobalWorkGroupSizes(nDst);
   SetGlobalOffsets(0);
   //NN:=LSize(N);
-  //SetLocalWorkGroupSizes(NN);
+  SetGlobalWorkGroupSizes(nDst*OCL_BLOCK);
+  SetLocalWorkGroupSizes(OCL_BLOCK);
+
   FErr := clSetKernelarg(kernels[kernelId], 0, sizeOf(groups)     , @groups);    CheckError();
   FErr := clSetKernelarg(kernels[kernelId], 1, sizeOf(blocksize)  , @blocksize); CheckError();
   FErr := clSetKernelarg(kernels[kernelId], 2, sizeOf(src1)       , @src1);      CheckError();
@@ -1308,7 +1453,7 @@ begin
   FErr := clEnqueueNDRangeKernel(
      ActiveQueue, Kernels[kernelId],
      WorkItemDimensions, @GlobalOffsets[0],
-     @GlobalWorkGroupSizes[0], nil{@LocalWorkGroupSizes[0]}
+     @GlobalWorkGroupSizes[0], @LocalWorkGroupSizes[0]
      , length(events), pointer(events), event); CheckError();
 
   {$ifdef USE_TELEMETRY}

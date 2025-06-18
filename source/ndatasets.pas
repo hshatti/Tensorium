@@ -90,6 +90,7 @@ end;
 
 constructor TBaseData.Create(const APath: string; ASources: TArray<string>);
 begin
+  FileMode:= fmOpenRead; // no execlusive file open
   FPath := Apath;
   if trim(APath)='' then
     FPath := GetCurrentDir + PathDelim

@@ -52,6 +52,7 @@ type
     ActivationType           : TActivationType;
     id                       : SizeInt;
     isBatchNormalized        : boolean;
+    bnMomentum               : single ;
     backwardStop, forwardOnly: boolean;
     dontLoad, dontLoadScales  : boolean;
     // for batch normalization
@@ -65,7 +66,7 @@ type
     rolling_variance         : TSingleTensor;
     x                        : TSingleTensor;
     x_norm                   : TSingleTensor;
-
+    workspace                : TSingleTensor;
     // for ADAM optimization
     m                        : TSingleTensor;
     v                        : TSingleTensor;
@@ -82,10 +83,11 @@ type
     cost                     : TArray<Single>;
     index                    : SizeInt;
     net                      : TObject;
-    {$ifdef USE_OPENCL}
+    {$if defined(USE_OPENCL) and defined(CL_EVENTS)}
     events                   : TArray<cl_event>;
     ev                       : TArray<cl_int>;
     {$endif}
+    constructor Create(); virtual;
     function getWorkspaceSize():SizeInt; virtual;
     procedure Activate(const offset: SizeInt =0);   virtual;
     procedure Derivative(const offset: SizeInt =0); virtual;
@@ -99,7 +101,7 @@ type
     procedure backward(var state : TNNetState); virtual; abstract;
     procedure update(const args : TUpdateArgs); virtual;
     procedure fuseBatchNorm; virtual;
-    function getWorkspaceShape:TArray<SizeInt>; virtual; abstract;
+    function getWorkspaceShape:TArray<SizeInt>; virtual;
     property train:boolean read FTrain write setTrain;
     property workspaceSize:SizeInt read getWorkspaceSize;
 
@@ -184,9 +186,14 @@ var
 
 
 implementation
-uses typInfo, nChrono;
+uses typInfo, termesc, nChrono;
 
 { TBaseLayer }
+
+constructor TBaseLayer.Create();
+begin
+  bnMomentum:=0.1;
+end;
 
 function TBaseLayer.getWorkspaceSize(): SizeInt;
 begin
@@ -328,6 +335,11 @@ begin
 
 end;
 
+function TBaseLayer.getWorkspaceShape: TArray<SizeInt>;
+begin
+  result:= nil
+end;
+
 procedure TBaseLayer.batchNorm(var state: TNNetState);
 begin
 {$ifdef USE_TELEMETRY}
@@ -345,10 +357,10 @@ begin
 
   if state.isTraining then begin
       output.MeansAndVars(mean, variance);
-      rolling_mean.Multiply(0.9);
-      rolling_mean.axpy(0.1, mean);
-      rolling_variance.Multiply(0.9);
-      rolling_variance.axpy(0.1, variance);
+      rolling_mean.Multiply(1-bnMomentum);
+      rolling_mean.axpy(bnMomentum, mean);
+      rolling_variance.Multiply(1-bnMomentum);
+      rolling_variance.axpy(bnMomentum, variance);
       output.CopyTo(x);
       output.Normalize(mean, variance);
       output.copyTo(x_norm)
@@ -440,7 +452,7 @@ begin
 
     if state.isTraining then begin
         //output.MeansAndVars(mean, variance);
-        ocl.meanAndVars(outputStep, mean.Size(), output.Groups, output.devData, offset, mean.devData, variance.devData);
+        ocl.meansAndVars(outputStep, mean.Size(), output.Groups, output.devData, offset, mean.devData, variance.devData);
 
         //rolling_mean.Multiply(0.9);
         ocl.scale(rolling_mean.size(), 0.9, rolling_mean.devData, 1);
@@ -557,9 +569,10 @@ begin
   outputStep := batch*outputs;
   offset := state.step*outputStep;
 
-  if LayerType = ltBATCHNORM then
-      //state.input.copyTo(output);
+  if LayerType = ltBATCHNORM then begin
       cuda.copy(outputStep, state.input.devData, 0, 1, output.devData, 0, 1);
+//state.input.copyTo(output);
+  end;
 
   //if l.&type = ltCONNECTED then begin
   //    outC := outputs;
@@ -578,21 +591,21 @@ begin
 //mean.printGpuSumSqrDiff();
 //variance.printGpuSumSqrDiff();
 
-      cuda.scale(rolling_mean.size(), 0.9, rolling_mean.devData, 1);
-//rolling_mean.Multiply(0.9);
+      cuda.scale(rolling_mean.size(), 1-bnMomentum, rolling_mean.devData, 1);
+//rolling_mean.Multiply(1- bnMomentum);
 //rolling_mean.printGpuSumSqrDiff();
 
 
-      cuda.axpy(rolling_mean.Size(), 0.1, mean.devData, 0, 1, rolling_mean.devData, 0, 1);
-//rolling_mean.axpy(0.1, mean);
+      cuda.axpy(rolling_mean.Size(), bnMomentum, mean.devData, 0, 1, rolling_mean.devData, 0, 1);
+//rolling_mean.axpy(bnMomentum, mean);
 //rolling_mean.printGpuSumSqrDiff();
 
-      cuda.scale(rolling_variance.Size(), 0.9, rolling_variance.devData, 1);
-//rolling_variance.Multiply(0.9);
+      cuda.scale(rolling_variance.Size(), 1-bnMomentum, rolling_variance.devData, 1);
+//rolling_variance.Multiply(1-bnMomentum);
 //rolling_variance.printGpuSumSqrDiff();
 
-      cuda.axpy(rolling_variance.size(), 0.1, variance.devData, 0, 1, rolling_variance.devData, 0, 1);
-//rolling_variance.axpy(0.1, variance);
+      cuda.axpy(rolling_variance.size(), bnMomentum, variance.devData, 0, 1, rolling_variance.devData, 0, 1);
+//rolling_variance.axpy(bnMomentum, variance);
 //rolling_variance.printGpuSumSqrDiff();
 
       cuda.copy(outputStep, output.devData, offset, 1, x.devData, offset, 1);
@@ -750,61 +763,61 @@ var
   j :TActivationType;
   k :TLayerType;
 begin
-  if not benchmark then exit;
   result :='';
+  if not benchmark then exit;
 
   if (telemetry and TELEMETRY_OPS>0) and (ops.total<>0) then begin
-    result := result + 'Operations :'+ sLineBreak;
+    result := result + 'Operations :' + cursorMove(cmDown, 1)+cursorMove(cmBackward, 12);//+ sLineBreak;
     for i:= low(ops.elapsed) to high(ops.elapsed) do
       if ops.elapsed[i]<>0 then
-        result := result + format('%-15s%10.3f[ms]',[copy(GetEnumName(TypeInfo(TMeasureOps),ord(i)),3), ops.elapsed[i]/uSecPerSec] ) + sLineBreak;
-    result := result + '----------------------------' + sLineBreak;
-    result := result + format('Total          %10.3f[ms]', [ops.total()/uSecPerSec]) + sLineBreak + sLineBreak;
+        result := result + format('%-15s%10.3f[ms]',[copy(GetEnumName(TypeInfo(TMeasureOps),ord(i)),3), ops.elapsed[i]/uSecPerSec] ) + cursorMove(cmDown, 1)+cursorMove(cmBackward, 29);//+ sLineBreak;
+    result := result + '-----------------------------' + cursorMove(cmDown, 1)+cursorMove(cmBackward, 29);//+ sLineBreak;
+    result := result + format('Total          %10.3f[ms]', [ops.total()/uSecPerSec]) + cursorMove(cmDown, 2)+cursorMove(cmBackward, 29);//sLineBreak + sLineBreak;
   end;
 
   if (telemetry and TELEMETRY_ACT>0) and (act.total<>0) then begin
-    result := result + sLineBreak + 'Activations :' + sLineBreak;
+    result := result + cursorMove(cmDown, 2)+{cursorMove(cmBackward, 29) +} 'Activations :'  + cursorMove(cmDown, 1)+cursorMove(cmBackward, 13);//+ sLineBreak;
     for j:= low(act.all) to high(act.all) do
       if act.all[j]<>0 then
-        result := result + format('%-15s%10.3f[ms]',[copy(GetEnumName(TypeInfo(TActivationType),ord(j)),3), act.all[j]/uSecPerSec] ) + sLineBreak;
-    result := result + '----------------------------' + sLineBreak;
-    result := result + format('Total          %10.3f[ms]', [act.total/uSecPerSec]) + sLineBreak + sLineBreak;
+        result := result + format('%-15s%10.3f[ms]',[copy(GetEnumName(TypeInfo(TActivationType),ord(j)),3), act.all[j]/uSecPerSec] ) + cursorMove(cmDown, 1)+cursorMove(cmBackward, 29);//+ sLineBreak;
+    result := result + '-----------------------------' + cursorMove(cmDown, 2)+cursorMove(cmBackward, 29);//+ sLineBreak;
+    result := result + format('Total          %10.3f[ms]', [act.total/uSecPerSec]) + cursorMove(cmDown, 2)+cursorMove(cmBackward, 29);
   end;
 
   if (telemetry and TELEMETRY_FWD>0) and (forward.total<>0) then begin
-    result := result + sLineBreak + 'Forwards :' + sLineBreak;
+    result := result + cursorMove(cmDown, 2)+{cursorMove(cmBackward, 29) +} 'Forwards :' + cursorMove(cmDown, 1)+cursorMove(cmBackward, 10);//+ sLineBreak;
     for k:= low(forward.all) to high(forward.all) do
       if forward.all[k]<>0 then
-        result := result + format('%-15s%10.3f[ms]',[copy(GetEnumName(TypeInfo(TLayerType),ord(k)),3), forward.all[k]/uSecPerSec] ) + sLineBreak;
-    result := result + '----------------------------' + sLineBreak;
-    result := result + format('Total          %10.3f[ms]', [forward.total/uSecPerSec]) + sLineBreak + sLineBreak;
+        result := result + format('%-15s%10.3f[ms]',[copy(GetEnumName(TypeInfo(TLayerType),ord(k)),3), forward.all[k]/uSecPerSec] ) + cursorMove(cmDown, 1)+cursorMove(cmBackward, 29);//+ sLineBreak;
+    result := result + '-----------------------------' + cursorMove(cmDown, 2)+cursorMove(cmBackward, 29);//+ sLineBreak;
+    result := result + format('Total          %10.3f[ms]', [forward.total/uSecPerSec]) + cursorMove(cmDown, 2)+cursorMove(cmBackward, 29);//+ sLineBreak + sLineBreak;
   end;
 
   if (telemetry and TELEMETRY_GRD>0) and (grad.total<>0) then begin
-    result := result + sLineBreak + 'Gradients:' + sLineBreak;
+    result := result + cursorMove(cmDown, 2)+{cursorMove(cmBackward, 29) +} 'Gradients :' + cursorMove(cmDown, 1)+cursorMove(cmBackward, 13);//+ sLineBreak;
     for j:= low(grad.all) to high(grad.all) do
       if grad.all[j]<>0 then
-        result := result + format('%-15s%10.3f[ms]',[copy(GetEnumName(TypeInfo(TActivationType),ord(j)),3), grad.all[j]/uSecPerSec] ) + sLineBreak;
-    result := result + '----------------------------' + sLineBreak;
-    result := result + format('Total          %10.3f[ms]', [grad.total/uSecPerSec]) + sLineBreak + sLineBreak;
+        result := result + format('%-15s%10.3f[ms]',[copy(GetEnumName(TypeInfo(TActivationType),ord(j)),3), grad.all[j]/uSecPerSec] ) + cursorMove(cmDown, 1)+cursorMove(cmBackward, 29);//+ sLineBreak;
+    result := result + '-----------------------------' + cursorMove(cmDown, 1)+cursorMove(cmBackward, 29);//+ sLineBreak;
+    result := result + format('Total          %10.3f[ms]', [grad.total/uSecPerSec]) + cursorMove(cmDown, 2)+cursorMove(cmBackward, 29);//+ sLineBreak + sLineBreak;
   end;
 
   if (telemetry and TELEMETRY_BWD>0) and (backward.total<>0) then begin
-    result := result + sLineBreak + 'Backwards :' + sLineBreak;
+    result := result + cursorMove(cmDown, 2)+{cursorMove(cmBackward, 29) +} 'Backwards :' + cursorMove(cmDown, 1)+cursorMove(cmBackward, 11);//+ sLineBreak;
     for k:= low(backward.all) to high(backward.all) do
       if backward.all[k]<>0 then
-        result := result + format('%-15s%10.3f[ms]',[copy(GetEnumName(TypeInfo(TLayerType),ord(k)),3), backward.all[k]/uSecPerSec] ) + sLineBreak;
-    result := result + '----------------------------' + sLineBreak;
-    result := result + format('Total          %10.3f[ms]', [backward.total/uSecPerSec]) + sLineBreak + sLineBreak;
+        result := result + format('%-15s%10.3f[ms]',[copy(GetEnumName(TypeInfo(TLayerType),ord(k)),3), backward.all[k]/uSecPerSec] ) + cursorMove(cmDown, 1)+cursorMove(cmBackward, 29);//+ sLineBreak;
+    result := result + '-----------------------------' + cursorMove(cmDown, 1)+cursorMove(cmBackward, 29);//+ sLineBreak;
+    result := result + format('Total          %10.3f[ms]', [backward.total/uSecPerSec]) + cursorMove(cmDown, 2)+cursorMove(cmBackward, 29);//+ sLineBreak + sLineBreak;
   end;
 
   if (telemetry and TELEMETRY_UPD>0) and (update.total<>0) then begin
-    result := result + sLineBreak + 'Updats :' + sLineBreak;
+    result := result + cursorMove(cmDown, 2)+{cursorMove(cmBackward, 29) +} 'Updats :' +cursorMove(cmDown, 1)+cursorMove(cmBackward, 8);//+ sLineBreak;
     for k:= low(update.all) to high(update.all) do
       if update.all[k]<>0 then
-        result := result + format('%-15s%10.3f[ms]',[copy(GetEnumName(TypeInfo(TLayerType),ord(k)),3), update.all[k]/uSecPerSec] ) + sLineBreak;
-    result := result + '----------------------------' + sLineBreak;
-    result := result + format('Total          %10.3f[ms]', [update.total/uSecPerSec]) + sLineBreak + sLineBreak;
+        result := result + format('%-15s%10.3f[ms]',[copy(GetEnumName(TypeInfo(TLayerType),ord(k)),3), update.all[k]/uSecPerSec] ) + cursorMove(cmDown, 1)+cursorMove(cmBackward, 29);//+ sLineBreak;
+    result := result + '-----------------------------' + cursorMove(cmDown, 2)+cursorMove(cmBackward, 29);//+ sLineBreak;
+    result := result + format('Total          %10.3f[ms]', [update.total/uSecPerSec]) + cursorMove(cmDown, 2)+cursorMove(cmBackward, 29);//+ sLineBreak + sLineBreak;
   end;
 end;
 

@@ -4,7 +4,9 @@ interface
 uses types, mkl_types;
 {$include mkl.inc}
 
-
+{$if not declared(size_t)}
+type size_t=UIntPtr;
+{$endif}
   {******************************************************************************
   * Copyright 1999-2021 Intel Corporation.
   *

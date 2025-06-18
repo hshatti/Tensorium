@@ -21,7 +21,7 @@ type
      procedure setTrain(ATrain: boolean); override;
      procedure forward(var state: TNNetState); override;
      procedure backward(var state: TNNetState); override;
-  {$ifdef USE_OPENCL}
+  {$if defined(USE_OPENCL) or defined(USE_CUDART)}
      procedure forwardGPU(var state: TNNetState); override;
      procedure backwardGPU(var state: TNNetState); override;
   {$endif}
@@ -120,7 +120,7 @@ begin
 
 end;
 
-{$ifdef USE_OPENCL}
+{$if defined(USE_OPENCL)}
 procedure TCostLayer.forwardGPU(var state: TNNetState);
 var t:TSingleTensor; nans:TSizeIntTensor;
     i:SizeInt;
@@ -214,6 +214,102 @@ begin
   if benchmark then metrics.backward.finish(layerType);
   {$endif}
 end;
+{$elseif defined(USE_CUDART)}
+procedure TCostLayer.forwardGPU(var state: TNNetState);
+var t:TSingleTensor; nans:TSizeIntTensor;
+    i:SizeInt;
+begin
+  {$ifdef USE_TELEMETRY}
+  if benchmark then metrics.forward.start(layerType);
+  {$endif}
+  if assigned(state.truth.Data) then begin
+    output.setCUDA();
+    delta.setCUDA;
+    cuda.costL2(output.Size(), state.input.devData, state.truth.devData, delta.devData, output.devData);
+    output.pullFromDevice;
+    if length(output.findNaNs)>0 then begin
+      cursorClearScreen;
+      writeln('cost error : NaN');
+      with TNNet(state.net) do
+          for i:=0 to high(layers) do begin
+              writeln('Layer ', layers[i].LayerTypeStr, ' [', i,'] :');
+              if layers[i].Weights.size()>0 then begin
+                layers[i].weights.pullFromDevice;
+                nans := layers[i].weights.findNaNs;
+                if nans.Size()>0 then
+                    WriteLn('  weights #of NaNs : ', nans.size());
+                layers[i].biases.pullFromDevice;
+                nans := layers[i].biases.findNaNs;
+                if nans.Size()>0 then
+                    WriteLn('  biases #of NaNs : ', nans.size());
+              end;
+              if i=0 then begin
+                input.pullFromDevice;
+                nans := input.findNaNs;
+                if nans.Size()>0 then
+                    WriteLn('  input #of NaNs : ', nans.size());
+                truth.pullFromDevice;
+                nans := truth.findNaNs;
+                if nans.Size()>0 then
+                    WriteLn('  truth #of NaNs : ', nans.size());
+              end;
+              layers[i].output.pullFromDevice;
+              nans := layers[i].output.findNaNs;
+              if nans.Size()>0 then
+                  WriteLn('  output #of NaNs : ', nans.size());
+              layers[i].delta.pullFromDevice;
+              nans := layers[i].delta.findNaNs;
+              if nans.Size()>0 then
+                  WriteLn('  delta #of NaNs : ', nans.size());
+
+              if layers[i].isBatchNormalized then begin
+                  layers[i].mean.pullFromDevice;
+                  nans := layers[i].mean.findNaNs;
+                  if nans.Size()>0 then
+                      WriteLn('  mean #of NaNs : ', nans.size());
+                  layers[i].variance.pullFromDevice;
+                  nans := layers[i].variance.findNaNs;
+                  if nans.Size()>0 then
+                      WriteLn('  varience #of NaNs : ', nans.size());
+                  layers[i].x.pullFromDevice;
+                  nans := layers[i].x.findNaNs;
+                  if nans.Size()>0 then
+                      WriteLn('  x #of NaNs : ', nans.size());
+                  layers[i].x_norm.pullFromDevice;
+                  nans := layers[i].x_norm.findNaNs;
+                  if nans.Size()>0 then
+                      WriteLn('  x_norm #of NaNs : ', nans.size());
+                  layers[i].mean_delta.pullFromDevice;
+                  nans := layers[i].mean_delta.findNaNs;
+                  if nans.Size()>0 then
+                      WriteLn('  mean_delta #of NaNs : ', nans.size());
+                  layers[i].variance_delta.pullFromDevice;
+                  nans := layers[i].variance_delta.findNaNs;
+                  if nans.Size()>0 then
+                      WriteLn('  varience_delta #of NaNs : ', nans.size());
+              end;
+          end;
+      readln
+    end;
+    cost[0] := output.sum();
+  end;
+  {$ifdef USE_TELEMETRY}
+  if benchmark then metrics.forward.finish(layerType);
+  {$endif}
+end;
+
+procedure TCostLayer.backwardGPU(var state: TNNetState);
+begin
+  {$ifdef USE_TELEMETRY}
+  if benchmark then metrics.backward.start(layerType);
+  {$endif}
+  cuda.axpy(delta.size(), scale, delta.devData, 0, 1, state.Delta.devData, 0, 1);
+  {$ifdef USE_TELEMETRY}
+  if benchmark then metrics.backward.finish(layerType);
+  {$endif}
+end;
+
+
 {$endif}
 
 class procedure TCostLayer.l1_cpu(const pred, truth: TSingleTensor; var delta, error: TSingleTensor);

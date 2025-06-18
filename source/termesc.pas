@@ -90,7 +90,7 @@ function setBackColor(const r,g,b:byte):ansistring;
 function setGray(const brightness:byte):ansistring;
 function setBackGray(const brightness:byte):ansistring;
 function setCursorPos(const x, y:integer):ansistring;
-
+procedure resetModes();
 function setFont(font : byte):ansistring;
 
 procedure curserUp(const count: integer=1);
@@ -188,6 +188,11 @@ end;
 function setBackColor(const r, g, b: byte): ansistring;
 begin
   result := #$1B'[48;2;'+intToStr(r)+';'+intToStr(g)+';'+intToStr(b)+'m';
+end;
+
+procedure resetModes;
+begin
+  write(resetAllModes);
 end;
 
 function setFont(font: byte): ansistring;

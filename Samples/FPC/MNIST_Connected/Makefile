@@ -4,14 +4,14 @@
 default: all
 
 # enable intel's SIMD
-USE_AVX2=1
+USE_AVX2=0
 
 #thread pooling
 USE_STEROIDS=0
 USE_OPENBLAS=0
 USE_TELEMETRY=0
 USE_MKL=0
-USE_OPENCL=1
+USE_OPENCL=0
 CLBLASTCONV=0
 
 FPC=fpc

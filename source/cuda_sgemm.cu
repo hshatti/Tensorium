@@ -81,6 +81,9 @@ __kernel void mandel(__global uchar *buf, const int w, const int h){
 }
 */
 
+#ifndef BLOCK
+#define BLOCK 512
+#endif
 
   //     K          N          N
   //   [...]      [...]      [...]
@@ -499,7 +502,7 @@ extern "C" __global__ void activate_array(const long N, nfloat* x, long const of
             //softmax_activate(N, x);
             //break
           default:
-            if (i==0) printf("[Activation] %d: not Implemented\n", (int)a);
+            //if (i==0) printf("[Activation] %d: not Implemented\n", (int)a);
 
       }
    //printf("%ld, ", i);
@@ -712,7 +715,7 @@ extern "C" __global__ void gradient_array(const long N, nfloat* x, long const of
     //   case acNORM_CHAN_SOFTMAX_MAXVAL:
     //
         default:
-            if (i==0) printf("[Gradient] : not Implemented %d\n", (int)a);
+            //if (i==0) printf("[Gradient] : not Implemented %d\n", (int)a);
 
     }
 
@@ -1278,8 +1281,8 @@ extern "C" __global__ void upsample(const long N, const long M, const long K,
    const long x = blockDim.z * blockIdx.z + threadIdx.z;
    if (x>=K) return;
 
-   const long h = blockDim.y * gridDim.y/stride; // but why multiplying by stride (look at setWorkgroupSizes) and then dividing by it in the loop??
-   const long w = blockDim.z * gridDim.z/stride; // but why multiplying by stride (look at setWorkgroupSizes) and then dividing by it in the loop??
+   const long h = M/stride; //blockDim.y * gridDim.y/stride; // but why multiplying by stride (look at setWorkgroupSizes) and then dividing by it in the loop??
+   const long w = K/stride; //blockDim.z * gridDim.z/stride; // but why multiplying by stride (look at setWorkgroupSizes) and then dividing by it in the loop??
 
    const long in_index   = (c*h + (y / stride))*w + x / stride;
    const long out_index  = (c*h*stride + y)*stride*w + x;   // <-- why having to adjust by stride instead of remving it !!!
@@ -1528,23 +1531,114 @@ extern "C" __global__ void forward_scale_add(
     output[i + outputOffset] = output[i + outputOffset]*scale[f] + bias[f];
 }
 
-#define RANDOM_MAX 1024u
-__device__ unsigned int rand(const unsigned int seed){
-  //ulong res = ((seed + get_global_linear_id()) * 0x5DEECE66DL + 0xBL) & ((1L << 48) - 1);
-  //return (res >> 16) % RAND_MAX;
-  //      uint x = seed + get_global_linear_id();
-        unsigned int x = seed + blockDim.x * blockIdx.x + threadIdx.x;
-        x ^= x << 13;
-	x ^= x >> 17;
-	x ^= x << 5;
-	return x % RANDOM_MAX;
+
+//  Pseudorandom number generators
+// https://en.wikipedia.org/wiki/Mersenne_Twister
+
+#define NR 624
+#define MR 397
+#define wR 32
+#define RR 31
+#define UMASK (0xffffffffUL << RR)
+#define LMASK (0xffffffffUL >> (wR-RR))
+#define AR 0x9908b0dfUL
+#define UR 11
+#define SR 7
+#define TR 15
+#define LR 18
+#define BR 0x9d2c5680UL
+#define CR 0xefc60000UL
+#define FR 1812433253UL
+//typedef unsigned long long uint64_t;
+//typedef unsigned long uint32_t;
+
+typedef struct
+{
+    unsigned int state_array[NR];         // the array for the state vector
+    int state_index;                 // index into state vector array, 0 <= state_index <= NR-1   always
+} mt_state;
+
+
+__device__ void init_mt(mt_state* state, unsigned int seed)
+{
+    unsigned int* state_array = &(state->state_array[0]);
+
+    state_array[0] = seed;                          // suggested initial seed = 19650218UL
+
+    for (int i=1; i<NR; i++)
+    {
+        seed = FR * (seed ^ (seed >> (wR-2))) + i;    // Knuth TAOCP Vol2. 3rd Ed. P.106 for multiplier.
+        state_array[i] = seed;
+    }
+
+    state->state_index = 0;
 }
+
+
+__device__ unsigned int rand_mt(mt_state* state)
+{
+    unsigned int* state_array = &(state->state_array[0]);
+
+    int k = state->state_index;      // point to current state location
+                                     // 0 <= state_index <= NR-1   always
+
+//  int k = k - NR;                   // point to state NR iterations before
+//  if (k < 0) k += NR;               // modulo NR circular indexing
+                                     // the previous 2 lines actually do nothing
+                                     //  for illustration only
+
+    int j = k - (NR-1);               // point to state NR-1 iterations before
+    if (j < 0) j += NR;               // modulo NR circular indexing
+
+    unsigned int x = (state_array[k] & UMASK) | (state_array[j] & LMASK);
+
+    unsigned int xA = x >> 1;
+    if (x & 0x00000001UL) xA ^= AR;
+
+    j = k - (NR-MR);                   // point to state NR-MR iterations before
+    if (j < 0) j += NR;               // modulo NR circular indexing
+
+    x = state_array[j] ^ xA;         // compute next value in the state
+    state_array[k++] = x;            // update new state value
+
+    if (k >= NR) k = 0;               // modulo NR circular indexing
+    state->state_index = k;
+
+    unsigned int y = x ^ (x >> UR);       // tempering
+             y = y ^ ((y << SR) & BR);
+             y = y ^ ((y << TR) & CR);
+    unsigned int z = y ^ (y >> LR);
+
+    return z;
+}
+
+
+
+#define RANDOM_MAX 0xffffffffull
+
+// https://en.wikipedia.org/wiki/Xorshift
+__device__ unsigned long long rand_xorshift(const unsigned long long seed){
+  //ulong res = ((seed + get_global_linear_id()) * 0x5DEECE66DL + 0xBL) & ((1L << 48) - 1);
+  //return (res >> 16) % RANDOM_MAX;
+  //      uint x = seed + get_global_linear_id();
+    unsigned long long x = seed;
+    x ^= x >> 12;
+    x ^= x << 25;
+    x ^= x >> 27;
+    x *= 0x2545F4914F6CDD1DULL;
+    //seed = x;
+    return x%RANDOM_MAX;
+}
+
 
 extern "C" __global__ void forward_dropout(const long N, const unsigned int seed, const nfloat probability, const nfloat scale, const nfloat* src, nfloat* rnd, nfloat* dst)
 {
   long i  = blockDim.x * blockIdx.x + threadIdx.x;
-  if (i>N) return;
-  rnd[i]  = rand(seed);
+  if (i>=N) return;
+  //mt_state state;
+  //init_mt(&state, seed + i);
+  //rnd[i]  = rand_mt(&state);
+  rnd[i]  = rand_xorshift(seed+i);
   rnd[i] /= RANDOM_MAX;
   dst[i]  = rnd[i] < probability? 0: src[i]*scale;
 
@@ -1553,7 +1647,7 @@ extern "C" __global__ void forward_dropout(const long N, const unsigned int seed
 extern "C" __global__ void backward_dropout(const long N, const nfloat probability, const nfloat scale, const nfloat* src, const nfloat* rnd, nfloat* dst)
 {
   long i = blockDim.x * blockIdx.x + threadIdx.x;
-  if (i>N) return;
+  if (i>=N) return;
   dst[i] = rnd[i] < probability? 0: src[i]*scale;
 
 }
@@ -1582,9 +1676,10 @@ extern "C" __global__ void fmav(  nfloat* src1, const long src1Offset, const lon
    dst[i*incd + dstOffset] = src1[i*inca + src1Offset] * src2[i*incb + src2Offset] + src3[i*incc + src3Offset];
 }
 
-extern "C" __global__ void power( nfloat* base, const long srcOffset, const long srcStride, const nfloat expo,  nfloat* dst, const long dstOffset, const long dstStride){
+extern "C" __global__ void power(const long N, nfloat* base, const long srcOffset, const long srcStride, const nfloat expo,  nfloat* dst, const long dstOffset, const long dstStride){
 
    const long i = blockDim.x * blockIdx.x + threadIdx.x;
+   if(i>=N) return;
    dst[i*dstStride + dstOffset] = pow(base[i*srcStride + srcOffset], expo);
 }
 //extern "C" __global__ void halftest( half* a,  half* b, __global half* c){
@@ -1658,18 +1753,18 @@ extern "C" __global__ void means_vars_delta_fast(
 
     __shared__ float local[BLOCK];
 
-    int id = threadIdx.x;
+    long id = threadIdx.x;
     local[id] = 0;
 
-    int filter = blockIdx.x;
+    long filter = blockIdx.x;
 
     x     += offset;
     delta += offset;
 
-    int i, j;
+    long i, j;
     for(j = 0; j < groups; ++j){
         for(i = 0; i < blocksize; i += BLOCK){
-            int index = j*blocksize*N + filter*blocksize + i + id;
+            long index = j*blocksize*N + filter*blocksize + i + id;
             local[id] += (i+id < blocksize) ? delta[index] : 0;
         }
     }
@@ -1684,9 +1779,12 @@ extern "C" __global__ void means_vars_delta_fast(
     }
 
     __syncthreads();
+
+    local[id] = 0;
+
     for(j = 0; j < groups; ++j){
         for(i = 0; i < blocksize; i += BLOCK){
-            int index = j*blocksize*N + filter*blocksize + i + id;
+            long index = j*blocksize*N + filter*blocksize + i + id;
 
             local[id] += (i+id < blocksize) ? delta[index]*(x[index] - means[filter]) : 0;
         }

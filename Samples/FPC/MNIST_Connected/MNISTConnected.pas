@@ -6,13 +6,13 @@ uses
   {$IFDEF UNIX}
   cthreads,
   {$ENDIF}
-  SysUtils, steroids, ntensors, ntypes, nDatasets, nConnectedlayer, nLogisticLayer,
-  nSoftmaxLayer, nCostLayer, nnet, nChrono, nModels, nActivation, keyboard
+  SysUtils, steroids, ntensors, nOpMetrics, nBaseLayer, ntypes, nDatasets, nConnectedlayer, nLogisticLayer,
+  nSoftmaxLayer, nCostLayer, nnet, nChrono, nModels, nActivation, termesc, keyboard
   { you can add units after this };
 
 const
   READ_BATCH   : SizeInt = 32;
-  READ_MEASURE : SizeInt = 128;
+  READ_MEASURE : SizeInt = 64;
   READ_TEST    : SizeInt = 4;
 var
   Neural:TNNet;
@@ -50,7 +50,12 @@ begin
   MNIST := TMNISTData.Create('');
   Neural:=TNNet.Create(
     //leNetMNIST
-    simpleDenseMNIST
+    //simpleDenseMNIST
+    [
+      TFeedForwardLayer.Create(1, 1, 28*28, 32, 4, 64, acRELU),
+      TConnectedLayer.Create(1, 1, 32   , 10, acLINEAR),
+      TSoftmaxLayer.Create(1, 10)
+    ]
   );
   Neural.setTraining(true);
   Neural.batch:= READ_BATCH;
@@ -79,6 +84,8 @@ begin
   output := Neural.output();
   actual := Data.Y;
   initKeyboard();
+  benchmark := true;
+  metrics.reset;
   while true do begin
 
     //i := random(MNIST.DATA_COUNT div READ_BATCH);
@@ -124,12 +131,17 @@ begin
       write(sLineBreak, 'Predicted :', #$1b'[11D', #$1B'[B');
       //Predicted.print();
       coor := output.print(psGray);
-      write(sLineBreak, #$1B'['+intToStr(coor[1]+2)+'A', #$1B'['+intToStr(40)+'C', 'Truth :', #$1b'[7D'#$1B'[B');
+
+      write(sLineBreak, #$1B'['+intToStr(coor[1]+2)+'A', #$1B'['+intToStr(40)+'C', 'Truth :', #$1'[7D'#$1B'[B');
       //truth.print();
       coor := actual.print(psGray);
       writeln(#$B'[',coor[1],'B');
-      history.plot();
-
+      coor := history.plot();
+      {$if defined(USE_TELEMETRY)}
+      cursorAbsPos(60, 25);
+      writeln(metrics.print(TELEMETRY_OPS));
+      metrics.reset;
+      {$endif}
       costDelta := cost;
       cost := 0;
       truth.fill(0);

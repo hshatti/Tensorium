@@ -4,18 +4,20 @@
 default: all
 
 # enable intel's SIMD
-USE_AVX2=1
+USE_AVX2=0
 
 #thread pooling
-USE_STEROIDS=0
+USE_STEROIDS=1
 USE_TELEMETRY=0
-USE_OPENBLAS=1
+USE_OPENBLAS=0
 USE_MKL=0
 USE_OPENCL=0
+USE_CUDART=1
 CLBLASTCONV=0
+DEBUG=0
 
 FPC=fpc
-UNITS =../../../source
+UNITS =-Fu../../../source
 OUTLIB=lib
 INCLIB=
 SRC=CIFAR10Conv
@@ -36,16 +38,23 @@ DEL=rm -rf
 MKD=mkdir -p
 endif
 
+ifeq ($(DEBUG),1)
+OPT+=-g -gv -O1
+else
+OPT+=-pg -O4 -CX -Scghi -Xs -XX 
+endif
+
 ifeq ($(USE_AVX2),1)
-FLAGS=-dUSE_AVX2 -CfAVX2
+FLAGS+=-dUSE_AVX2 -CfAVX2
 endif
 
 ifeq ($(USE_STEROIDS),1)
-FLAGS+=-dUSE_MULTITHREADING
+FLAGS +=-dUSE_MULTITHREADING
 endif
 
 ifeq ($(USE_OPENBLAS),1)
-FLAGS+=-dUSE_OPENBLAS
+FLAGS +=-dUSE_OPENBLAS
+UNITS +=-Fu../../../source/3rdparty/openblas/source
 endif
 
 ifeq ($(USE_TELEMETRY),1)
@@ -55,25 +64,24 @@ endif
 # use intel's Math Kernel Library (intel oneAPI must be installed and it's dlls must exisits)
 ifeq ($(USE_MKL),1)
 FLAGS+=-dUSE_MKL
+UNITS +=-Fu../../../source/3rdparty/oneAPI/mkl/source
 endif
 
 ifeq ($(USE_OPENCL),1)
 FLAGS+=-dUSE_OPENCL
+UNITS+=-Fu../../../source/3rdparty/clblast/source
 endif
 
-ifeq ($(USE_CUDA),1)
-FLAGS+=-dUSE_CUDA
-endif
-
-ifeq ($(CLBLASTCONV),1)
-FLAGS+=-dCLBLASTCONV
+ifeq ($(USE_CUDART),1)
+FLAGS+=-dUSE_CUDART
+UNITS+=-Fu../../../source/3rdparty/cuda/source
 endif
 
 
 all: 
 	@$(MKD) $(OUTLIB)
-	$(FPC) -v0 -O4 -CX -Scghi -Xs -XX -Fu$(UNITS) -Fi$(INCLIB) -FU$(OUTLIB) $(FLAGS) $(SRC)$(SRC_EXT)
+	$(FPC) -v0 $(OPT) $(UNITS) $(INCLIB) -FU$(OUTLIB) $(FLAGS) $(SRC)$(SRC_EXT)
 	@echo done!, now try running $(SRC)$(EXE_EXT) executable.
 
 clean: 
-	@$(DEL) lib/ *.o *.a *.ppu *.exe $(SRC)
+	@$(DEL) lib/ *.o *.a *.ppu *.exe link*.res $(SRC)

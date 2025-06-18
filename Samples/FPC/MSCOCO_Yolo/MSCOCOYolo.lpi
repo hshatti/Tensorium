@@ -53,8 +53,10 @@
 -OpCOREAVX2
 -dUSE_AVX2
 -dUSE_MULTITHREADING
--dBIG_MATRECIES"/>
-            <OtherDefines Count="11">
+-dUSE_TELEMETRY
+-dBIG_MATRECIES
+-dUSE_CUDART"/>
+            <OtherDefines Count="12">
               <Define0 Value="USE_AVX2"/>
               <Define1 Value="USE_MULTITHREADING"/>
               <Define2 Value="USE_OPENBLAS"/>
@@ -66,6 +68,7 @@
               <Define8 Value="BIG_MATRECIES"/>
               <Define9 Value="CL_BLAST"/>
               <Define10 Value="USE_NVBLAS"/>
+              <Define11 Value="USE_CUDART"/>
             </OtherDefines>
           </Other>
         </CompilerOptions>
@@ -130,8 +133,9 @@
 -dUSE_AVX2
 -dUSE_MULTITHREADING
 -dUSE_TELEMETRY
--dBIG_MATRECIES"/>
-      <OtherDefines Count="11">
+-dBIG_MATRECIES
+-dUSE_CUDART"/>
+      <OtherDefines Count="12">
         <Define0 Value="USE_AVX2"/>
         <Define1 Value="USE_MULTITHREADING"/>
         <Define2 Value="USE_OPENBLAS"/>
@@ -143,6 +147,7 @@
         <Define8 Value="BIG_MATRECIES"/>
         <Define9 Value="CL_BLAST"/>
         <Define10 Value="USE_NVBLAS"/>
+        <Define11 Value="USE_CUDART"/>
       </OtherDefines>
     </Other>
   </CompilerOptions>

@@ -131,6 +131,10 @@ nfloat rssv(const long N, const nfloat mean, __global const nfloat* src, const l
   return sum;
 }
 
+nfloat sqr(const nfloat x){
+  return x*x;
+}
+
 //#define VW 8
 //nfloat sumv_simd(const long N, __global nfloat* v){
 //  float8 sum4 = 0;
@@ -736,7 +740,7 @@ __kernel void gradient_array(__global nfloat* x, long const offset, const Activa
 
 }
 
-#define BLOCK 512
+// #define BLOCK 512
 __kernel void backward_bias(__global nfloat* dst, const long blockSize, __global nfloat* src, const long srcOffset, const long batch)
 {
     //const long filter = get_group_id(0);
@@ -886,7 +890,7 @@ __kernel void forward_maxpool(
       indexes[out_index] = max_i;
 }
 
-__kernel void backwardMaxPool( __global nfloat* output, __global const long* indexes, __global const nfloat* delta){
+__kernel void backward_maxpool( __global nfloat* output, __global const long* indexes, __global const nfloat* delta){
         const long i = get_global_id(0);
         const long j = get_global_id(1);
         const long id = i*get_global_size(1) + j;
@@ -1260,35 +1264,87 @@ __kernel void fmavss(__global nfloat* src, const long offset, const nfloat scala
 
 __kernel void means_vars(const long blocksize, const long groups, __global nfloat* src, const long offset, __global nfloat* means, __global nfloat* vars){
 
-    nfloat m = 0;
-    nfloat v = 0;
-    const long i = get_global_id(0);
-    const long N = get_global_size(0);
-    const long S = groups*blocksize;
+    local float buf[BLOCK];
+    const long N  = get_num_groups(0);
+    const long id = get_local_id(0);//threadIdx.x;
+    long filter = get_group_id(0);//blockIdx.x;
+
+    buf[id] = 0;
+
     src += offset;
-    // take a shortcut
-    if(blocksize==1){
-      m = sumv(groups, src+i, N);
-      m /= S;
-      v = rssv(groups, m, src+i, N);
-      means[i] = m;
-      vars[i]  = v / (S-1);
-      return;
+    long i, j;
+
+    for(j = 0; j < groups; ++j){
+        for(i = 0; i < blocksize; i += BLOCK){
+            long index = j*blocksize*N + filter*blocksize + i + id;
+            buf[id] += (i+id < blocksize) ? src[index] : 0;
+        }
+    }
+    //__syncthreads();
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    if(id == 0){
+        float mean_tmp = 0;
+        for(i = 0; i < BLOCK; ++i){
+            mean_tmp += buf[i];
+        }
+        mean_tmp /= blocksize * groups;
+        means[filter] = mean_tmp;
     }
 
-    #pragma unroll
-    for (long b=0; b<groups; b++){
-        const long idx = (i + b*N)*blocksize;
-        m += sumv(blocksize, src + idx, 1);
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    //src += offset;
+    //long i, j;
+    buf[id] = 0;
+    for(j = 0; j < groups; ++j){
+        for(i = 0; i < blocksize; i += BLOCK){
+            long index = j*blocksize*N + filter*blocksize + i + id;
+            //buf[id] += (i+id < blocksize) ? pow((src[index] - means[filter]), 2.0f) : 0; // pow will not work always when -use_fast_math compiler switch
+            buf[id] += (i+id < blocksize) ? sqr(src[index] - means[filter]) : 0;
+        }
     }
-    m /= S;
-    #pragma unroll
-    for (long b=0; b<groups; b++){
-        const long idx = (i + b*N)*blocksize;
-        v += rssv(blocksize, m, src + idx, 1);
+    //__syncthreads();
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    if(id == 0){
+        float variance_tmp = 0;
+        for(i = 0; i < BLOCK; ++i){
+            variance_tmp += buf[i];
+        }
+        variance_tmp /= (blocksize * groups);
+        vars[filter] = variance_tmp;
     }
-    means[i] = m;
-    vars[i]  = v / (S-1);
+
+    //nfloat m = 0;
+    //nfloat v = 0;
+    //const long i = get_global_id(0);
+    //const long N = get_global_size(0);
+    //const long S = groups*blocksize;
+    //src += offset;
+    //// take a shortcut
+    //if(blocksize==1){
+    //  m = sumv(groups, src+i, N);
+    //  m /= S;
+    //  v = rssv(groups, m, src+i, N);
+    //  means[i] = m;
+    //  vars[i]  = v / (S-1);
+    //  return;
+    //}
+    //
+    //#pragma unroll
+    //for (long b=0; b<groups; b++){
+    //    const long idx = (i + b*N)*blocksize;
+    //    m += sumv(blocksize, src + idx, 1);
+    //}
+    //m /= S;
+    //#pragma unroll
+    //for (long b=0; b<groups; b++){
+    //    const long idx = (i + b*N)*blocksize;
+    //    v += rssv(blocksize, m, src + idx, 1);
+    //}
+    //means[i] = m;
+    //vars[i]  = v / (S-1);
 }
 
 __kernel void normvv(__global nfloat* mean, const long mean_stride, __global nfloat* variance, const long variance_stride, __global nfloat* dst, const long dst_stride)
@@ -1321,36 +1377,83 @@ __kernel void means_vars_delta(const long groups, const long blocksize,
          __global nfloat* means, __global nfloat* vars,
          __global nfloat* means_delta, __global nfloat* vars_delta){
 
-  nfloat m = 0;
-  nfloat v = 0;
-  const long i = get_global_id(0);
-  const long ndst = get_global_size(0);
+  local float buf[BLOCK];
+
+  const long N = get_num_groups(0);
+  long id = get_local_id(0);
+  long filter = get_group_id(0);
+
+  buf[id] = 0;
+
+
   x     += offset;
   delta += offset;
-  // take a shortcut
-  if(blocksize==1){
-    #pragma unroll
-    for (long j=0 ;j<groups; j++){
-      const long index = i+j*ndst;
-      m += delta[index];
-      v += delta[index] * (x[index] - means[i]);
-    }
-    means_delta[i] = m * (-1.0f / sqrt(fmax(vars[i], sEPSILON)));
-    vars_delta[i]  = v * -0.5f * pow(fmax(vars[i], sEPSILON), -1.5f);
-    return;
+
+  long i, j;
+  for(j = 0; j < groups; ++j){
+      for(i = 0; i < blocksize; i += BLOCK){
+          long index = j*blocksize*N + filter*blocksize + i + id;
+          buf[id] += (i+id < blocksize) ? delta[index] : 0;
+      }
   }
-  #pragma unroll
-  for (long j=0 ;j<groups; j++)
-    #pragma unroll
-    for (long k=0; k<blocksize; k++){
-      const long index = (i + j*ndst)*blocksize + k;
-      m += delta[index];
-      v += delta[index] * (x[index] - means[i]);
-    }
-  means_delta[i] = m * (-1.0f / sqrt(fmax(vars[i], sEPSILON)));
-  vars_delta[i]  = v * -0.5f * pow(fmax(vars[i], sEPSILON), -1.5f);
-  //means_delta[i] = m * (-1.0f / sqrt(vars[i]));
-  //vars_delta[i]  = v * -0.5f / (vars[i]*sqrt(vars[i]));
+  barrier(CLK_LOCAL_MEM_FENCE);
+  if(id == 0){
+      means_delta[filter] = 0;
+      for(i = 0; i < BLOCK; ++i){
+          means_delta[filter] += buf[i];
+      }
+      means_delta[filter] *= (-1.0f/sqrt(max(vars[filter] , sEPSILON)));
+  }
+
+  barrier(CLK_LOCAL_MEM_FENCE);
+
+  buf[id] = 0;
+  for(j = 0; j < groups; ++j){
+      for(i = 0; i < blocksize; i += BLOCK){
+          long index = j*blocksize*N + filter*blocksize + i + id;
+
+          buf[id] += (i+id < blocksize) ? delta[index]*(x[index] - means[filter]) : 0;
+      }
+  }
+  barrier(CLK_LOCAL_MEM_FENCE);
+  if(id == 0){
+      vars_delta[filter] = 0;
+      for(i = 0; i < BLOCK; ++i){
+          vars_delta[filter] += buf[i];
+      }
+      vars_delta[filter] *= -0.5f * pow(max(vars[filter] , sEPSILON), -1.5f);
+  }
+
+  //nfloat m = 0;
+  //nfloat v = 0;
+  //const long i = get_global_id(0);
+  //const long ndst = get_global_size(0);
+  //x     += offset;
+  //delta += offset;
+  //// take a shortcut
+  //if(blocksize==1){
+  //  #pragma unroll
+  //  for (long j=0 ;j<groups; j++){
+  //    const long index = i+j*ndst;
+  //    m += delta[index];
+  //    v += delta[index] * (x[index] - means[i]);
+  //  }
+  //  means_delta[i] = m * (-1.0f / sqrt(fmax(vars[i], sEPSILON)));
+  //  vars_delta[i]  = v * -0.5f * pow(fmax(vars[i], sEPSILON), -1.5f);
+  //  return;
+  //}
+  //#pragma unroll
+  //for (long j=0 ;j<groups; j++)
+  //  #pragma unroll
+  //  for (long k=0; k<blocksize; k++){
+  //    const long index = (i + j*ndst)*blocksize + k;
+  //    m += delta[index];
+  //    v += delta[index] * (x[index] - means[i]);
+  //  }
+  //means_delta[i] = m * (-1.0f / sqrt(fmax(vars[i], sEPSILON)));
+  //vars_delta[i]  = v * -0.5f * pow(fmax(vars[i], sEPSILON), -1.5f);
+  ////means_delta[i] = m * (-1.0f / sqrt(vars[i]));
+  ////vars_delta[i]  = v * -0.5f / (vars[i]*sqrt(vars[i]));
 
 }
 
@@ -1375,26 +1478,50 @@ __kernel void norm_delta(__global nfloat* x, const long offset, __global nfloat*
 
 __kernel void add_dots(const long groups, const long blocksize, __global nfloat* src1, __global nfloat* src2, const long srcOffset, __global nfloat* dst){
 
-    const long i = get_global_id(0);
-    const long ndst = get_global_size(0);
-    nfloat sum = 0;
+    const long filter = get_group_id(0);
+    const long p = get_local_id(0);
+    const long N = get_num_groups(0);
+
+    local float part[BLOCK];
     src1 += srcOffset;
     src2 += srcOffset;
-    // take a shortcut
-    if (blocksize==1){
-      sum = dotv(groups, src1 + i, ndst, src2 + i, ndst);
-      dst[i] += sum;
-      return;
+
+    long i,b;
+    float sum = 0;
+    for(b = 0; b < groups; ++b){
+        for(i = 0; i < blocksize; i += BLOCK){
+            int index = p + i + blocksize*(filter + N*b);
+            sum += (p+i < blocksize) ? src1[index]*src2[index] : 0;
+        }
     }
-    #pragma unroll
-    for (long b=0; b<groups; b++){
-      const long idx = (i + b * ndst) * blocksize;
-      sum += dotv(blocksize, src1 + idx, 1, src2 + idx, 1);
+    part[p] = sum;
+
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    if (p == 0) {
+        for(i = 0; i < BLOCK; ++i) dst[filter] += part[i];
     }
-    dst[i] += sum;
+
+    //const long i = get_global_id(0);
+    //const long ndst = get_global_size(0);
+    //nfloat sum = 0;
+    //src1 += srcOffset;
+    //src2 += srcOffset;
+    //// take a shortcut
+    //if (blocksize==1){
+    //  sum = dotv(groups, src1 + i, ndst, src2 + i, ndst);
+    //  dst[i] += sum;
+    //  return;
+    //}
+    //#pragma unroll
+    //for (long b=0; b<groups; b++){
+    //  const long idx = (i + b * ndst) * blocksize;
+    //  sum += dotv(blocksize, src1 + idx, 1, src2 + idx, 1);
+    //}
+    //dst[i] += sum;
 }
 
-__kernel void forward_scale(const int reshape, __global nfloat* a,  const long aOffset, __global nfloat* b, const long bOffset, const long incb)
+__kernel void forward_scale(const int reshape, __global nfloat* output,  const long outputOffset, __global nfloat* scale, const long scaleOffset, const long incb)
 {
   long N, blockSize, i, k, j;
   switch (reshape) {
@@ -1419,11 +1546,11 @@ __kernel void forward_scale(const int reshape, __global nfloat* a,  const long a
   //}
   //for (i = 0; i<N; i++)
   //  for (k = 0; k<batch; k++){
-  a += (k*N + i)*blockSize + aOffset;
-  nfloat bb = b[i * incb];
+  output += (k*N + i)*blockSize + outputOffset;
+  nfloat bb = scale[i * incb];
   //#pragma unroll 8
   //    for (long j=0; j<blockSize; j++)
-        a[j] *= bb;
+        output[j] *= bb;
   //}
 }
 
