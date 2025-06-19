@@ -503,7 +503,7 @@ extern "C" __global__ void activate_array(const long N, nfloat* x, long const of
             //break
           default:
             //if (i==0) printf("[Activation] %d: not Implemented\n", (int)a);
-
+	    ;
       }
    //printf("%ld, ", i);
 
@@ -716,7 +716,7 @@ extern "C" __global__ void gradient_array(const long N, nfloat* x, long const of
     //
         default:
             //if (i==0) printf("[Gradient] : not Implemented %d\n", (int)a);
-
+	    ;
     }
 
 }
@@ -1368,6 +1368,8 @@ extern "C" __global__ void normblkvv( const long M, const long N, const long K,
   const long b = blockDim.z * blockIdx.z + threadIdx.z; // batch batch pos
   long j = blockDim.y * blockIdx.y + threadIdx.y;
   if (i>=M || j>=N || b>=K) return;
+  if (i==0 && j==0 && b==0)
+    printf("[GPU] Normalize...");
 
   j += b*batchsize + i*blocksize + offset; // block pos
   const nfloat v = sqrt(max(vars[i*vars_stride], sEPSILON));

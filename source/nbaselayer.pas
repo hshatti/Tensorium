@@ -571,7 +571,9 @@ begin
 
   if LayerType = ltBATCHNORM then begin
       cuda.copy(outputStep, state.input.devData, 0, 1, output.devData, 0, 1);
-//state.input.copyTo(output);
+{$ifdef DEBUG_GPU}
+state.input.copyTo(output);
+{$endif}
   end;
 
   //if l.&type = ltCONNECTED then begin
@@ -587,42 +589,58 @@ begin
       //cuda.meansAndVars(outputStep, mean.Size(), output.Groups, output.devData, offset, mean.devData, variance.devData);
       cuda.means(outputStep, mean.Size(), output.Groups, output.devData, offset, mean.devData);
       cuda.variances(outputStep, mean.Size(), output.Groups, output.devData, offset, mean.devData, variance.devData);
-//output.MeansAndVars(mean, variance);
-//mean.printGpuSumSqrDiff();
-//variance.printGpuSumSqrDiff();
-
+{$ifdef DEBUG_GPU}
+output.MeansAndVars(mean, variance);
+mean.printGpuSumSqrDiff();
+variance.printGpuSumSqrDiff();
+{$endif}
       cuda.scale(rolling_mean.size(), 1-bnMomentum, rolling_mean.devData, 1);
-//rolling_mean.Multiply(1- bnMomentum);
-//rolling_mean.printGpuSumSqrDiff();
-
+{$ifdef DEBUG_GPU}
+rolling_mean.Multiply(1- bnMomentum);
+rolling_mean.printGpuSumSqrDiff();
+{$endif}
 
       cuda.axpy(rolling_mean.Size(), bnMomentum, mean.devData, 0, 1, rolling_mean.devData, 0, 1);
-//rolling_mean.axpy(bnMomentum, mean);
-//rolling_mean.printGpuSumSqrDiff();
+{$ifdef DEBUG_GPU}
+rolling_mean.axpy(bnMomentum, mean);
+rolling_mean.printGpuSumSqrDiff();
+{$endif}
 
       cuda.scale(rolling_variance.Size(), 1-bnMomentum, rolling_variance.devData, 1);
-//rolling_variance.Multiply(1-bnMomentum);
-//rolling_variance.printGpuSumSqrDiff();
+{$ifdef DEBUG_GPU}
+rolling_variance.Multiply(1-bnMomentum);
+rolling_variance.printGpuSumSqrDiff();
+{$endif}
 
       cuda.axpy(rolling_variance.size(), bnMomentum, variance.devData, 0, 1, rolling_variance.devData, 0, 1);
-//rolling_variance.axpy(bnMomentum, variance);
-//rolling_variance.printGpuSumSqrDiff();
+{$ifdef DEBUG_GPU}
+rolling_variance.axpy(bnMomentum, variance);
+rolling_variance.printGpuSumSqrDiff();
+{$endif}
 
       cuda.copy(outputStep, output.devData, offset, 1, x.devData, offset, 1);
-//output.CopyTo(x);
-//x.printGpuSumSqrDiff();
+{$ifdef DEBUG_GPU}
+output.CopyTo(x);
+x.printGpuSumSqrDiff();
+{$endif}
 
       cuda.normalize(mean.Size(), outputStep, output.groups, mean.devData, 1, variance.devData, 1, output.devData, offset);
-//output.Normalize(mean, variance);
-//output.printGpuSumSqrDiff();
+{$ifdef DEBUG_GPU}
+output.Normalize(mean, variance);
+output.printGpuSumSqrDiff();
+{$endif}
 
-      cuda.copy(outputStep, output.devData, offset, 1, x_norm.devData ,offset, 1);
-//output.copyTo(x_norm) ;
-//x_norm.printGpuSumSqrDiff();
+        cuda.copy(outputStep, output.devData, offset, 1, x_norm.devData ,offset, 1);
+{$ifdef DEBUG_GPU}
+output.copyTo(x_norm) ;
+x_norm.printGpuSumSqrDiff();
+{$endif}
   end else begin
       cuda.normalize(rolling_mean.Size(), outputStep, output.Groups, rolling_mean.devData, 1, rolling_variance.devData, 1, output.devData, 0);
-//output.Normalize(rolling_mean, rolling_variance);
-//output.printGpuSumSqrDiff();
+{$ifdef DEBUG_GPU}
+output.Normalize(rolling_mean, rolling_variance);
+output.printGpuSumSqrDiff();
+{$endif}
   end;
 
 
@@ -630,14 +648,15 @@ begin
   //cuda.forwardScaleAdd(outputStep, output.devData, offset, scales.size(), scales.devData, biases.devData, 1, output.groups);
   cuda.forwardScale(outputStep, output.devData, offset, scales.size(), scales.devData, 1, output.groups);
   cuda.forwardBias(outputStep, output.devData, offset, biases.size(), biases.devData, 1, output.groups);
-//output.forwardScale(scales);
-//output.forwardBias(biases);
-
-//output.printGpuSumSqrDiff();
-//mean.printGpuSumSqrDiff();
-//variance.printGpuSumSqrDiff();
-//x.printGpuSumSqrDiff();
-//x_norm.printGpuSumSqrDiff();
+{$ifdef DEBUG_GPU}
+output.forwardScale(scales);
+output.forwardBias(biases);
+output.printGpuSumSqrDiff();
+mean.printGpuSumSqrDiff();
+variance.printGpuSumSqrDiff();
+x.printGpuSumSqrDiff();
+x_norm.printGpuSumSqrDiff();
+{$endif}
 
 
 
@@ -669,21 +688,29 @@ begin
   offset := state.step*outputStep;
 
   cuda.addDots(outputStep, scale_updates.Size(), delta.groups, x_norm.devData, delta.devData, offset, scale_updates.devData);
-//scale_updates.addDots(x_norm, delta, offset, outputStep);
-//scale_updates.printGpuSumSqrDiff();
+{$ifdef DEBUG_GPU}
+scale_updates.addDots(x_norm, delta, offset, outputStep);
+scale_updates.printGpuSumSqrDiff();
+{$endif}
 
   cuda.forwardScale(outputStep, delta.devData, offset, scales.Size(), scales.devData, 1, delta.groups);
-//delta.forwardScale(scales, offset, outputStep);
-//delta.printGpuSumSqrDiff();
+{$ifdef DEBUG_GPU}
+delta.forwardScale(scales, offset, outputStep);
+delta.printGpuSumSqrDiff();
+{$endif}
 
   cuda.meansAndVarsDelta(outputStep, mean.size(), delta.groups, delta.devData, x.devData, offset, mean.devData, variance.devData, mean_delta.devData, variance_delta.devData);
-//TSingleTensor.MeansAndVarsDelta(delta, x, mean, variance, mean_delta, variance_delta, offset);
-//mean_delta.printGpuSumSqrDiff();
-//variance_delta.printGpuSumSqrDiff();
+{$ifdef DEBUG_GPU}
+TSingleTensor.MeansAndVarsDelta(delta, x, mean, variance, mean_delta, variance_delta, offset);
+mean_delta.printGpuSumSqrDiff();
+variance_delta.printGpuSumSqrDiff();
+{$endif}
 
   cuda.normalizeDelta(outputStep, mean.size(), delta.groups, delta.devData, x.devData, offset, mean.devData, variance.devData, mean_delta.devData, variance_delta.devData);
-//TSingleTensor.normalizeDelta(x, mean, variance, mean_delta, variance_delta, delta, offset);
-//delta.printGpuSumSqrDiff();
+{$ifdef DEBUG_GPU}
+TSingleTensor.normalizeDelta(x, mean, variance, mean_delta, variance_delta, delta, offset);
+delta.printGpuSumSqrDiff();
+{$endif}
 
   if layerType = ltBATCHNORM then
     cuda.copy(outputStep, delta.devData, 0, 1, state.delta^.devData, 0, 1);

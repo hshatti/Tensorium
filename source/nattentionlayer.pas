@@ -268,18 +268,18 @@ initialization
   //t1.resize([4, 5, 6]);
   //t1.Fill(0,1);
   //t1.print();
-  t1.resize([1000, 1000, 3]);
-  mandel(t1.data, 1000, 1000);
-  t2 := t1.permute([1, 2, 0]); // HxWxC => CxHxX
-  t2.printStat();
-  t2.print(0.1);
+  //t1.resize([1000, 1000, 3]);
+  //mandel(t1.data, 1000, 1000);
+  //t2 := t1.permute([1, 2, 0]); // HxWxC => CxHxX
+  //t2.printStat();
+  //t2.print(0.1);
   //t1.toSingles(t3.data);
   //t3.printStat();
   //t3.print(0.1, true);
-  t := GetTickCount64;
-  printSixel(t1.data, 1000, 1000);
-  writeln('done in [', (getTickCount64()-t)/1000:1:3,']ms');
-  readln
+  //t := GetTickCount64;
+  //printSixel(t1.data, 1000, 1000);
+  //writeln('done in [', (getTickCount64()-t)/1000:1:3,']ms');
+  //readln
 
 
   //sDigits:=3; sSeparator:=', ';

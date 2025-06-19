@@ -57,9 +57,9 @@ interface
    //const libcuda='cudart64_12.dll';
    const libcuda='nvcuda.dll';
 {$elseif defined(MACOS) or defined(DARWIN)}
-   const libcuda= 'libcuda.dylib'
-{$elseif devined(LINUX)}
-   const libcuda= 'libcuda.so'
+   const libcuda= 'libcuda.dylib';
+{$elseif defined(LINUX)}
+   const libcuda= 'libcuda.so'   ;
 {$endif}
 
 

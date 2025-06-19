@@ -2414,7 +2414,7 @@ begin
 
   if (TransA = CblasNoTrans) and (TransB = CblasNoTrans) then
     // todo fast_gemm is disabled, not 100% accurate!
-    {$if defined(BIG_MATRECIES)}
+    {$if defined(CPUX64) and $defined(BIG_MATRECIES)}
     // optimized for big matrecies! it will perform close to openblas speed, [CAUSION] : unstable with small matrecies!
     if AVX2Support then
       gemm_nn_fast(M, N, K, ALPHA, A, lda, B, ldb, C, ldc)
@@ -6183,9 +6183,11 @@ begin
   if not assigned(cuda) then
   begin
     cuda := TNNCuda.Create(deviceIndex);
-    if FileExists(CUBIN_FILE) then
-      cuda.loadCUBinFile(CUBIN_FILE)
-    else
+    //if FileExists(CUBIN_FILE) then
+    //  cuda.loadCUBinFile(CUBIN_FILE)
+    //else if FileExists(GetCurrentDir + '/../../../source/'+CUBIN_FILE) then
+    //  cuda.loadCUBinFile(GetCurrentDir + '/../../../source/'+CUBIN_FILE)
+    //else
       cuda.loadCUBIN(cuda.compileFile(GetCurrentDir + '/../../../source/cuda_sgemm.cu'));
   end;
 end;
@@ -10818,9 +10820,11 @@ end;
 
 procedure TTensor<T>.printGpuSumSqrDiff(N: SizeInt; const offset: SizeInt);
 var tmp : TTensor<T>;
+  m,v:T;
 begin
   pullFromDevice(tmp, N, offset);
-  writeLn('[Host, Device] sumOfSqrDiff : ', toStr(sumSqrDiff(tmp.data, N, 1, 1, offset)))
+  meanAndVar(m, v);
+  writeLn('[Host, Device] mean/stdDev [', toStr(m), '/', toStr(v), '] sumOfSqrDiff : ', toStr(sumSqrDiff(tmp.data, N, 1, 1, offset)))
 
 end;
 
@@ -11680,7 +11684,7 @@ begin
   ow := (_w + 2 * padWidth - (dilationX * (kernelWidth - 1) + 1)) div strideX + 1;
   oh := (_h + 2 * padHeight - (dilationy * (kernelHeight - 1) + 1)) div stridey + 1;
   colSize := _c * oh * ow * kernelWidth * kernelHeight;
-  if not assigned(dst.Data) then
+  if {not assigned(dst.Data) or }(dst.size() < groups*_c*kernelHeight*kernelWidth*oh*ow) then
     dst.resize([groups, _c, kernelHeight * kernelWidth, oh, ow], groups);
   assert(colSize <= dst.Size(), '[im2col], Invalid destination tensor size.');
 

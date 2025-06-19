@@ -24,6 +24,7 @@
             <Filename Value="CIFAR10Conv"/>
           </Target>
           <SearchPaths>
+            <IncludeFiles Value="$(ProjOutDir)"/>
             <OtherUnitFiles Value="..\..\..\source;..\..\..\source\3rdparty\cuda\source;..\..\..\source\3rdparty\clblast\source;..\..\..\source\3rdparty\oneAPI\mkl\source;..\..\..\source\3rdparty\openblas\source"/>
             <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
@@ -49,13 +50,12 @@
             <LinkSmart Value="True"/>
           </Linking>
           <Other>
-            <CustomOptions Value="-CfAVX2
--OpCOREAVX2
--dUSE_AVX2
--dUSE_MKL
+            <CustomOptions Value="-CfVFP
+-dUSE_OPENBLAS
 -dUSE_MULTITHREADING
+-dUSE_TELEMETRY
 -dBIG_MATRECIES"/>
-            <OtherDefines Count="9">
+            <OtherDefines Count="10">
               <Define0 Value="USE_OPENCL"/>
               <Define1 Value="USE_AVX2"/>
               <Define2 Value="USE_OPENBLAS"/>
@@ -65,6 +65,7 @@
               <Define6 Value="BIG_MATRECIES"/>
               <Define7 Value="USE_CUDNN"/>
               <Define8 Value="USE_CUDART"/>
+              <Define9 Value="USE_CUDA"/>
             </OtherDefines>
           </Other>
         </CompilerOptions>
@@ -162,14 +163,14 @@
       </Debugging>
     </Linking>
     <Other>
-      <CustomOptions Value="-CfAVX2
--OpCOREAVX2
--dUSE_AVX2
--dUSE_MKL
+      <CustomOptions Value="-CfVFP
 -dUSE_MULTITHREADING
+-dUSE_TELEMETRY
 -dBIG_MATRECIES
--dUSE_CUDART"/>
-      <OtherDefines Count="9">
+-dUSE_CUDART
+-dUSE_CUDA
+-dDEBUG_GPU"/>
+      <OtherDefines Count="10">
         <Define0 Value="USE_OPENCL"/>
         <Define1 Value="USE_AVX2"/>
         <Define2 Value="USE_OPENBLAS"/>
@@ -179,6 +180,7 @@
         <Define6 Value="BIG_MATRECIES"/>
         <Define7 Value="USE_CUDNN"/>
         <Define8 Value="USE_CUDART"/>
+        <Define9 Value="USE_CUDA"/>
       </OtherDefines>
     </Other>
   </CompilerOptions>
