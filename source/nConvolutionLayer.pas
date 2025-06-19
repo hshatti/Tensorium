@@ -1015,6 +1015,7 @@ begin
   imColSize := c * kSize * outImgSize;
   _C := output.devData;
   strideC := outImgSize * filters;
+
   if (kSize <> 1) or (Stride_y * Stride_x <> 1) or (Dilation * Dilation <> 1) then begin
     strideA := state.input.volume();
     strideB := imColSize;
@@ -1043,20 +1044,28 @@ begin
 
   end;
 
+//output.im2Col(kernelSize, kernelSize, Padding, Padding, stride_x, stride_y, Dilation, Dilation, state.workspace);
+//state.workspace.printGpuSumSqrDiff();
+
   //cuda.WriteBuffer(workSpacesDev,     batch*sizeOf(pointer), Pointer(workSpaces));
   //cuda.WriteBuffer(batchesOutDev,     batch*sizeOf(pointer), Pointer(batchesOut));
   //cuda.WriteBuffer(batchesWeightsDev, batch*sizeOf(pointer), Pointer(batchesWeights));
   //cuda.gemmBatched(false, false, filters, outImgSize, k, 1, ppsingle(batchesWeightsDev), 0, k, ppsingle(workspacesDev), 0, outImgSize, 0, ppsingle(batchesOutDev), 0, outImgSize, batch);
   cuda.gemmStridedBatched(false, false, filters, outImgSize, k, 1, weights.devData, 0,k, 0, _B, 0, outImgSize, strideB, 0, _C, 0, outImgSize, strideC, batch);
 
-//state.input.Conv2D(weights, output, Padding, Padding, stride_x, stride_y, Dilation, Dilation);
-//output.printGpuSumSqrDiff();
+//TSingleTensor.gemmStridedBatched(CblasRowMajor, CblasNoTrans, CblasNoTrans, filters, outImgSize, k, 1, weights.Data, k, 0, state.workspace.Data, outImgSize, strideB, 0, output.Data, outImgSize, strideC, batch);
+{$ifdef DEBUG_GPU}
+state.input.Conv2D(weights, output, Padding, Padding, stride_x, stride_y, Dilation, Dilation);
+output.printGpuSumSqrDiff();
+{$endif}
 
   if isBatchNormalized then
     batchNormGPU(state)
   else begin
     cuda.forwardBias(output.Size(), output.devData, 0, biases.size(), biases.devData,1, Batch);
-//output.forwardBias(biases);
+{$ifdef DEBUG_GPU}
+output.forwardBias(biases);
+{$endif}
   end;
 
   {$ifdef USE_TELEMETRY}
@@ -1083,7 +1092,10 @@ begin
   cuda.finish();
   if benchmark then metrics.act.finish(ActivationType);
   {$endif}
-//Activate();
+
+{$ifdef DEBUG_GPU}
+Activate();
+{$endif}
 
   if (assistedExcitation<>0) and state.isTraining then
       assistedForward(state);
@@ -1096,8 +1108,11 @@ begin
       cuda.copy(output.Size(), inputLayer.output.devData, 0, 1, output.devData, 0, 1);
   end;
 
-//write(LayerTypeStr,' ');
-//output.printGpuSumSqrDiff();
+{$ifdef DEBUG_GPU}
+write(LayerTypeStr,' ');
+output.printGpuSumSqrDiff();
+{$endif}
+
   {$ifdef USE_TELEMETRY}
   cuda.finish();
   if benchmark then metrics.forward.finish(layerType);
@@ -1136,13 +1151,19 @@ begin
     else
       cuda.DeriveArray(output.size(), output.devData, 0, longint(ActivationType), delta.devData);
   end;
-//Derivative();
-//delta.printGpuSumSqrDiff();
+
+{$ifdef DEBUG_GPU}
+Derivative();
+delta.printGpuSumSqrDiff();
+{$endif}
+
   if isBatchNormalized then
     batchNormBackGPU(state)
   else begin
     cuda.backwardBias(bias_updates.size(), bias_updates.devData, delta.size, delta.devData, 0, 1, batch);
-//bias_updates.addSums(delta);
+{$ifdef DEBUG_GPU}
+bias_updates.addSums(delta);
+{$endif}
   end;
 
   state.workspace.setCUDA;
@@ -1150,7 +1171,10 @@ begin
     cuda.im2col(c, h, w, kernelSize, kernelSize, Padding, Padding,
       stride_y, stride_x, dilation, dilation, state.input.devData , b*_vol, state.workspace.devData, b*colSize);
   end;
-//state.input.im2Col(kernelSize, kernelSize, padding * dilation, padding * dilation, stride_y, stride_x, dilation, dilation, state.workspace, 1);
+
+{$ifdef DEBUG_GPU}
+state.input.im2Col(kernelSize, kernelSize, padding * dilation, padding * dilation, stride_y, stride_x, dilation, dilation, state.workspace, 1);
+{$endif}
 
   if not weight_updates.wasGPU() then weight_updates.pushToDevice;
 
@@ -1169,11 +1193,13 @@ begin
           , 1, weight_updates.devData, 0, i_n, 0, batch);
 
 
-//for b:= 0 to batch -1 do
-//TSingleTensor.gemm(CblasRowMajor, CblasNoTrans, CblasTrans, i_m, i_n, i_k, 1
-//, delta.data + b*i_m*i_k, i_k
-//, state.workspace.data + b*ColSize, i_k
-//, 1, weight_updates.data, i_n);
+{$ifdef DEBUG_GPU}
+for b:= 0 to batch -1 do
+TSingleTensor.gemm(CblasRowMajor, CblasNoTrans, CblasTrans, i_m, i_n, i_k, 1
+, delta.data + b*i_m*i_k, i_k
+, state.workspace.data + b*ColSize, i_k
+, 1, weight_updates.data, i_n);
+{$endif}
 
   if assigned(state.delta) and assigned(state.delta.devdata) then begin
     if not weights.wasGPU() then weights.pushToDevice;
@@ -1193,27 +1219,33 @@ begin
         , delta.devData, 0, i_k, i_m*i_k
         , 0, state.workspace.devData, 0, i_k, colSize, batch);
 
-//for b := 0 to batch -1 do begin
-//    TSingleTensor.gemm(
-//      CblasRowMajor, CblasTrans, CblasNoTrans, i_n, i_k, i_m, 1
-//      , weights.Data, i_n
-//      , delta.Data + b * i_m * i_k, i_k
-//      , 0, state.workspace.data + b*colSize, i_k);
-//end;
-
+{$ifdef DEBUG_GPU}
+for b := 0 to batch -1 do begin
+    TSingleTensor.gemm(
+      CblasRowMajor, CblasTrans, CblasNoTrans, i_n, i_k, i_m, 1
+      , weights.Data, i_n
+      , delta.Data + b * i_m * i_k, i_k
+      , 0, state.workspace.data + b*colSize, i_k);
+end;
+{$endif}
 
     imSize := state.delta.Volume();
     for b := 0 to batch-1 do begin
       cuda.col2im(state.delta.c, state.delta.h, state.delta.w, kernelSize, kernelSize, Padding, Padding
               , stride_y, stride_x, dilation, dilation, state.workspace.devData, b*colSize, state.delta.devData, b*imSize);
     end;
-//state.delta.col2Im(kernelSize, kernelSize, padding*Dilation, padding*Dilation, stride_x, stride_y, dilation, dilation, state.workspace);
 
+{$ifdef DEBUG_GPU}
+state.delta.col2Im(kernelSize, kernelSize, padding*Dilation, padding*Dilation, stride_x, stride_y, dilation, dilation, state.workspace);
+{$endif}
   end ;
 
-//bias_updates.printGpuSumSqrDiff();
-//weight_updates.printGpuSumSqrDiff();
-//state.delta.printGpuSumSqrDiff();
+{$ifdef DEBUG_GPU}
+bias_updates.printGpuSumSqrDiff();
+weight_updates.printGpuSumSqrDiff();
+state.delta.printGpuSumSqrDiff();
+{$endif}
+
   {$ifdef USE_TELEMETRY}
   cuda.finish();
   if benchmark then metrics.backward.finish(layerType);

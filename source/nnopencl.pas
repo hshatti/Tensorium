@@ -1,7 +1,9 @@
 unit nnOpenCL;
 {$ifdef FPC}
   {$mode Delphi}
+  {$if defined(CPUX64) or defined(CPUX32)}
   {$asmmode intel}
+   {$endif}
 {$endif}
 
 interface
@@ -15,6 +17,8 @@ uses
   , OpenCLHelper
   {$ifndef FPC}
   , windows
+  {$else}
+  , dl
   {$endif}
 
 {$ifdef USE_TELEMETRY}
@@ -363,12 +367,12 @@ end;
 var hLib : {$if defined(MSWINDOWS)}HMODULE {$else}Pointer{$endif};
     {$if defined(MSWINDOWS)}
       {$ifdef FPC}
-      getProc : function(Lib : HMODULE; const ProcName : AnsiString):pointer;
+      getProc : function(Lib : HMODULE; const ProcName : AnsiString):pointer;WINAPI;
       {$else}
       getProc : function (hModule: HMODULE; lpProcName: LPCSTR): FARPROC; winapi;
       {$endif}
     {$else}
-      getProc : function(h :pointer; name:PAnsiChar):pointer;
+      getProc : function(h :pointer; name:PAnsiChar):pointer;WINAPI;
     {$endif}
 
 

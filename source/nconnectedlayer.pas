@@ -640,10 +640,12 @@ begin
     , 0.0, output.devData  , offset, outputs
   );
 
-//TSingleTensor.gemm(CblasRowMajor, CblasNoTrans, CblasTrans, batch, outputs, inputs, 1
-//  , state.input^.Data + state.inputStep*inputStep, inputs
-//  , weights.Data, inputs
-//  , 0, output.data + offset, outputs);
+{$ifdef DEBUG_GPU}
+TSingleTensor.gemm(CblasRowMajor, CblasNoTrans, CblasTrans, batch, outputs, inputs, 1
+  , state.input^.Data + state.inputStep*inputStep, inputs
+  , weights.Data, inputs
+  , 0, output.data + offset, outputs);
+{$endif}
 
   if isBatchNormalized then begin
       {$ifdef USE_TELEMETRY}
@@ -658,41 +660,71 @@ begin
           cuda.means(outputStep, mean.Size(), output.Groups, output.devData, offset, mean.devData);
           cuda.variances(outputStep, mean.Size(), output.Groups, output.devData, offset, mean.devData, variance.devData);
 
-//output.MeansAndVars(mean, variance, offset, outputStep);
+{$ifdef DEBUG_GPU}
+output.MeansAndVars(mean, variance, offset, outputStep);
+{$endif}
 
           cuda.scale(rolling_mean.size(), 1-bnMomentum, rolling_mean.devData, 1);
-//rolling_mean.Multiply(1-bnMomentum);
+{$ifdef DEBUG_GPU}
+rolling_mean.Multiply(1-bnMomentum);
+{$endif}
+
           cuda.axpy(rolling_mean.Size(), bnMomentum, mean.devData, 0, 1, rolling_mean.devData, 0, 1);
-//rolling_mean.axpy(bnMomentum, mean);
+{$ifdef DEBUG_GPU}
+rolling_mean.axpy(bnMomentum, mean);
+{$endif}
+
           cuda.scale(rolling_variance.Size(), 1-bnMomentum, rolling_variance.devData, 1);
-//rolling_variance.Multiply(1-bnMomentum);
+{$ifdef DEBUG_GPU}
+rolling_variance.Multiply(1-bnMomentum);
+{$endif}
+
           cuda.axpy(rolling_variance.size(), bnMomentum, variance.devData, 0, 1, rolling_variance.devData, 0, 1);
-//rolling_variance.axpy(bnMomentum, variance);
+{$ifdef DEBUG_GPU}
+rolling_variance.axpy(bnMomentum, variance);
+{$endif}
+
           cuda.copy(outputStep, output.devData, offset, 1, x.devData, offset, 1);
-//output.CopyTo(x, offset, 1, offset, 1, outputStep);
+{$ifdef DEBUG_GPU}
+output.CopyTo(x, offset, 1, offset, 1, outputStep);
+{$endif}
+
           cuda.normalize(mean.Size(), outputStep, output.groups, mean.devData, 1, variance.devData, 1, output.devData, offset);
-//output.Normalize(mean, variance, offset, outputStep);
+{$ifdef DEBUG_GPU}
+output.Normalize(mean, variance, offset, outputStep);
+{$endif}
           cuda.copy(outputStep, output.devData, offset, 1, x_norm.devData, offset, 1);
-//output.copyTo(x_norm, offset, 1, offset, 1, outputStep) ;
+{$ifdef DEBUG_GPU}
+output.copyTo(x_norm, offset, 1, offset, 1, outputStep) ;
+{$endif}
+
       end else begin
           cuda.normalize(rolling_mean.Size(), outputStep, output.Groups, rolling_mean.devData, 1, rolling_variance.devData, 1, output.devData, offset);
-//output.Normalize(rolling_mean, rolling_variance, offset, outputStep);
+{$ifdef DEBUG_GPU}
+output.Normalize(rolling_mean, rolling_variance, offset, outputStep);
+{$endif}
       end;
       cuda.forwardScaleAdd(outputStep, output.devData, offset, scales.size(), scales.devData, biases.devData, 1, output.Groups);
-//output.forwardScale(scales, offset, outputStep);
-//output.forwardBias(biases, offset, outputStep);
+{$ifdef DEBUG_GPU}
+output.forwardScale(scales, offset, outputStep);
+output.forwardBias(biases, offset, outputStep);
+{$endif}
       {$ifdef USE_TELEMETRY}
       cuda.finish();
       if benchmark then metrics.forward.finish(ltBATCHNORM);
       {$endif}
   end else begin
     cuda.forwardBias(outputStep, output.devData, offset, biases.size(), biases.devData, 1, output.groups);
-//output.forwardBias(biases, offset, outputStep);
+{$ifdef DEBUG_GPU}
+output.forwardBias(biases, offset, outputStep);
+{$endif}
   end;
 
   cuda.ActivateArray(outputStep, output.devData, offset, longint(ActivationType));
-//activate();
-//output.printGpuSumSqrDiff();
+{$ifdef DEBUG_GPU}
+activate();
+output.printGpuSumSqrDiff();
+{$endif}
   {$ifdef USE_TELEMETRY}
   if benchmark
      //and not metrics.forward.isSubPropagation()
@@ -729,13 +761,17 @@ begin
 
   cuda.DeriveArray(outStepSize, output.devData, outOffset, longint(ActivationType), delta.devData);
 
-//Derivative(outOffset);
-//output.printGpuSumSqrDiff();
-//delta.printGpuSumSqrDiff();
+{$ifdef DEBUG_GPU}
+Derivative(outOffset);
+output.printGpuSumSqrDiff();
+delta.printGpuSumSqrDiff();
+{$endif}
 
   cuda.backwardBias(bias_updates.size(), bias_updates.devData, outStepSize, delta.devData, outOffset, 1, batch);
-//bias_updates.addSums(delta, outOffset, outStepSize);
-//bias_updates.printGpuSumSqrDiff();
+{$ifdef DEBUG_GPU}
+bias_updates.addSums(delta, outOffset, outStepSize);
+bias_updates.printGpuSumSqrDiff();
+{$endif}
 
   if isBatchNormalized {and (batch > 1)} then begin
       {$ifdef USE_TELEMETRY}
@@ -743,21 +779,29 @@ begin
       {$endif}
 
       cuda.addDots(outStepSize, scale_updates.Size(), delta.groups, x_norm.devData, delta.devData, outOffset, scale_updates.devData);
-//scale_updates.addDots(x_norm, delta);
-//x_norm.printGpuSumSqrDiff();
+{$ifdef DEBUG_GPU}
+scale_updates.addDots(x_norm, delta);
+x_norm.printGpuSumSqrDiff();
+{$endif}
 
       cuda.forwardScale(outStepSize, delta.devData, outOffset, scales.Size(), scales.devData, 1, delta.groups);
-//delta.add(scales);
-//delta.printGpuSumSqrDiff();
+{$ifdef DEBUG_GPU}
+delta.add(scales);
+delta.printGpuSumSqrDiff();
+{$endif}
 
       cuda.meansAndVarsDelta(outStepSize, mean.size(), delta.groups, delta.devData, x.devData, outOffset, mean.devData, variance.devData, mean_delta.devData, variance_delta.devData);
-//TSingleTensor.MeansAndVarsDelta(delta, x, mean, variance, mean_delta, variance_delta);
-//mean_delta.printGpuSumSqrDiff();
-//variance_delta.printGpuSumSqrDiff();
+{$ifdef DEBUG_GPU}
+TSingleTensor.MeansAndVarsDelta(delta, x, mean, variance, mean_delta, variance_delta);
+mean_delta.printGpuSumSqrDiff();
+variance_delta.printGpuSumSqrDiff();
+{$endif}
 
       cuda.normalizeDelta(outStepSize, mean.size(), delta.groups, delta.devData, x.devData, outOffset, mean.devData, variance.devData, mean_delta.devData, variance_delta.devData);
-//TSingleTensor.normalizeDelta(x, mean, variance, mean_delta, variance_delta, delta);
-//delta.printGpuSumSqrDiff();
+{$ifdef DEBUG_GPU}
+TSingleTensor.normalizeDelta(x, mean, variance, mean_delta, variance_delta, delta);
+delta.printGpuSumSqrDiff();
+{$endif}
 
       {$ifdef USE_TELEMETRY}
       cuda.finish();
@@ -773,10 +817,12 @@ begin
     , 1, weight_updates.devData, 0, inputs
     );
 
-//TSingleTensor.gemm(CblasRowMajor, CblasTrans, CblasNoTrans, outputs, inputs, batch, 1
-//  , delta.Data + outOffset, outputs
-//  , state.input^.Data + state.inputStep*inStepSize, inputs
-//  , 1, weight_updates.Data, inputs);
+{$ifdef DEBUG_GPU}
+TSingleTensor.gemm(CblasRowMajor, CblasTrans, CblasNoTrans, outputs, inputs, batch, 1
+  , delta.Data + outOffset, outputs
+  , state.input^.Data + state.inputStep*inStepSize, inputs
+  , 1, weight_updates.Data, inputs);
+{$endif}
 
   if assigned(state.delta) and assigned(state.delta^.devData) then begin
       assert(state.delta.size() >= (state.deltaStep + 1)*inStepSize, '[TConnectedLayer.backwardGPU] inputStep out of range!');
@@ -790,16 +836,19 @@ begin
           , 1, state.delta.devData, state.deltaStep*inStepSize, inputs
           );
 
-//TSingleTensor.gemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, batch, inputs, outputs, 1
-//  , delta.Data + outOffset, outputs
-//  , weights.Data, inputs
-//  , 1, state.delta^.Data + state.deltaStep*inStepSize, inputs);
-
+{$ifdef DEBUG_GPU}
+TSingleTensor.gemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, batch, inputs, outputs, 1
+  , delta.Data + outOffset, outputs
+  , weights.Data, inputs
+  , 1, state.delta^.Data + state.deltaStep*inStepSize, inputs);
+{$endif}
   end ;
 
-//bias_updates.printGpuSumSqrDiff();
-//weight_updates.printGpuSumSqrDiff();
-//state.delta^.printGpuSumSqrDiff();
+{$ifdef DEBUG_GPU}
+bias_updates.printGpuSumSqrDiff();
+weight_updates.printGpuSumSqrDiff();
+state.delta^.printGpuSumSqrDiff();
+{$endif}
 
   {$ifdef USE_TELEMETRY}
   if benchmark

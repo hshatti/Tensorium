@@ -10,7 +10,14 @@ unit nnCuda;
 interface
 
 uses
-  SysUtils, cudart, cudarttypes, cublas_api, nvrtc, nOpMetrics;
+  SysUtils,
+
+  cudart, cudarttypes,
+  {$if defined(USE_CUDA)}
+  cudaTypes, cuda,
+  {$endif}
+  cublas_api, nvrtc, nOpMetrics;
+
 
 type
   TCUMem = pointer;
@@ -27,24 +34,59 @@ type
 
   TNNCuda = class
   private
-    FJitOptions : TArray<cudaJitOption>;
     FJitOptionsValues : TArray<pointer>;
-    FLibOptions : TArray<cudaLibraryOption>;
     FLibOptionsValues : TArray<pointer>;
+    {$if defined(USE_CUDA)}
+    FKernels : TArray<CUKernel>;
+    FJitOptions : TArray<CUjit_option>;
+    FLibOptions : TArray<CULibraryOption>;
+    function GetjitOptions(jo: CUjit_option): pointer;
+    function GetlibraryOptions(lo: CUlibraryOption): pointer;
+    procedure SetjitOptions(jo: CUjit_option; AValue: pointer);
+    procedure SetlibraryOptions(lo: CUlibraryOption; AValue: pointer);
+    {$else}
     FKernels : TArray<cudaKernel_t>;
+    FJitOptions : TArray<cudaJitOption>;
+    FLibOptions : TArray<cudaLibraryOption>;
     function GetjitOptions(jo: cudaJitOption): pointer;
     function GetlibraryOptions(lo: cudaLibraryOption): pointer;
     procedure SetjitOptions(jo: cudaJitOption; AValue: pointer);
     procedure SetlibraryOptions(lo: cudaLibraryOption; AValue: pointer);
+    {$endif}
+    {$if defined(USE_CUDA)}
+    class function cudaLibraryLoadData(&library : PCUlibrary ; const code : pointer ; jitOptions : PCUjit_option ; jitOptionsValues : PPointer ; numJitOptions : longword ; libraryOptions : PCUlibraryOption ; libraryOptionValues : PPointer; numLibraryOptions : longword):CUresult; static;
+    class function cudaLibraryLoadFromFile(&library : PCUlibrary; const fileName:pchar; jitOptions : PCUjit_option; jitOptionsValues : PPointer; numJitOptions: longword ; libraryOptions : PCUlibraryOption ; libraryOptionValues : PPointer; numLibraryOptions : longword):CUresult; static;
+    class function cudaLibraryGetKernel(pKernel : PCUkernel; const &library : CUlibrary; const name : pchar):CUresult; static;
+
+    class function cudaLaunchKernel(const func:pointer; const gridDim:dim3; const blockDim:dim3; const args:Ppointer; const sharedMem:size_t; const stream:CUStream):CUresult;   static;
+    class function cudaStreamCreate(stream: PCUStream):CUresult;   static;
+    class function cudaLibraryUnload(const &library : CUlibrary):CUResult; static;
+    class function cudaStreamDestroy(const stream: CUStream):CUresult; static;
+    {$endif}
   public
+    {$if defined(USE_CUDA)}
+    stream : CUStream;
+    ctx : CUContext;
+    {$else}
     stream : cudaStream_t;
+    {$endif}
     properties : cudaDeviceProp;
+    rtVersionMajor, rtVersionMinor : longint;
     prog : nvrtcProgram;
+    {$if defined(USE_CUDA)}
+    nnLib : CUlibrary;
+    {$else}
     nnLib : cudaLibrary_t;
+    {$endif}
     useBLAS : integer;
     cublas: cublasHandle_t;
+    {$if defined(USE_CUDA)}
+    property jitOptions[jo:CUjit_option] : pointer read GetjitOptions write SetjitOptions;
+    property libraryOptions[jo:CUlibraryOption] : pointer read GetlibraryOptions write SetlibraryOptions;
+    {$else}
     property jitOptions[jo:cudaJitOption] : pointer read GetjitOptions write SetjitOptions;
     property libraryOptions[jo:cudaLibraryOption] : pointer read GetlibraryOptions write SetlibraryOptions;
+    {$endif}
     class function deviceCount() : longint;
     constructor Create(deviceIndex: longint = 0);
     destructor Destroy();  override;
@@ -101,7 +143,7 @@ type
     procedure loadCUBIN(const cubin : RawByteString);
     function compileFile(const filename : string):RawByteString;
     procedure loadCUBinFile(const filename: string);
-    // procedure halfTest(//  const N : SizeInt; a:TCUMem; b:TCUMem ; c:TCUMem);
+    // procedure halfTest (//  const N : SizeInt; a:TCUMem; b:TCUMem ; c:TCUMem);
 
   end;
 
@@ -110,6 +152,54 @@ procedure SAFE_CALL(const res : cudaError_t);inline;   overload;
 //var
 //  cuda : TNNCuda;
 implementation
+
+const kernelNames : array[0..44] of PAnsiChar =(
+  'means_vars_delta_fast',
+  'vars',
+  'means',
+  'power',
+  'fmav',
+  'mulv',
+  'cost_l2',
+  'backward_dropout',
+  'forward_dropout',
+  'forward_scale_add',
+  'forward_scale',
+  'add_dots',
+  'norm_delta',
+  'means_vars_delta',
+  'normblkvv',
+  'normvs',
+  'normvv',
+  'means_vars',
+  'fmavss',
+  'upsample',
+  'Xcol2imKernelNormal',
+  'Xcol2imKernelFlip',
+  'Xim2colKernelNormal',
+  'Xim2colKernelFlip',
+  'im2col',
+  'crossEntropySoftmax',
+  'softmaxBatch',
+  'backward_maxpool',
+  'forward_maxpool',
+  'copy',
+  'fill',
+  'crossEntropyLogistics',
+  'scale',
+  'axpy',
+  'subv',
+  'addv',
+  'backward_bias',
+  'gradient_array',
+  'array_avtivate_swish',
+  'activate_array',
+  'forward_bias',
+  'sgemm1_tn',
+  'sgemm1_nt',
+  'sgemm2_nn',
+  'sgemm1_nn'
+);
 
 //procedure SAFE_CALL(const res : CUresult);inline;     overload;
 //var str:PAnsiChar;
@@ -131,6 +221,15 @@ begin
   str := cublasGetStatusString(res);
   assert(res=CUBLAS_STATUS_SUCCESS, str)
 end;
+
+{$if defined(USE_CUDA)}
+procedure SAFE_CALL(const res : CUresult); inline;  overload;
+var str:PAnsiChar;
+begin
+  cuGetErrorString(res, @str);
+  assert(res=CUDA_SUCCESS, str)
+end;
+{$endif}
 
 //procedure SAFE_CALL(const res : cublasStatus); inline;  overload;
 //var str:PAnsiChar;
@@ -177,7 +276,11 @@ end;
 
 { TNNCuda }
 
+{$if defined(USE_CUDA)}
+function TNNCuda.GetjitOptions(jo: CUjit_option): pointer;
+{$else}
 function TNNCuda.GetjitOptions(jo: cudaJitOption): pointer;
+{$endif}
 var i:sizeInt;
 begin
   for i:=0 to High(FJitOptions) do
@@ -185,7 +288,11 @@ begin
       exit(FJitOptionsValues[i])
 end;
 
+{$if defined(USE_CUDA)}
+function TNNCuda.GetlibraryOptions(lo: CUlibraryOption): pointer;
+{$else}
 function TNNCuda.GetlibraryOptions(lo: cudaLibraryOption): pointer;
+{$endif}
 var i:sizeInt;
 begin
   for i:=0 to High(FJitOptions) do
@@ -193,7 +300,11 @@ begin
       exit(FLibOptionsValues[i])
 end;
 
+{$if defined(USE_CUDA)}
+procedure TNNCuda.SetjitOptions(jo: CUjit_option; AValue: pointer);
+{$else}
 procedure TNNCuda.SetjitOptions(jo: cudaJitOption; AValue: pointer);
+{$endif}
 var i:sizeInt;
 begin
   for i:=0 to High(FJitOptions) do
@@ -210,7 +321,11 @@ begin
   insert(AValue, FJitOptionsValues, 0);
 end;
 
+{$if defined(USE_CUDA)}
+procedure TNNCuda.SetlibraryOptions(lo: CUlibraryOption; AValue: pointer);
+{$else}
 procedure TNNCuda.SetlibraryOptions(lo: cudaLibraryOption; AValue: pointer);
+{$endif}
 var i:sizeInt;
 begin
   for i:=0 to High(FLibOptions) do
@@ -227,6 +342,55 @@ begin
   insert(AValue, FLibOptionsValues, 0);
 end;
 
+{$if defined(USE_CUDA)}
+class function TNNCuda.cudaLibraryLoadData(&library: PCUlibrary;
+  const code: pointer; jitOptions: PCUjit_option; jitOptionsValues: PPointer;
+  numJitOptions: longword; libraryOptions: PCUlibraryOption;
+  libraryOptionValues: PPointer; numLibraryOptions: longword): CUresult;
+begin
+  result := cuLibraryLoadData(&library, code, jitOptions, jitOptionsValues, numJitOptions, libraryOptions, libraryOptionValues, numLibraryOptions);
+end;
+
+class function TNNCuda.cudaLibraryLoadFromFile(&library: PCUlibrary;
+  const fileName: pchar; jitOptions: PCUjit_option; jitOptionsValues: PPointer;
+  numJitOptions: longword; libraryOptions: PCUlibraryOption;
+  libraryOptionValues: PPointer; numLibraryOptions: longword): CUresult;
+begin
+  result := cuLibraryLoadFromFile(&library, filename, jitOptions, jitOptionsValues, numJitOptions, libraryOptions, libraryOptionValues, numLibraryOptions);
+end;
+
+class function TNNCuda.cudaLibraryGetKernel(pKernel: PCUkernel;
+  const &library: CUlibrary; const name: pchar): CUresult;
+begin
+  result := cuLibraryGetKernel(pKernel, &library, name);
+end;
+
+class function TNNCuda.cudaLaunchKernel(const func: pointer;
+  const gridDim: dim3; const blockDim: dim3; const args: Ppointer;
+  const sharedMem: size_t; const stream: CUStream): CUresult;
+var cuFunc : CUFunction;
+begin
+  SAFE_CALL(cuKernelGetFunction(@cuFunc, func));
+  result := cuLaunchKernel(cuFunc, gridDim.x, gridDim.y, gridDim.x, blockDim.x, blockDim.y, blockDim.z, sharedMem, stream, args, nil)
+end;
+
+class function TNNCuda.cudaStreamCreate(stream: PCUStream): CUresult;
+begin
+  result := cuStreamCreate(stream, CU_STREAM_DEFAULT);
+end;
+
+class function TNNCuda.cudaLibraryUnload(const &library: CUlibrary): CUResult;
+begin
+  result := cuLibraryUnload(&library);
+end;
+
+class function TNNCuda.cudaStreamDestroy(const stream: CUStream): CUresult;
+begin
+  result := cuStreamDestroy(stream);
+end;
+
+{$endif}
+
 class function TNNCuda.deviceCount(): longint;
 begin
   SAFE_CALL(cudaGetDeviceCount(@result))
@@ -234,13 +398,21 @@ end;
 
 constructor TNNCuda.Create(deviceIndex: longint);
 begin
+  SAFE_CALL(cudaRuntimeGetVersion(@rtVersionMajor));
+  rtVersionMinor:=rtVersionMajor mod 1000;
+  rtVersionMajor:=rtVersionMajor div 1000;
   SAFE_CALL(cudaGetDeviceProperties(@properties, deviceIndex));
   SAFE_CALL(cudaSetDevice(deviceIndex));
   SAFE_CALL(cudaStreamCreate(@stream));
+  //stream := nil;
   SAFE_CALL(cublasCreate(@cublas));
-  SAFE_CALL(cublasSetStream(cublas, stream));
+  SAFE_CALL(cublasSetStream(cublas, pointer(stream)));
   //SAFE_CALL(cublasInit());
   //SAFE_CALL(cublasSetKernelStream(stream));
+  FJitOptions:=nil;
+  FJitOptionsValues:= nil;
+  FLibOptions:=nil;
+  FLibOptionsValues:=nil;
   useBLAS := 0;
   nnLib := nil;
 end;
@@ -823,7 +995,7 @@ var
 begin
   num_grids := (N + NUM_THREADS-1) div NUM_THREADS;
   params := [@N, @pred, @truth, @delta, @error];
-  SAFE_CALL(cudaLibraryGetKernel(@FKernels[kernelId], nnLib,'crossEntropySoftmax'));
+  //SAFE_CALL(cudaLibraryGetKernel(@FKernels[kernelId], nnLib, 'crossEntropySoftmax'));
   SAFE_CALL(cudaLaunchKernel(FKernels[kernelId], dim3.Create(num_grids), dim3.create(NUM_THREADS), ppointer(params), 0, stream));
 end;
 
@@ -1296,7 +1468,12 @@ end;
 procedure TNNCuda.finish();
 begin
   //SAFE_CALL(cudaDeviceSynchronize());
+  {$if defined(USE_CUDA)}
+  //SAFE_CALL(cuStreamSynchronize(stream));
+  SAFE_CALL(cuCtxSynchronize());
+  {$else}
   SAFE_CALL(cudaStreamSynchronize(stream));
+  {$endif}
 end;
 
 function TNNCuda.compileToCUBIN(const code, name: ansistring; const headers: TArray<PAnsiChar>; const includeNames: TArray<PAnsiChar>): RawByteString;
@@ -1333,36 +1510,48 @@ end;
 procedure TNNCuda.loadCUBIN(const cubin: RawByteString);
 var kernelCount : longint;
   i : SizeInt;
+  {$if defined(USE_CUDA)}
+  ker : CUkernel;
+  {$else}
   ker : cudaKernel_t;
+  {$endif}
 begin
-  SAFE_CALL(cudaLibraryLoadData(@nnLib, pointer(cubin), pointer(FJitOptions), pointer(FJitOptionsValues), length(FJitOptions),  pointer(FLibOptions), pointer(FLibOptionsValues), length(FLibOptions)));
-  SAFE_CALL(cudaLibraryGetKernelCount(@kernelCount, nnLib));
+  SAFE_CALL(cudaLibraryLoadData(@nnLib, pointer(cubin), nil{pointer(FJitOptions)}, nil{pointer(FJitOptionsValues)}, 0{length(FJitOptions)},  nil{pointer(FLibOptions)}, nil{pointer(FLibOptionsValues)}, 0{length(FLibOptions)}));
+  //SAFE_CALL(cudaLibraryGetKernelCount(@kernelCount, pointer(nnLib)));
+  kernelCount := length(kernelNames);
   setLength(FKernels, kernelCount);
-  SAFE_CALL(cudaLibraryEnumerateKernels(pointer(FKernels), kernelCount, nnlib));
+  //SAFE_CALL(cudaLibraryEnumerateKernels(pointer(FKernels), kernelCount, pointer(nnlib)));
   // cuda enumerates kernels reversed !#@%
-  for i:=0 to kernelCount div 2 do begin
-    ker := FKernels[i];
-    FKernels[i] := Fkernels[kernelCount-i-1];
-    Fkernels[kernelCount-i-1] := ker
+  for i:=0 to kernelCount -1 do begin
+    SAFE_CALL(cudaLibraryGetKernel(@FKernels[kernelCount-1-i], nnLib, kernelNames[i]))
   end;
 end;
 
 function TNNCuda.compileFile(const filename: string): RawByteString;
-var f : TextFile;
+var
+  tf : TextFile;
+  f  : file;
   line, code:AnsiString;
-  cuda_path:ansistring;
+  cuda_bin:ansistring;
 begin
   //cuda_path := GetEnvironmentVariable('CUDA_PATH')+'\include';
   //assert(FileExists(filename), 'Cannot find file '+filename);
-  AssignFile(F, filename);
-  reset(F);
+  AssignFile(tf, filename);
+  reset(tf);
   code :='';
-  while not EOF(F) do begin
-    readln(F, line);
+  while not EOF(tf) do begin
+    readln(tf, line);
     code := code +line + sLineBreak;
   end;
-  CloseFile(F);
-  result := compileToCUBIN(code, filename)
+  CloseFile(tf);
+  result := compileToCUBIN(code, filename);
+  if length(result)>0 then begin
+    cuda_bin := ChangeFileExt(filename, '.cubin');
+    assignFile(f, cuda_bin);
+    rewrite(f, 1);
+    blockWrite(f, result[1], length(result));
+    closeFile(f)
+  end;
 
 end;
 
@@ -1370,15 +1559,35 @@ procedure TNNCuda.loadCUBinFile(const filename: string);
 var f: file;
   fs : SizeInt;
   bin : RawByteString;
+  kernelCount : longint;
+  i : SizeInt;
+  {$if defined(USE_CUDA)}
+  ker : CUkernel;
+  {$else}
+  ker : cudaKernel_t;
+  {$endif}
 begin
   assert(fileExists(Filename),'File does not exists!');
-  assignFile(f, filename);
-  reset(f, 1);
-  fs := FileSize(f);
-  setLength(bin, fs);
-  BlockRead(f, bin[1], fs);
-  closeFile(f);
-  loadCUBIN(bin);
+  SAFE_CALL(cudaLibraryLoadFromFile(@nnLib, PAnsiChar(filename), nil, nil, 0, nil, nil, 0));
+
+
+  //SAFE_CALL(cudaLibraryGetKernelCount(@kernelCount, pointer(nnLib)));
+  kernelCount := length(kernelNames);
+  setLength(FKernels, kernelCount);
+  //SAFE_CALL(cudaLibraryEnumerateKernels(pointer(FKernels), kernelCount, pointer(nnlib)));
+
+  // cuda enumerates kernels reversed !#@%
+  for i:=0 to kernelCount -1 do begin
+    SAFE_CALL(cudaLibraryGetKernel(@FKernels[kernelCount-1-i], nnLib, kernelNames[i]))
+  end;
+
+  //assignFile(f, filename);
+  //reset(f, 1);
+  //fs := FileSize(f);
+  //setLength(bin, fs);
+  //BlockRead(f, bin[1], fs);
+  //closeFile(f);
+  //loadCUBIN(bin);
 end;
 
 initialization

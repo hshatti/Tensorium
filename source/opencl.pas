@@ -1295,7 +1295,7 @@ var hLib : {$if defined(MSWINDOWS)}THandle {$else}Pointer{$endif};
       getProc : function(h :THandle; name:LPCSTR):pointer;winapi;
 
     {$else}
-      getProc : function(h :pointer; name:PAnsiChar):pointer;
+      getProc : function(h :pointer; name:PAnsiChar):pointer; WINAPI;
     {$endif}
 initialization
   {$if defined(MSWINDOWS)}
