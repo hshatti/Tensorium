@@ -1,11 +1,15 @@
 unit nOpMetrics;
-
+{$ifdef FPC}
 {$mode Delphi}
+{$endif}
 
 interface
 
 type
 
+{$if not declared(SizeInt)}
+  SizeInt = IntPtr;
+{$endif}
   TMeasureOps = (
     opIncFill, opFill, opCopy, opMaxNorm, opStdDevNorm, opRMSNorm, opBatchAddvs, opAddvs, opBatchMulvs,
     opMulvs, opBatchSubvs, opSubvs, opBatchDivvs, opDivvs, opPow, opAxpy, opMulvv, opAddvv, opSubvv, opDivvv, opFmavv, opDot, opBatchFmavss, opFmavss, opGemm, opIm2col, opCol2im,

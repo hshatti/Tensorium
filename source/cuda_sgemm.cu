@@ -1,4 +1,4 @@
-#define nfloat  float
+//#define nfloat  float
 #define sEPSILON 0.000001f
 //#include <stdio.h>
 /*
@@ -1368,8 +1368,6 @@ extern "C" __global__ void normblkvv( const long M, const long N, const long K,
   const long b = blockDim.z * blockIdx.z + threadIdx.z; // batch batch pos
   long j = blockDim.y * blockIdx.y + threadIdx.y;
   if (i>=M || j>=N || b>=K) return;
-  if (i==0 && j==0 && b==0)
-    printf("[GPU] Normalize...");
 
   j += b*batchsize + i*blocksize + offset; // block pos
   const nfloat v = sqrt(max(vars[i*vars_stride], sEPSILON));
@@ -1616,7 +1614,7 @@ __device__ unsigned int rand_mt(mt_state* state)
 
 
 
-#define RANDOM_MAX 0xffffffffull
+#define RANDOM_MAX 0x10000000ull
 
 // https://en.wikipedia.org/wiki/Xorshift
 __device__ unsigned long long rand_xorshift(const unsigned long long seed){

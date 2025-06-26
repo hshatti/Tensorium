@@ -10,7 +10,7 @@ unit nConfig;
 interface
 
 uses
-  SysUtils;
+  SysUtils, nTypes;
 
 type
   { TCFGSection }

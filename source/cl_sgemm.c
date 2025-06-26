@@ -1262,6 +1262,64 @@ __kernel void fmavss(__global nfloat* src, const long offset, const nfloat scala
 
 }
 
+__kernel void means(const long blocksize, const long groups,  __global nfloat* src, const long offset, __global nfloat* means){
+
+    local float buff[BLOCK];
+    const long N  = get_num_groups(0);
+    const long id = get_local_id(0);
+    buff[id] = 0;
+
+    long filter = get_group_id(0);
+    src += offset;
+    long i, j;
+    for(j = 0; j < groups; ++j){
+        for(i = 0; i < blocksize; i += BLOCK){
+            long index = j*blocksize*N + filter*blocksize + i + id;
+            buff[id] += (i+id < blocksize) ? src[index] : 0;
+        }
+    }
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    if(id == 0){
+        float mean_tmp = 0;
+        for(i = 0; i < BLOCK; ++i){
+            mean_tmp += buff[i];
+        }
+        mean_tmp /= blocksize * groups;
+        means[filter] = mean_tmp;
+    }
+
+}
+
+__kernel void vars(const long blocksize, const long groups, __global nfloat* src, const long offset, __global nfloat* means, __global nfloat* vars){
+
+    local float buf[BLOCK];
+    const long N  = get_num_groups(0);
+    const long id = get_local_id(0);
+    buf[id] = 0;
+
+    long filter = get_group_id(0);
+    src += offset;
+    long i, j;
+    for(j = 0; j < groups; ++j){
+        for(i = 0; i < blocksize; i += BLOCK){
+            long index = j*blocksize*N + filter*blocksize + i + id;
+            buf[id] += (i+id < blocksize) ? sqr(src[index] - means[filter]) : 0;
+        }
+    }
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    if(id == 0){
+        float variance_tmp = 0;
+        for(i = 0; i < BLOCK; ++i){
+            variance_tmp += buf[i];
+        }
+        variance_tmp /= (blocksize * groups);
+        vars[filter] = variance_tmp;
+    }
+}
+
+
 __kernel void means_vars(const long blocksize, const long groups, __global nfloat* src, const long offset, __global nfloat* means, __global nfloat* vars){
 
     local float buf[BLOCK];
@@ -1300,7 +1358,6 @@ __kernel void means_vars(const long blocksize, const long groups, __global nfloa
     for(j = 0; j < groups; ++j){
         for(i = 0; i < blocksize; i += BLOCK){
             long index = j*blocksize*N + filter*blocksize + i + id;
-            //buf[id] += (i+id < blocksize) ? pow((src[index] - means[filter]), 2.0f) : 0; // pow will not work always when -use_fast_math compiler switch
             buf[id] += (i+id < blocksize) ? sqr(src[index] - means[filter]) : 0;
         }
     }
@@ -1590,22 +1647,31 @@ __kernel void forward_scale_add(const int reshape, __global nfloat* a,  const lo
   //}
 }
 
-#define RAND_MAX 1000u
-uint rand(const uint seed){
+#define RANDOM_MAX 0x10000000u
+
+// https://en.wikipedia.org/wiki/Xorshift
+unsigned long rand_xorshift(const unsigned long seed){
   //ulong res = ((seed + get_global_linear_id()) * 0x5DEECE66DL + 0xBL) & ((1L << 48) - 1);
-  //return (res >> 16) % RAND_MAX;
-        uint x = seed + get_global_linear_id();
-        x ^= x << 13;
-	x ^= x >> 17;
-	x ^= x << 5;
-	return x % RAND_MAX;
+  //return (res >> 16) % RANDOM_MAX;
+  //      uint x = seed + get_global_linear_id();
+    unsigned long x = seed;
+    x ^= x >> 12;
+    x ^= x << 25;
+    x ^= x >> 27;
+    x *= 0x2545F4914F6CDD1DUL;
+    //seed = x;
+    return x%RANDOM_MAX;
 }
 
-kernel void forward_dropout(const uint seed, const nfloat probability, const nfloat scale, global const nfloat* src, global nfloat* rnd, global nfloat* dst)
+
+__kernel void forward_dropout(const unsigned int seed, const nfloat probability, const nfloat scale, __global const nfloat* src, __global nfloat* rnd, __global nfloat* dst)
 {
-  long i  = get_global_id(0);
-  rnd[i]  = rand(seed);
-  rnd[i] /= RAND_MAX;
+  unsigned long i  = get_global_id(0);
+  //mt_state state;
+  //init_mt(&state, seed + i);
+  //rnd[i]  = rand_mt(&state);
+  rnd[i]  = rand_xorshift(seed+i);
+  rnd[i] /= RANDOM_MAX;
   dst[i]  = rnd[i] < probability? 0: src[i]*scale;
 
 }

@@ -2,6 +2,7 @@ unit nRNNLayer;
 {$ifdef FPC}
 {$mode Delphi}
 {$endif}
+{$pointermath on}
 
 interface
 
@@ -128,10 +129,11 @@ begin
 end;
 
 procedure fill_cpu(const N:SizeInt; const val:single; P:PSingle; const stride:SizeInt);
-var i:SizeInt;
+var i:SizeInt; v:longword;
 begin
+  v := plongword(@val)^;
   if stride=1 then begin
-      FillDWord(p^, N, DWord(val));
+      FillDWord(p^, N, v);
       exit
   end;
   for i:=0 to N-1 do

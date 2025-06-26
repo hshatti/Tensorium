@@ -1,3 +1,4 @@
+{$Z4}
   {
    26/04/2025   converted to pascal by Haitham Shatti <haitham.shatti@gmail.com>
 
@@ -215,7 +216,7 @@ type
   { Cublas logging  }
 
     PcublasLogCallback = ^cublasLogCallback;
-    cublasLogCallback = procedure (msg:Pchar); WINAPI;
+    cublasLogCallback = procedure (msg:PAnsiChar); WINAPI;
   { cuBLAS Exported API   }
   { --------------- CUBLAS Helper Functions  ----------------  }
 
@@ -248,11 +249,11 @@ type
     cublasGetSmCountTarget : function(handle:cublasHandle_t; smCountTarget:Plongint):cublasStatus_t; WINAPI;
     cublasSetSmCountTarget : function(handle:cublasHandle_t; smCountTarget:longint):cublasStatus_t; WINAPI;
 
-    cublasGetStatusName : function(status:cublasStatus_t):Pchar; WINAPI;
+    cublasGetStatusName : function(status:cublasStatus_t):PAnsiChar; WINAPI;
 
-    cublasGetStatusString : function(status:cublasStatus_t):Pchar; WINAPI;
+    cublasGetStatusString : function(status:cublasStatus_t):PAnsiChar; WINAPI;
 
-    cublasLoggerConfigure : function(logIsOn:longint; logToStdOut:longint; logToStdErr:longint; logFileName:Pchar):cublasStatus_t; WINAPI;
+    cublasLoggerConfigure : function(logIsOn:longint; logToStdOut:longint; logToStdErr:longint; logFileName:PAnsiChar):cublasStatus_t; WINAPI;
     cublasSetLoggerCallback : function(userCallback:cublasLogCallback):cublasStatus_t; WINAPI;
     cublasGetLoggerCallback : function(userCallback:PcublasLogCallback):cublasStatus_t; WINAPI;
 
@@ -304,7 +305,7 @@ type
     cublasGetMatrixAsync_64 : function(rows:int64; cols:int64; elemSize:int64; A:pointer; lda:int64; 
       B:pointer; ldb:int64; stream:cudaStream_t):cublasStatus_t; WINAPI;
 
-    cublasXerbla : procedure(srName:Pchar; info:longint); WINAPI;
+    cublasXerbla : procedure(srName:PAnsiChar; info:longint); WINAPI;
   { --------------- CUBLAS BLAS1 Functions  ----------------  }
 
     cublasNrm2Ex : function(handle:cublasHandle_t; n:longint; x:pointer; xType:cudaDataType; incx:longint; 
@@ -2865,7 +2866,13 @@ type
 
 implementation
   uses
-    SysUtils, dynlibs;
+    SysUtils,
+    {$if defined(MSWINDOWS)}
+    windows
+    {$else}
+    dynlibs
+    {$endif}
+    ;
   {  cuBLAS Exported API  }
 (*
   static inline cublasStatus_t cublasMigrateComputeType(cublasHandle_t handle,
@@ -3148,8 +3155,11 @@ end;
 
 
   var
+  {$if defined(MSWINDOWS)}
+    hlib : THandle;
+  {$else}
     hlib : tlibhandle;
-
+  {$endif}
 
   procedure Freecublas_api;
     begin
@@ -3997,10 +4007,10 @@ end;
     end;
 
 
-  procedure Loadcublas_api(lib : pchar);
+  procedure Loadcublas_api(lib : PAnsiChar);
     begin
       Freecublas_api;
-      hlib:=LoadLibrary(lib);
+      hlib:=LoadLibrarya(lib);
       if hlib=0 then
  begin
         if isConsole then

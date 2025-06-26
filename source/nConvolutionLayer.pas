@@ -716,6 +716,7 @@ var
       strideA, strideB, strideC :SizeInt;
     _A, _B, _C : TCLMemory;
     s : TNNetState;
+    workspacePtr: PSingleTensor;
 begin
   {$ifdef USE_TELEMETRY}
   if benchmark then metrics.forward.start(layerType);
@@ -736,7 +737,11 @@ begin
   if (kSize <> 1) or (Stride_y * Stride_x <> 1) or (Dilation * Dilation <> 1) then begin
     strideA := state.input.volume();
     strideB := imColSize;
-    _B := state.workspace.devData;
+    if speedOverSize then
+      workspacePtr := @workspace
+    else
+      workspacePtr := @state.workspace;
+    _B := workspacePtr.devData;
     for b := 0 to batch - 1 do
       begin
         aOffset := b * strideA;
@@ -825,6 +830,7 @@ end;
 procedure TConvolutionalLayer.backwardGPU(var state: TNNetState);
 var
     b, i_m, i_n, i_k, colSize, _vol, imSize: SizeInt;
+    workspacePtr: PSingleTensor;
 begin
   {$ifdef USE_TELEMETRY}
   if benchmark then metrics.backward.start(layerType);
@@ -863,12 +869,18 @@ begin
 //bias_updates.addSums(delta);
   end;
 
-  state.workspace.setOCL;
-  for b:=0 to batch-1 do begin
-    ocl.im2col(c, h, w, kernelSize, kernelSize, Padding, Padding,
-      stride_y, stride_x, dilation, dilation, state.input.devData , b*_vol, state.workspace.devData, b*colSize);
-  end;
+  if speedOverSize then
+    workspacePtr := @workspace
+  else
+  begin
+    workspacePtr := @state.workspace;
+    for b:=0 to batch-1 do begin
+      ocl.im2col(c, h, w, kernelSize, kernelSize, Padding, Padding,
+        stride_y, stride_x, dilation, dilation, state.input.devData , b*_vol, workspacePtr.devData, b*colSize);
+    end;
 //state.input.im2Col(kernelSize, kernelSize, padding * dilation, padding * dilation, stride_y, stride_x, dilation, dilation, state.workspace, 1);
+  end;
+  workspacePtr.setOCL;
 
   if not weight_updates.wasGPU() then weight_updates.pushToDevice;
 
@@ -883,7 +895,7 @@ begin
   ocl.gemmStridedBatched(false, true,
           i_m, i_n, i_k, 1
           , delta.devdata, 0, i_k, i_m*i_k
-          , state.workspace.devData, 0, i_k, colSize
+          , workspacePtr.devData, 0, i_k, colSize
           , 1, weight_updates.devData, 0, i_n, 0, batch);
 
 
@@ -909,7 +921,7 @@ begin
         i_n, i_k, i_m, 1
         , weights.devData, 0, i_n, 0
         , delta.devData, 0, i_k, i_m*i_k
-        , 0, state.workspace.devData, 0, i_k, colSize, batch);
+        , 0, workspacePtr.devData, 0, i_k, colSize, batch);
 
 //for b := 0 to batch -1 do begin
 //    TSingleTensor.gemm(
@@ -923,7 +935,7 @@ begin
     imSize := state.delta.Volume();
     for b := 0 to batch-1 do begin
       ocl.col2im(state.delta.c, state.delta.h, state.delta.w, kernelSize, kernelSize, Padding, Padding
-              , stride_y, stride_x, dilation, dilation, state.workspace.devData, b*colSize, state.delta.devData, b*imSize);
+              , stride_y, stride_x, dilation, dilation, workspacePtr.devData, b*colSize, state.delta.devData, b*imSize);
     end;
 //state.delta.col2Im(kernelSize, kernelSize, padding*Dilation, padding*Dilation, stride_x, stride_y, dilation, dilation, state.workspace);
 
@@ -998,6 +1010,7 @@ var
       strideA, strideB, strideC :SizeInt;
     _A, _B, _C : PSingle;
     s : TNNetState;
+    workspacePtr : PSingleTensor;
 begin
   {$ifdef USE_TELEMETRY}
   if benchmark then metrics.forward.start(layerType);
@@ -1019,12 +1032,16 @@ begin
   if (kSize <> 1) or (Stride_y * Stride_x <> 1) or (Dilation * Dilation <> 1) then begin
     strideA := state.input.volume();
     strideB := imColSize;
-    _B := state.workspace.devData;
+    if speedOverSize then
+      workspacePtr := @workspace
+    else
+      workspacePtr := @state.workspace;
+    _B := workspacePtr.devData;
     for b := 0 to batch - 1 do
       begin
         aOffset := b * strideA;
         bOffset := b * strideB;
-        cuda.im2col(c, h, w, kernelSize, kernelSize, Padding, Padding, stride_y, stride_x, Dilation, Dilation, state.input.devData, aOffset, _B, bOffset);
+        cuda.im2col(c, h, w, kernelSize, kernelSize, Padding, Padding, stride_y, stride_x, Dilation, Dilation, state.input.devData, aOffset, pointer(_B), bOffset);
         //cuda.gemm(false, false, filters, outImgSize, k, 1, weights.devData, 0, k, state.workspace.devData, bOffset, outImgSize, 0, _C, b * strideC, outImgSize);
         //batchesWeights[b] := weights.devData;
         //workSpaces[b] := state.workspace.devData + bOffset;
@@ -1051,7 +1068,7 @@ begin
   //cuda.WriteBuffer(batchesOutDev,     batch*sizeOf(pointer), Pointer(batchesOut));
   //cuda.WriteBuffer(batchesWeightsDev, batch*sizeOf(pointer), Pointer(batchesWeights));
   //cuda.gemmBatched(false, false, filters, outImgSize, k, 1, ppsingle(batchesWeightsDev), 0, k, ppsingle(workspacesDev), 0, outImgSize, 0, ppsingle(batchesOutDev), 0, outImgSize, batch);
-  cuda.gemmStridedBatched(false, false, filters, outImgSize, k, 1, weights.devData, 0,k, 0, _B, 0, outImgSize, strideB, 0, _C, 0, outImgSize, strideC, batch);
+  cuda.gemmStridedBatched(false, false, filters, outImgSize, k, 1, weights.devData, 0,k, 0, pointer(_B), 0, outImgSize, strideB, 0, pointer(_C), 0, outImgSize, strideC, batch);
 
 //TSingleTensor.gemmStridedBatched(CblasRowMajor, CblasNoTrans, CblasNoTrans, filters, outImgSize, k, 1, weights.Data, k, 0, state.workspace.Data, outImgSize, strideB, 0, output.Data, outImgSize, strideC, batch);
 {$ifdef DEBUG_GPU}
@@ -1122,6 +1139,7 @@ end;
 procedure TConvolutionalLayer.backwardGPU(var state: TNNetState);
 var
     b, i_m, i_n, i_k, colSize, _vol, imSize: SizeInt;
+    workspacePtr : PSingleTensor;
 begin
   {$ifdef USE_TELEMETRY}
   if benchmark then metrics.backward.start(layerType);
@@ -1166,15 +1184,20 @@ bias_updates.addSums(delta);
 {$endif}
   end;
 
-  state.workspace.setCUDA;
-  for b:=0 to batch-1 do begin
-    cuda.im2col(c, h, w, kernelSize, kernelSize, Padding, Padding,
-      stride_y, stride_x, dilation, dilation, state.input.devData , b*_vol, state.workspace.devData, b*colSize);
-  end;
-
+  if speedOverSize then
+    workspacePtr := @workspace
+  else begin
+    workspacePtr := @state.workspace;
+    for b:=0 to batch-1 do begin
+      cuda.im2col(c, h, w, kernelSize, kernelSize, Padding, Padding,
+        stride_y, stride_x, dilation, dilation, state.input.devData , b*_vol, workspacePtr.devData, b*colSize);
+    end;
 {$ifdef DEBUG_GPU}
-state.input.im2Col(kernelSize, kernelSize, padding * dilation, padding * dilation, stride_y, stride_x, dilation, dilation, state.workspace, 1);
+state.input.im2Col(kernelSize, kernelSize, padding * dilation, padding * dilation, stride_y, stride_x, dilation, dilation, workspacePtr^, 1);
 {$endif}
+  end;
+  workspacePtr.setCUDA;
+
 
   if not weight_updates.wasGPU() then weight_updates.pushToDevice;
 
@@ -1189,7 +1212,7 @@ state.input.im2Col(kernelSize, kernelSize, padding * dilation, padding * dilatio
   cuda.gemmStridedBatched(false, true,
           i_m, i_n, i_k, 1
           , delta.devdata, 0, i_k, i_m*i_k
-          , state.workspace.devData, 0, i_k, colSize
+          , workspacePtr.devData, 0, i_k, colSize
           , 1, weight_updates.devData, 0, i_n, 0, batch);
 
 
@@ -1197,7 +1220,7 @@ state.input.im2Col(kernelSize, kernelSize, padding * dilation, padding * dilatio
 for b:= 0 to batch -1 do
 TSingleTensor.gemm(CblasRowMajor, CblasNoTrans, CblasTrans, i_m, i_n, i_k, 1
 , delta.data + b*i_m*i_k, i_k
-, state.workspace.data + b*ColSize, i_k
+, workspacePtr.data + b*ColSize, i_k
 , 1, weight_updates.data, i_n);
 {$endif}
 
@@ -1217,7 +1240,7 @@ TSingleTensor.gemm(CblasRowMajor, CblasNoTrans, CblasTrans, i_m, i_n, i_k, 1
         i_n, i_k, i_m, 1
         , weights.devData, 0, i_n, 0
         , delta.devData, 0, i_k, i_m*i_k
-        , 0, state.workspace.devData, 0, i_k, colSize, batch);
+        , 0, workspacePtr.devData, 0, i_k, colSize, batch);
 
 {$ifdef DEBUG_GPU}
 for b := 0 to batch -1 do begin
@@ -1232,11 +1255,11 @@ end;
     imSize := state.delta.Volume();
     for b := 0 to batch-1 do begin
       cuda.col2im(state.delta.c, state.delta.h, state.delta.w, kernelSize, kernelSize, Padding, Padding
-              , stride_y, stride_x, dilation, dilation, state.workspace.devData, b*colSize, state.delta.devData, b*imSize);
+              , stride_y, stride_x, dilation, dilation, workspacePtr.devData, b*colSize, state.delta.devData, b*imSize);
     end;
 
 {$ifdef DEBUG_GPU}
-state.delta.col2Im(kernelSize, kernelSize, padding*Dilation, padding*Dilation, stride_x, stride_y, dilation, dilation, state.workspace);
+state.delta.col2Im(kernelSize, kernelSize, padding*Dilation, padding*Dilation, stride_x, stride_y, dilation, dilation, workspacePtr^);
 {$endif}
   end ;
 

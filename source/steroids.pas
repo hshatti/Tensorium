@@ -1,4 +1,3 @@
-
 { <Steroids : (Thread Pooling wrapper for Freepascal/Delphi) >
   Copyright (c) <2022> <Haitham Shatti  <haitham.shatti at gmail dot com> >
   Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"),
@@ -417,7 +416,7 @@ begin
   {$ifdef FPC}
   RTLEventDestroy(PoolDone);
   {$else}
-  FreeAndNil(PoolDone)
+  FreeAndNil(PoolDone);
   {$endif}
   inherited Destroy;
 

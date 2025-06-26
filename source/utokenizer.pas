@@ -34,7 +34,7 @@ type
     procedure encode(const aText: ansistring; const bos, eos: boolean; var tokens: TArray<longint>);  overload;
     function encode(const aText: ansistring; const bos, eos:boolean):TArray<longint>;                 overload;
   private
-    class function compareTokens(const a, b: TTokenIndex): SizeInt;static;
+    class function compareTokens(const a, b: TTokenIndex): SizeInt;static; WINAPI;
   end;
 
 implementation
@@ -146,7 +146,7 @@ begin
           sortedVocab[i].str := vocab[i];
           sortedVocab[i].id := i;
       end;
-      TTokenTools.QuickSort(pointer(sortedVocab), 0, High(sortedVocab), compareTokens());
+      TTokenTools.QuickSort(pointer(sortedVocab), 0, High(sortedVocab), compareTokens);
   end;
 
   // create a temporary buffer that will store merge candidates of always two consecutive tokens

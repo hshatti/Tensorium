@@ -8,12 +8,6 @@ interface
 uses
   SysUtils, Math
   ,ntensors, NTypes, nBaseLayer, termesc
-{$if defined (USE_OPENCL)}
-  , OpenCL
-  {$ifdef CL_BLAST} , clblast {$endif}
-{$elseif defined(USE_CUDART)}
-  , cudarttypes, cudart, cublas_api, nnCuda
-{$endif}
   {$ifdef USE_TELEMETRY}
   , nOpMetrics
   {$endif}
@@ -24,7 +18,8 @@ type
   { TConnectedLayer }
 
   TConnectedLayer = class(TBaseLayer)
-    constructor Create(const ABatch, ASteps, AInputs, aOutputs: SizeInt; const AActivationType:TActivationType= acLINEAR; AIsBatchNormalized:boolean=false);
+    FWithBias : boolean;
+    constructor Create(const ABatch, ASteps, AInputs, aOutputs: SizeInt; const AActivationType:TActivationType= acLINEAR; AIsBatchNormalized:boolean=false; const aWithBias:boolean = true);
     procedure setBatch(ABatch:SizeInt); override;
     procedure setTrain(ATrain: boolean); override;
     procedure forward(var state: TNNetState); override;
@@ -66,7 +61,7 @@ implementation
 
 constructor TConnectedLayer.Create(const ABatch, ASteps, AInputs,
   aOutputs: SizeInt; const AActivationType: TActivationType;
-  AIsBatchNormalized: boolean);
+  AIsBatchNormalized: boolean; const aWithBias: boolean);
 var randomRange:Single;
 begin
   bnMomentum            := 0.05;
@@ -78,12 +73,14 @@ begin
   inputShape            := [steps * batch, inputs];
   outputs               := aOutputs;
   isBatchNormalized     := AIsBatchNormalized;
-
+  FWithBias             := aWithBias;
   output                := TSingleTensor.Create([steps * batch , outputs], steps * Batch);
   weights               := TSingleTensor.Create([outputs , inputs]);
   randomRange           := sqrt(2/inputs);
   weights.UniformDistribution(-randomRange, randomRange);
-  biases                := TSingleTensor.Create([outputs]);
+
+  if FWithBias then
+    biases                := TSingleTensor.Create([outputs]);
 
   if isBatchNormalized then begin
     //if train then begin
@@ -130,7 +127,8 @@ begin
   if FTrain then begin
     delta                 := TSingleTensor.Create([steps * batch , outputs], steps * Batch);
     weight_updates        := TSingleTensor.Create([inputs , outputs]);
-    bias_updates          := TSingleTensor.Create([outputs]);
+    if assigned(biases.Data) then
+      bias_updates          := TSingleTensor.Create([outputs]);
     if isBatchNormalized then begin
         x                     := TSingleTensor.Create([steps * batch , outputs], steps * Batch);
         x_norm                := TSingleTensor.Create([steps * batch , outputs], steps * Batch);
@@ -216,12 +214,14 @@ begin
 
       //scale_bias(l.output, l.scales, l.batch, l.outputs, 1);
       output.forwardScale(scales, offset, outputStep);
-      output.forwardBias(biases, offset, outputStep);
+      if assigned(biases.data) then
+        output.forwardBias(biases, offset, outputStep);
       //output.FusedMultiplyAdd(scales, biases);
   end else
 
   //for i := 0 to batch -1 do
   //    TSingleTensor.axpysvv(outputs, 1, biases.data, 1, output.data+i * outputs, 1);
+  if assigned(biases.data) then
     output.forwardBias(biases, offset, outputStep);
 
   //activate_array(l.output, l.outputs * l.batch, l.activation);
@@ -264,7 +264,8 @@ begin
   //    TSingleTensor.axpysvv(outputs, 1, delta.data+i * outputs, 1, bias_updates.data, 1);
   //bias_updates.add(delta, outOffset, outputs);
 
-  bias_updates.addSums(delta, outOffset, outStepSize);
+  if assigned(biases.data) then
+    bias_updates.addSums(delta, outOffset, outStepSize);
   //if l.batch_normalize then
   if isBatchNormalized {and (batch > 1)} then begin
       // spatial dot (x_norm . delta) then add to scale_updates
@@ -326,10 +327,12 @@ begin
   {$endif}
   //axpy_cpu(l.outputs, args.learning_rate / args.batch, l.bias_updates, 1, l.biases, 1);
   //TSingleTensor.axpysvv(outputs, args.learningRate / args.batch, bias_updates, 1, biases, 1);
-  biases.axpy(args.learningRate / args.batch, bias_updates);
+  if assigned(biases.data) then begin
+    biases.axpy(args.learningRate / args.batch, bias_updates);
 
   //scal_cpu(l.outputs, args.momentum, l.bias_updates, 1);
-  bias_updates.Multiply(args.momentum);
+    bias_updates.Multiply(args.momentum)
+  end;
   if isBatchNormalized then begin
       //axpy_cpu(l.outputs, args.learning_rate / args.batch, l.scale_updates, 1, l.scales, 1);
       scales.axpy(args.learningRate / args.batch, scale_updates);
@@ -436,15 +439,18 @@ begin
       end else begin
           ocl.normalize(rolling_mean.Size(), outputStep, output.Groups, rolling_mean.devData, 1, rolling_variance.devData, 1, output.devData, offset);
       end;
+      if assigned(biases.devData) then
+        ocl.forwardScaleAdd(outputStep, output.devData, offset, scales.size(), scales.devData, biases.devData, 1, output.Groups)
       //ocl.forwardScale(outputStep, output.devData, offset, scales.size(), scales.devData, 1, output.Groups);
-      //ocl.forwardBias(outputStep, output.devData, offset, biases.size(), biases.devData, 1, output.Groups);
-      ocl.forwardScaleAdd(outputStep, output.devData, offset, scales.size(), scales.devData, biases.devData, 1, output.Groups);
+      else
+        ocl.forwardBias(outputStep, output.devData, offset, biases.size(), biases.devData, 1, output.Groups);
+        //ocl.forwardScaleAdd(outputStep, output.devData, offset, scales.size(), scales.devData, biases.devData, 1, output.Groups);
 
       {$ifdef USE_TELEMETRY}
       ocl.finish();
       if benchmark then metrics.forward.finish(ltBATCHNORM);
       {$endif}
-  end else begin
+  end else if assigned(biases.devData) then begin
     ocl.forwardBias(outputStep, output.devData, offset, biases.size(), biases.devData, 1, output.groups);
   end;
 
@@ -489,12 +495,8 @@ begin
   //ocl.waitForEvents(batch, pointer(events));
   //ocl.finish();
 
-  ocl.backwardBias(bias_updates.size(), bias_updates.devData, outStepSize, delta.devData, outOffset, 1, batch
-  {$IFDEF CL_EVENTS}
-  , 1, pointer(state.events), pointer(state.events));
-  {$ELSE}
-  );
-  {$ENDIF}
+  if assigned(biases.devData) then
+      ocl.backwardBias(bias_updates.size(), bias_updates.devData, outStepSize, delta.devData, outOffset, 1, batch);
   //ocl.waitForEvents(batch, pointer(events));
 
   if isBatchNormalized {and (batch > 1)} then begin
@@ -568,14 +570,15 @@ begin
   if not weights.wasGPU() then weights.pushToDevice;
   if not weight_updates.wasGPU() then weight_updates.pushToDevice;
 
-  ocl.axpy(biases.size(), args.learningRate / args.batch, bias_updates.devData, 0, 1, biases.devData, 0, 1);
-  //ocl.waitForEvents(batch, pointer(events));
-  //ocl.finish();
+  if assigned(biases.devData) then begin
+    ocl.axpy(biases.size(), args.learningRate / args.batch, bias_updates.devData, 0, 1, biases.devData, 0, 1);
+    //ocl.waitForEvents(batch, pointer(events));
+    //ocl.finish();
 
-  ocl.scale(bias_updates.size(), args.momentum, bias_updates.devData, 1);
-  //ocl.waitForEvents(batch, pointer(events));
-  //ocl.finish();
-
+    ocl.scale(bias_updates.size(), args.momentum, bias_updates.devData, 1);
+    //ocl.waitForEvents(batch, pointer(events));
+    //ocl.finish();
+  end;
   ocl.axpy(weight_updates.size(), -args.decay * args.batch, weights.devData, 0, 1, weight_updates.devData, 0, 1);
   //ocl.waitForEvents(batch, pointer(events));
   //ocl.finish();
@@ -704,19 +707,25 @@ output.copyTo(x_norm, offset, 1, offset, 1, outputStep) ;
 output.Normalize(rolling_mean, rolling_variance, offset, outputStep);
 {$endif}
       end;
-      cuda.forwardScaleAdd(outputStep, output.devData, offset, scales.size(), scales.devData, biases.devData, 1, output.Groups);
+      if assigned(biases.devData) then
+        cuda.forwardScaleAdd(outputStep, output.devData, offset, scales.size(), scales.devData, biases.devData, 1, output.Groups)
+      else
+        cuda.forwardBias(outputStep, output.devData, offset, scales.size(), scales.devData, 1, output.Groups);
+
 {$ifdef DEBUG_GPU}
 output.forwardScale(scales, offset, outputStep);
-output.forwardBias(biases, offset, outputStep);
+if assigned(biases.Data) then
+  output.forwardBias(biases, offset, outputStep);
 {$endif}
       {$ifdef USE_TELEMETRY}
       cuda.finish();
       if benchmark then metrics.forward.finish(ltBATCHNORM);
       {$endif}
-  end else begin
+  end else if assigned(biases.devData) then begin
     cuda.forwardBias(outputStep, output.devData, offset, biases.size(), biases.devData, 1, output.groups);
 {$ifdef DEBUG_GPU}
-output.forwardBias(biases, offset, outputStep);
+if assigned(biases.Data) then
+  output.forwardBias(biases, offset, outputStep);
 {$endif}
   end;
 
@@ -767,7 +776,8 @@ output.printGpuSumSqrDiff();
 delta.printGpuSumSqrDiff();
 {$endif}
 
-  cuda.backwardBias(bias_updates.size(), bias_updates.devData, outStepSize, delta.devData, outOffset, 1, batch);
+  if assigned(biases.devData) then
+    cuda.backwardBias(bias_updates.size(), bias_updates.devData, outStepSize, delta.devData, outOffset, 1, batch);
 {$ifdef DEBUG_GPU}
 bias_updates.addSums(delta, outOffset, outStepSize);
 bias_updates.printGpuSumSqrDiff();
@@ -871,9 +881,11 @@ begin
   if not weights.wasGPU() then weights.pushToDevice;
   if not weight_updates.wasGPU() then weight_updates.pushToDevice;
 
-  cuda.axpy(biases.size(), args.learningRate / args.batch, bias_updates.devData, 0, 1, biases.devData, 0, 1);
+  if assigned(biases.devData) then begin
+    cuda.axpy(biases.size(), args.learningRate / args.batch, bias_updates.devData, 0, 1, biases.devData, 0, 1);
 
-  cuda.scale(bias_updates.size(), args.momentum, bias_updates.devData, 1);
+    cuda.scale(bias_updates.size(), args.momentum, bias_updates.devData, 1);
+  end;
 
   cuda.axpy(weight_updates.size(), -args.decay * args.batch, weights.devData, 0, 1, weight_updates.devData, 0, 1);
 

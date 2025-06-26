@@ -1,5 +1,5 @@
 ﻿unit ntensors;
-
+{$Z4}
 {$ifdef fpc}
   {$mode delphi}
   {$PackRecords C}
@@ -132,13 +132,14 @@ type
   {$endif}
 
 type
+
   PPHalf   = ^PHalf;
   PHalf    = ^Half;
-  Half     =  Word;
-  PPSingle = ^PSingle;
+  Half     =  SmallInt;
+  SizeInt = IntPtr;
+  SizeUInt = UIntPtr;
   PSizeInt = ^SizeInt;
-  SizeInt = nativeint;
-  SizeUInt = nativeuint;
+  PSizeUInt = ^SizeUInt;
   TSizes = TArray<SizeInt>;
   TBitPixels = TArray<TArray<longword>>;
   TMapFunc<T> = function(const a: T; const index: SizeInt): T;
@@ -221,7 +222,6 @@ type
     {$if defined(USE_OPENCL)}
     devWorkspace : TCLMemory;
     {$endif}
-    defaultDevice: TComputingDevice;
     Plus, Minus, Times, Division: TBinaryFunc;
     sqr, sqrt, exp, log, __abs: TUnaryFunc;
     CastI: TCastIOp;
@@ -264,6 +264,15 @@ type
     //vcvti64 : procedure(const N:SizeInt; const src:PT; const dst:PInt64 );
     vcvtd: procedure(const N: SizeInt; const src: PT; const dst: PDouble);
     vcvts: procedure(const N: SizeInt; const src: PT; const dst: PSingle);
+    vcvth: procedure(const N: SizeInt; const src: PT; const dst: PHalf);
+
+    vcvtfb: procedure(const N: SizeInt; const src: PByte; const dst: PT);
+    vcvtfi8: procedure(const N: SizeInt; const src: PShortInt; const dst: PT);
+    vcvtfi16: procedure(const N: SizeInt; const src: PSmallInt; const dst: PT);
+    vcvtfi32: procedure(const N: SizeInt; const src: PInt32; const dst: PT);
+    vcvtfd: procedure(const N: SizeInt; const src: PDouble; const dst: PT);
+    vcvtfs: procedure(const N: SizeInt; const src: PSingle; const dst: PT);
+    vcvtfh: procedure(const N: SizeInt; const src: PHalf; const dst: PT);
 
     threshv, absThreshv: function(const N: SizeInt; var src: PT;
       const stride: SizeInt; const thresh: T;
@@ -277,7 +286,7 @@ type
     matTra: procedure(const matIn: PT; const matOut: PT; const rows, cols: SizeInt);
 
     toStr: function(const v: T): string;
-    Compare: function(const a, b: T): SizeInt;
+    Compare: function(const a, b: T): SizeInt; WINAPI;
     rand: function(const a: T): T;
     randG: function(const aMean, aStdDev: T): T;
   public
@@ -298,9 +307,10 @@ type
     gemmStridedBatched: procedure (const Layout:CBLAS_LAYOUT; const TransA:CBLAS_TRANSPOSE; const TransB:CBLAS_TRANSPOSE; const M:SizeInt; const N:SizeInt; const
             K:SizeInt; const alpha:T; const A:PT; const lda:SizeInt; const stridea:SizeInt; const
             B:PT; const ldb:SizeInt; const strideb:SizeInt; const beta:T; const C:PT; const
-            ldc:SizeInt; const stridec:SizeInt; const batch_size:SizeInt); winapi;
+            ldc:SizeInt; const stridec:SizeInt; const batch_size:SizeInt); WINAPI;
 
     axpysvv: TUnaryVecOp2;
+    defaultDevice: TComputingDevice;
     normvss: procedure(const N: SizeInt; const src: PT; const aMean, aStdDev: T);
     MeansAndVarsDelta: procedure(const delta, x, mean, variance: TTensor<T>;
       const mean_delta, variance_delta: TTensor<T>; const offset: SizeInt = 0;
@@ -339,7 +349,8 @@ type
     {$if defined(USE_OPENCL)}
     devData: TCLMemory;
     {$elseif defined(USE_CUDART)}
-    devData : TCUMem;
+    //devData : TCUMem;
+    devData : pointer;
     {$endif}
     Groups: SizeInt;
     computingDevice: TComputingDevice;
@@ -349,6 +360,8 @@ type
     FDimSizes: TSizes;
     FStrides: TSizes;
     lastOP: TComputingDevice;
+    function GetFloats(index: SizeInt): Single;
+    procedure SetFloats(index: SizeInt; AValue: Single);
   public
     function GetDimensions: SizeInt;
     function GetGroup(idx: SizeInt): TTensor<T>; overload;
@@ -413,6 +426,9 @@ type
     class procedure cvtsi32(const N: SizeInt; const src: PSingle; const dst: PInt32); static;
     class procedure cvtsd(const N: SizeInt; const src: PSingle; const dst: PDouble); static;
     class procedure cvtss(const N: SizeInt; const src: PSingle; const dst: PSingle); static;
+    class procedure cvtsh(const N: SizeInt; const src: PSingle; const dst: PHalf); static;
+
+    class procedure cvths(const N: SizeInt; const src: PHalf; const dst: PSingle); static;
 
     class procedure cvtdd(const N: SizeInt; const src: PDouble; const dst: PDouble); static;
     class procedure cvtdb(const N: SizeInt; const src: PDouble; const dst: pbyte); static;
@@ -448,7 +464,7 @@ type
     class function bToStr(const v: byte): string; static;
 
     class function _str(const v: T): string; static;
-    class function _compare(const a, b: T): SizeInt; static;
+    class function _compare(const a, b: T): SizeInt; static; winapi;
     class function subPrint(const src: TTensor<T>; const Indecies: TSizes; const lvl: SizeInt): string; static;
     class procedure Permute(var dst: TTensor<T>; const src: TTensor<T>; const newShape, Indecies, newIndecies, newArrange: TSizes; const lvl: SizeInt); overload; static;
     class function Sum(const N: SizeInt; const src: PT; const stride: SizeInt = 1): T; overload; static;
@@ -539,6 +555,9 @@ type
     procedure Fill(const val: T; const interval: T; const stride: SizeInt = 1; start: SizeInt = 0; Count: SizeInt = -1); overload;
     procedure Fill(const val: T); overload;
     procedure FillExt(const val: T; const offset: SizeInt; const N: SizeInt); overload;
+    procedure &repeat(const vals:PT; const valsCount:SizeInt; N:SizeInt = 0); overload;
+    procedure &repeat(const vals:TArray<T>; N:SizeInt = 0); overload;
+    procedure triangularFill(const val:T; const upper : boolean= false; const includeDiagonal: boolean = true);
     procedure Sort(dst: TTensor<T>; const Descending: boolean = False); overload;
     procedure Sort(const Descending: boolean = False); overload;
     procedure linSpace(const start: T; const Finish: T; const N: SizeInt = 0);
@@ -629,7 +648,7 @@ type
     procedure toInts(const dst: PInt32; const start: SizeInt = 0; N: SizeInt = 0);
     procedure toSingles(const dst: PSingle; const start: SizeInt = 0; N: SizeInt = 0);
     procedure toDoubles(const dst: PDouble; const start: SizeInt = 0; N: SizeInt = 0);
-
+    procedure toHalfs(const dst: PHalf; const start: SizeInt = 0; N: SizeInt = 0);
     procedure axpy(const a: T; const x: PT; N: SizeInt = -1; const offset: SizeInt = 0; dstStride: SizeInt = 1; xStride: SizeInt = 1); overload;
     function dot(const src: PT; N: SizeInt = -1; const Stride: SizeInt = 1; const srcStride: SizeInt = 1): T; overload;
     function sumSqrDiff(const src: PT; N: SizeInt = 0; const Stride: SizeInt = 1; const srcStride: SizeInt = 1; const offset: SizeInt = 0): T; overload;
@@ -782,6 +801,7 @@ type
 
     procedure getGroup(const idx: SizeInt; const dst: PT); overload;
     property Group[idx: SizeInt]: TTensor<T> read GetGroup write SetGroup;
+    property Floats[index:SizeInt]:Single read GetFloats write SetFloats ;default;
     class procedure histogram(const N: SizeInt; const src: PT; const aCount: SizeInt; dst: PInteger; outMin: PT = nil; outMax: PT = nil); overload; static;
     class function SolveLeastSquares(const a: PT; const M, N, rwidtha: SizeInt; const b: PT; var x: PT): integer; overload; static;
     class function FitPloynomial(const M: SizeInt; degree: SizeInt; const x, y: PT; var b: PT): integer; static;
@@ -842,6 +862,7 @@ type
   TByteTensor = TTensor<byte>;
   TShortIntTensor = TTensor<shortint>;
   TSizeIntTensor = TTensor<SizeInt>;
+  THalfTensor  = TTensor<Half>;
 
   { TensorUtils }
 
@@ -865,10 +886,14 @@ type
   { TTools }
 
   TTools<T> = record
-  type PT = ^T;
-    TComparefunc = function(const a, b: T): SizeInt;
-    class procedure QuickSort(Arr: PT; L, R: SizeInt; const Compare: TComparefunc; const Descending: boolean = False); static;
-    class function BinSearch(const Arr:PT;const Val:T; R:SizeInt; Compare:TComparefunc):integer;static;
+  type
+    PT = ^T;
+    TComparefunc = function(const a, b: T): SizeInt; WINAPI;
+  private
+    class function _cmp(const a, b: T): SizeInt; static; winapi;
+  public
+    class procedure QuickSort(Arr: PT; L, R: SizeInt; Compare: TComparefunc = nil; const Descending: boolean = False); static;
+    class function BinSearch(const Arr:PT;const Val:T; R:SizeInt; Compare:TComparefunc = nil):integer;static;
   end;
 
   //{$if defined(CPUX64)}
@@ -907,7 +932,8 @@ procedure _line(const x0, y0, x1, y1: integer; const color: longword; const d: T
 
 
 procedure FP16ToSingle(const N:SizeInt; const src:PHalf; dst:PSingle);
-procedure SingleTpFP16(const N:SizeInt; const src:PSingle; dst:PHalf);
+procedure SingleToFP16(const N:SizeInt; const src:PSingle; dst:PHalf);
+procedure FillUntyped(var x; const count:SizeInt; const value; const valueSize:integer); inline;
 
 const
 
@@ -982,7 +1008,7 @@ procedure initOpenCL(const platformId :SizeInt=0; const deviceId: SizeInt=0);
 
 {$elseif defined(USE_CUDART)}
 var
-  cuda :TNNCuda;
+  cuda :TNNCuda<Single>;
 procedure initCUDART(const deviceIndex: SizeInt);
 {$endif}
 
@@ -1148,13 +1174,13 @@ const offset_table : array[0..63] of word = (
 var  bits : ConversionBits; i:SizeInt; value:word;
 begin
   for i:=0 to N-1 do begin
-    value := src[i];
+    value := word(src[i]);
     bits.i32 := mantissa_table[offset_table[value shr 10] + (value and $3FF)] + exponent_table[value shr 10];
     dst[i] := bits.f32;
   end;
 end;
 
-procedure SingleTpFP16(const N: SizeInt; const src: PSingle; dst: PHalf);
+procedure SingleToFP16(const N: SizeInt; const src: PSingle; dst: PHalf);
     const base_table : array[0..511] of word = (
       $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000,
       $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000, $0000,
@@ -1209,12 +1235,19 @@ procedure SingleTpFP16(const N: SizeInt; const src: PSingle; dst: PHalf);
     );
 var
   bits: ConversionBits;
-  halfbits : word; i:SizeInt; value:single;
+  i:SizeInt;
 begin
   for i:=0 to N-1 do begin
     bits.f32 := src[i];
     dst[i] := base_table[bits.i32 shr 23] + word((bits.i32 and $7FFFFF) shr shift_table[bits.i32 shr 23]);
   end
+end;
+
+procedure FillUntyped(var x; const count: SizeInt; const value; const valueSize: integer);
+var i: SizeInt;
+begin
+  for i:=0 to count-1 do
+    move(value, (PByte(@x) + i*valueSize)^, valueSize)
 end;
 
 
@@ -1709,7 +1742,7 @@ end;
 {$endif}
 
 procedure cblas_sscal(const N: SizeInt; const ALPHA: single; const a: PSingle;
-  const inca: SizeInt); overload; inline;
+  const inca: SizeInt); overload;
 var
   i: SizeInt;
 begin
@@ -2368,7 +2401,7 @@ begin
 end;
 
 function cblas_ddot(const N: SizeInt; const A: PDouble; const inca: SizeInt;
-  const B: PDouble; const incb: SizeInt): double;
+  const B: PDouble; const incb: SizeInt): double; WINAPI;
 var
   i: SizeInt;
 begin
@@ -2414,7 +2447,7 @@ begin
 
   if (TransA = CblasNoTrans) and (TransB = CblasNoTrans) then
     // todo fast_gemm is disabled, not 100% accurate!
-    {$if defined(CPUX64) and $defined(BIG_MATRECIES)}
+    {$if defined(CPUX64) and defined(BIG_MATRECIES)}
     // optimized for big matrecies! it will perform close to openblas speed, [CAUSION] : unstable with small matrecies!
     if AVX2Support then
       gemm_nn_fast(M, N, K, ALPHA, A, lda, B, ldb, C, ldc)
@@ -2513,7 +2546,7 @@ procedure cblas_dgemm_batch_strided(const Order: CBLAS_LAYOUT; const TransA, Tra
   const A: PDouble; const lda, strideA:SizeInt;
   const B: PDouble; const ldb, strideB: SizeInt;
   const BETA: double;
-  const C: PDouble; const ldc, strideC, batchCount: SizeInt);
+  const C: PDouble; const ldc, strideC, batchCount: SizeInt);  WINAPI;
 var i:SizeInt;
 begin
   for i:= 0 to batchCount-1 do
@@ -2631,13 +2664,14 @@ end;
 
 { TTools }
 
-class procedure TTools<T>.QuickSort(Arr: PT; L, R: SizeInt;
-  const Compare: TComparefunc; const Descending: boolean);
+class procedure TTools<T>.QuickSort(Arr: PT; L, R: SizeInt; Compare: TComparefunc; const Descending: boolean);
 var
   I, J, neg: SizeInt;
   P, Q: T;
 begin
   if not Assigned(Arr) then exit;
+  if not Assigned(Compare) then
+    compare := @_cmp;
 
   if descending then
     neg := -1
@@ -2676,12 +2710,18 @@ begin
   until L >= R;
 end;
 
-class function TTools<T>.BinSearch(const Arr: PT; const Val: T; R: SizeInt;
-  Compare: TComparefunc): integer;
+class function TTools<T>._cmp(const a, b: T): SizeInt;
+begin
+  result := TComparer<T>.default.Compare(a, b)
+end;
+
+class function TTools<T>.BinSearch(const Arr: PT; const Val: T; R: SizeInt; Compare: TComparefunc): integer;
 var
   L, I: SizeInt;
   CompareRes: IntPtr;isFound:boolean;
 begin
+  if not Assigned(Compare) then
+    compare := @_cmp;
   isFound := false;
   result:=-1;
   assert(assigned(compare), 'No <Compare> function assigned');
@@ -3104,7 +3144,7 @@ begin
   Result := round(randG(aMean, aStdDev));
 end;
 
-function _cmp(const a, b: single): SizeInt; overload; inline;
+function _cmp(const a, b: single): SizeInt; overload; WINAPI;
 begin
   if isNan(a) or isNan(b) then exit(-1);
   if a = b then exit(0);
@@ -3113,7 +3153,7 @@ begin
   //if a < b then exit(-1);
 end;
 
-function _cmp(const a, b: double): SizeInt; overload; inline;
+function _cmp(const a, b: double): SizeInt; overload; WINAPI;
 begin
   if isNan(a) or isNan(b) then exit(-1);
   if a = b then exit(0);
@@ -3122,22 +3162,22 @@ begin
   Result := -1;
 end;
 
-function _cmp(const a, b: int32): SizeInt; overload; inline;
+function _cmp(const a, b: int32): SizeInt; overload; WINAPI;
 begin
   Result := a - b;
 end;
 
-function _cmp(const a, b: int64): SizeInt; overload; inline;
+function _cmp(const a, b: int64): SizeInt; overload; WINAPI;
 begin
   Result := a - b;
 end;
 
-function _cmp(const a, b: byte): SizeInt; overload; inline;
+function _cmp(const a, b: byte): SizeInt; overload; WINAPI;
 begin
   Result := a - b;
 end;
 
-function _cmp(const a, b: shortint): SizeInt; overload; inline;
+function _cmp(const a, b: shortint): SizeInt; overload; WINAPI;
 begin
   Result := a - b;
 end;
@@ -3293,7 +3333,7 @@ begin
   Result := abs(a);
 end;
 
-{$ifdef fpc}
+{$ifdef _fpc}
 function _Abs(const a: SizeInt): SizeInt; overload; inline;
 begin
   Result := abs(a);
@@ -4878,6 +4918,16 @@ begin
     dst[i] := src[i];
 end;
 
+class procedure TTensor<T>.cvtsh(const N: SizeInt; const src: PSingle; const dst: PHalf);
+begin
+  SingleToFP16(N, src, dst)
+end;
+
+class procedure TTensor<T>.cvths(const N: SizeInt; const src: PHalf; const dst: PSingle);
+begin
+  FP16ToSingle(N, src, dst);
+end;
+
 class procedure TTensor<T>.cvtdd(const N: SizeInt; const src: PDouble;
   const dst: PDouble);
 var
@@ -5369,6 +5419,18 @@ begin
   move(AValue.Data[0], Data[idx * groupSize()], groupSize() * SizeOf(T));
 end;
 
+function TTensor<T>.GetFloats(index: SizeInt): Single;
+begin
+  assert(assigned(vcvts), '[Floats] Not implemented');
+  vcvts(1, @Data[index], @result)
+end;
+
+procedure TTensor<T>.SetFloats(index: SizeInt; AValue: Single);
+begin
+  assert(assigned(vcvtfs), '[Floats] Not implemented');
+  vcvtfs(1, @AValue, @Data[index])
+end;
+
 function TTensor<T>.GetDimensions: SizeInt;
 begin
   Result := length(FShape);
@@ -5709,8 +5771,7 @@ begin
   Result := v;
 end;
 
-class procedure TTensor<T>.meanVarMagAsDouble(const N: SizeInt; const src: PT;
-  var outMean, outVar, outMag: double);
+class procedure TTensor<T>.meanVarMagAsDouble(const N: SizeInt; const src: PT; var outMean, outVar, outMag: double);
 var i: SizeInt;
   d : double;
 begin
@@ -6146,9 +6207,9 @@ begin
     exit;
   end;
   if not Assigned(Data) then exit;
-  d := Data;
-  Data := nil;
-  Freemem(d);
+  //d := Data;
+  //Data := nil;
+  //Freemem(d);
 end;
 
 function TTensor<T>.wasGPU(): boolean;
@@ -6163,15 +6224,26 @@ procedure initOpenCL(const platformId: SizeInt; const deviceId: SizeInt);
 var
   //infs: array of string;
   i: Integer;
+  withKernels:TArray<ansistring>;
 begin
   if not assigned(ocl) then
   begin
     ocl := TNNOpenCL.Create(TCLDeviceType.dtALL);
+    {$ifdef fpc} // todo Load CL code to exe .RC resource file
     ocl.LoadFromFile(GetCurrentDir + '/../../../source/cl_sgemm.c');
+    {$else}
+    ocl.LoadFromFile(GetCurrentDir + '/../../../../../source/cl_sgemm.c');
+    {$endif}
   end;
   ocl.ActivePlatformId := platformId;
   ocl.ActiveDeviceId := deviceId;
-  if not ocl.isBuilt then ocl.build('-DBLOCK='+intToStr(OCL_BLOCK));
+  // i have listed the kernels in reverse because of cuda!,
+  //this is my lazy reverse, didn't have time to hard code them rearranged
+  setLength(withKernels, length(kernelNames));
+  for i:=0 to High(kernelNames) do
+    withKernels[i] := kernelNames[i];
+  if not ocl.isBuilt then
+    ocl.build('-DBLOCK='+intToStr(OCL_BLOCK), withKernels);
   //setLength(infs, ocl.KernelCount);
   //for i:=0 to ocl.KernelCount-1 do
   //  infs[i] := ocl.KernelInfo(i).KernelName;
@@ -6182,13 +6254,17 @@ const CUBIN_FILE='cuda_sgemm.cubin';
 begin
   if not assigned(cuda) then
   begin
-    cuda := TNNCuda.Create(deviceIndex);
+    cuda := TNNCuda<single>.Create(deviceIndex);
     //if FileExists(CUBIN_FILE) then
     //  cuda.loadCUBinFile(CUBIN_FILE)
     //else if FileExists(GetCurrentDir + '/../../../source/'+CUBIN_FILE) then
     //  cuda.loadCUBinFile(GetCurrentDir + '/../../../source/'+CUBIN_FILE)
     //else
+    {$ifdef FPC}                       // todo CUDA code must be inside the executable .RC resource
       cuda.loadCUBIN(cuda.compileFile(GetCurrentDir + '/../../../source/cuda_sgemm.cu'));
+    {$else}
+      cuda.loadCUBIN(cuda.compileFile(GetCurrentDir + '/../../../../../source/cuda_sgemm.cu'));
+    {$endif}
   end;
 end;
 {$endif}
@@ -6219,19 +6295,21 @@ begin
   {$ifdef USE_TELEMETRY}
   if benchmark then tensorMetrics.start(opHostToDevice);
   {$endif}
-
   {$if defined(USE_OPENCL)}
-  sz := byteSize();
-  ocl.writeBuffer(devData, sz, Data);
-  //ocl.finish();
-  lastOP := cdOpenCL;
+  if assigned(Data) then begin
+    sz := byteSize();
+    ocl.writeBuffer(devData, sz, Data);
+    //ocl.finish();
+    lastOP := cdOpenCL;
+  end;
   {$elseif defined(USE_CUDART)}
-  sz := byteSize();
-  cuda.writeBuffer(devData, sz, Data);
-  //SAFE_CALL(cudaMemcpy(devData, data, sz, cudaMemcpyHostToDevice));
-  lastOP := cdCUDA;
+  if assigned(Data) then begin
+    sz := byteSize();
+    cuda.writeBuffer(devData, sz, Data);
+    //SAFE_CALL(cudaMemcpy(devData, data, sz, cudaMemcpyHostToDevice));
+    lastOP := cdCUDA;
+  end;
   {$endif}
-
   {$ifdef USE_TELEMETRY}
   if benchmark then tensorMetrics.finish(opHostToDevice);
   {$endif}
@@ -6246,14 +6324,18 @@ begin
   {$endif}
 
   {$if defined(USE_OPENCL)}
-  sz := byteSize();
-  ocl.readBuffer(devData, sz, Data);
-  //ocl.finish();
-  lastOP := cdCPU;
+  if assigned(data) then begin
+    sz := byteSize();
+    ocl.readBuffer(devData, sz, Data);
+    //ocl.finish();
+    lastOP := cdCPU;
+  end;
   {$elseif defined(USE_CUDART)}
-  sz := byteSize();
-  cuda.readBuffer(devData, sz, Data);
-  lastOP := cdCPU;
+  if assigned(data) then begin
+    sz := byteSize();
+    cuda.readBuffer(devData, sz, Data);
+    lastOP := cdCPU;
+  end;
   {$endif}
 
   {$ifdef USE_TELEMETRY}
@@ -6281,7 +6363,7 @@ begin
   ocl.ReadBuffer(devData, sizeOf(T) * N, dst.Data, sizeOf(T) * offset);
   ocl.CheckError();
   {$elseif defined(USE_CUDART)}
-  cuda.ReadBuffer(devData + sizeOf(T)*offset, sizeOf(T) * N, dst.Data);
+  cuda.ReadBuffer(pointer(PByte(@devData) + sizeOf(T)*offset), sizeOf(T) * N, dst.Data);
   {$endif}
   //ocl.finish();
   dst.lastOP := cdCPU;
@@ -6356,6 +6438,46 @@ begin
   {$ifdef USE_TELEMETRY}
   if benchmark then tensorMetrics.finish(opFill);
   {$endif}
+end;
+
+procedure TTensor<T>.&repeat(const vals: PT; const valsCount: SizeInt;N: SizeInt);
+begin
+  assert(assigned(data) and assigned(vals),'[TTensor.repeat] Tensor or values to repeat must be assigned!');
+  if N=0 then
+    N:= size() div valsCount ;
+  FillUntyped(Data^, SizeOf(T)*N, vals^, SizeOf(T)*valsCount);
+end;
+
+procedure TTensor<T>.&repeat(const vals: TArray<T>; N: SizeInt);
+begin
+  &repeat(pointer(vals), length(vals), N)
+end;
+
+procedure TTensor<T>.triangularFill(const val: T; const upper: boolean; const includeDiagonal: boolean);
+var i, j, sz, wi, diag:SizeInt;
+  D :PT;
+begin
+  sz := area();
+  wi := w();
+  D := Data;
+  if upper then
+    diag := SizeInt(not includeDiagonal)
+  else
+    diag := SizeInt(includeDiagonal);
+  if upper then
+    for i:=0 to Size() div sz -1 do begin
+      for j:=0 to h()-1 do begin
+        if j>=wi then break;
+        FillUntyped((D + wi*j+j+diag)^, wi-j-diag, val, sizeOf(T));
+      end;
+      inc(D, sz)
+    end
+  else
+  for i:=0 to Size() div sz -1 do begin
+    for j:=0 to h()-1 do
+      FillUntyped((D + wi*j)^, math.min(j+diag, wi), val, sizeOf(T));
+    inc(D, sz)
+  end;
 end;
 
 procedure TTensor<T>.Sort(dst: TTensor<T>; const Descending: boolean = False);
@@ -7832,6 +7954,19 @@ begin
   {$endif}
 end;
 
+procedure TTensor<T>.toHalfs(const dst: PHalf; const start: SizeInt; N: SizeInt);
+begin
+  {$ifdef USE_TELEMETRY}
+  tensorMetrics.start(opConvert);
+  {$endif}
+  assert(assigned(vcvth), 'Not Implemented');
+  if N = 0 then N := Size - Start;
+  vcvth(N, @Data[start], dst);
+  {$ifdef USE_TELEMETRY}
+  tensorMetrics.finish(opConvert);
+  {$endif}
+end;
+
 function TTensor<T>.dot(const src: PT; N: SizeInt; const Stride: SizeInt;
   const srcStride: SizeInt): T;
 begin
@@ -8137,6 +8272,7 @@ begin
                      AKernels.Data, k, strideA,
                      workspacePtr, outImgSize, strideB,
                      zero, dstIM, outImgSize, strideC, groups);
+
   {$else}
   for b := 0 to groups - 1 do
   begin
@@ -8374,7 +8510,7 @@ var
 begin
   MeanAndVar(aMean, aStdDev);
   if compare(aStdDev, zero) = 0 then exit;
-  aStdDev := Self.sqrt(aStdDev);
+  aStdDev := sqrt(aStdDev);
   if assigned(normvss) then
     normvss(Size(), Data, aMean, aStdDev)
   else
@@ -8474,7 +8610,7 @@ begin
 
   for i:=0 to C-1 do begin
     meanAndVar(m, v, 1, N, i*N);
-    normvss(N, data + i*N, m, TTensor<T>.sqrt(v));
+    normvss(N, data + i*N, m, sqrt(v));
   end;
   {$ifdef USE_TELEMETRY}
   if benchmark then tensorMetrics.finish(opRMSNorm)
@@ -8497,7 +8633,7 @@ begin
     C := Size() div N;
 
   for i:=0 to C-1 do begin
-    norm := division(one, TTensor<T>.sqrt(sumSqrv(N, data + i*N, 1)));
+    norm := division(one, sqrt(sumSqrv(N, data + i*N, 1)));
     mulvs(N, norm, data + i*N, 1);
   end;
   {$ifdef USE_TELEMETRY}
@@ -8650,7 +8786,13 @@ procedure sMeanAndVarianceDelta(const delta, x, mean, variance: TTensor<single>;
 var
   nDst, blockSize: SizeInt;
 
+{$ifdef FPC}
   procedure MnVD(i:IntPtr; data:pointer);
+{$else}
+  MnVD : TThreadProcNested;
+begin
+  MnVD := procedure (i:IntPtr; data:pointer)
+{$endif}
   var m, v: single;
     j, k, index:SizeInt;
   begin
@@ -8681,7 +8823,9 @@ var
   end;
 
 var i:SizeInt;
+{$ifdef FPC}
 begin
+{$endif}
   {$ifdef USE_TELEMETRY}
   if benchmark then tensorMetrics.start(opMeansVarsDelta);
   {$endif}
@@ -9606,7 +9750,7 @@ var
 begin
   Result := 0;
   for i := 0 to N - 1 do
-    if src[i * stride] <> Val then
+    if compare(src[i * stride], Val)<>0 then
       Inc(Result);
 end;
 
@@ -9617,7 +9761,7 @@ var
 begin
   Result := 0;
   for i := 0 to N - 1 do
-    if src[i * stride] = Val then
+    if compare(src[i * stride], Val)=0 then
       Inc(Result);
 end;
 
@@ -10632,7 +10776,12 @@ begin
       ow := Math.max(ow, length(S));
       Inc(oh);
     end;
-    if isNan(minVal) or isNan(maxVal) then exit([ow, oh]);
+
+    if isNan(minVal) or isNan(maxVal) then
+    begin
+      result := [ow, oh];
+      exit();
+    end;
     _w := w();
     if length(FShape) > 1 then
     begin
@@ -11282,15 +11431,22 @@ procedure sim2colStridedBatched(
   const batchCount:SizeInt);
 var b : SizeInt; mt:boolean;
 
-procedure i2c(idx:IntPtr; ptr:Pointer);
+{$ifdef FPC}
+  procedure i2c(idx:IntPtr; ptr:Pointer);
+{$else}
+  i2c : TThreadProcNested;
 begin
-  sim2Col(
-    aChannels, aHeight, aWidth,
-    kernelHeight, kernelWidth, padHeight, padWidth,
-    strideY, strideX, dilationY, dilationX, im+idx*imStride, imOffset, col+idx*colStride, colOffset, mt);
-end;
-
+  i2c := procedure (idx:IntPtr; ptr:Pointer)
+{$endif}
+  begin
+    sim2Col(
+      aChannels, aHeight, aWidth,
+      kernelHeight, kernelWidth, padHeight, padWidth,
+      strideY, strideX, dilationY, dilationX, im+idx*imStride, imOffset, col+idx*colStride, colOffset, mt);
+  end;
+{$ifdef FPC}
 begin
+{$endif}
   mt := batchCount=1;
   {$ifdef USE_MULTITHREADING}
   if not mt then
@@ -11393,15 +11549,22 @@ procedure dim2colStridedBatched(
   const batchCount:SizeInt);
 var b : SizeInt; mt:boolean;
 
-procedure i2c(idx:IntPtr; ptr:Pointer);
+{$ifdef FPC}
+  procedure i2c(idx:IntPtr; ptr:Pointer);
+{$else}
+  i2c : TThreadProcNested;
 begin
-  dim2Col(
-    aChannels, aHeight, aWidth,
-    kernelHeight, kernelWidth, padHeight, padWidth,
-    strideY, strideX, dilationY, dilationX, im+idx*imStride, imOffset, col+idx*colStride, colOffset, mt);
-end;
-
+  i2c :=  procedure (idx:IntPtr; ptr:Pointer)
+{$endif}
+  begin
+    dim2Col(
+      aChannels, aHeight, aWidth,
+      kernelHeight, kernelWidth, padHeight, padWidth,
+      strideY, strideX, dilationY, dilationX, im+idx*imStride, imOffset, col+idx*colStride, colOffset, mt);
+  end;
+{$ifdef FPC}
 begin
+{$endif}
   mt := batchCount=1;
   {$ifdef USE_MULTITHREADING}
   if not mt then
@@ -11611,18 +11774,25 @@ var
   mt: Boolean;
   b:SizeInt;
 
-procedure c2i(idx:IntPtr; ptr:Pointer);
+{$ifdef FPC}
+  procedure c2i(idx:IntPtr; ptr:Pointer);
+{$else}
+  c2i : TThreadProcNested;
 begin
-  scol2Im(
-    aChannels, aHeight, aWidth,
-    kernelHeight, kernelWidth, padHeight, padWidth,
-    strideY, strideX,
-    dilationY, dilationX,
-    inData + idx*inStride, inOffset,
-    outData + idx*outStride, outOffset, batchCount, mt);
-end;
-
+  c2i := procedure(idx:IntPtr; ptr:Pointer)
+{$endif}
+  begin
+    scol2Im(
+      aChannels, aHeight, aWidth,
+      kernelHeight, kernelWidth, padHeight, padWidth,
+      strideY, strideX,
+      dilationY, dilationX,
+      inData + idx*inStride, inOffset,
+      outData + idx*outStride, outOffset, batchCount, mt);
+  end;
+{$ifdef FPC}
 begin
+{$endif}
   mt := batchCount=1;
   {$ifdef USE_MULTITHREADING}
   if not mt then
@@ -11652,11 +11822,11 @@ var
   mt: Boolean;
 begin
   mt := batchCount=1;
-  {$ifdef USE_MULTITHREADING}
+  {$ifdef _USE_MULTITHREADING}
   if not mt then
     mp.&For(c2i, 0, batchCount, nil)
   else
-  {$endif}
+  {$else}
   for b:=0 to batchCount-1 do
     dcol2Im(
       aChannels, aHeight, aWidth,
@@ -11665,6 +11835,7 @@ begin
       dilationY, dilationX,
       inData + b*inStride, inOffset,
       outData + b*outStride, outOffset, batchCount, mt);
+  {$endif}
 end;
 
 procedure TTensor<T>.im2Col(const kernelWidth, kernelHeight, padWidth,
@@ -11871,7 +12042,7 @@ begin
   minMaxvss(N, src, 1, minVal, val);
   if assigned(outMin) then outMin^ := minVal;
   if assigned(outMax) then outMax^ := val;
-  if minVal = val then exit;
+  if compare(minVal , val)=0 then exit;
   val := minus(val, minVal); // rangle
   vcvtd(1, @val, @interval);
   interval := interval / aCount;
@@ -11981,6 +12152,7 @@ class operator TTensor<T>.Initialize(var dst:TTensor<T>);
 
 class operator TTensor<T>.Initialize(out dst: TTensor<T>);
   {$endif}
+
 var
   P: PTypeInfo;
   D: PTypeData;
@@ -12024,6 +12196,13 @@ begin
           vcvtd := @cvtbd;
           toStr := @bToStr;
 
+          //vcvtfi8          := @cvti8b;
+          //vcvtfi16         := @cvti16b;
+          //vcvtfi32         := @cvti32b;
+          vcvtfs           := @cvtsb;
+          vcvtfd           := @cvtdb;
+
+
         end;
 
         otSByte:
@@ -12041,10 +12220,16 @@ begin
           vcvtd := @cvti8d;
           toStr := @i8ToStr;
 
+          vcvtfs           := @cvtsi8;
+          vcvtfd           := @cvtdi8;
+
         end;
 
         otSWord:
-        begin
+        if CompareText(PTypeInfo(TypeInfo(T)).name, 'half')=0 then begin
+          vcvts := @cvths;
+          vcvtfs := @cvtsh
+        end else begin
           plus := @swplus;
           minus := @swminus;
           times := @swmul;
@@ -12058,6 +12243,10 @@ begin
           vcvts := @cvti16s;
           vcvtd := @cvti16d;
           toStr := @i16ToStr;
+
+          vcvtfs := @cvtsi16;
+          vcvtfd := @cvtdi16;
+
         end;
 
         otSLong:
@@ -12074,6 +12263,9 @@ begin
           vcvts := @cvti32s;
           vcvtd := @cvti32d;
           toStr := @i32ToStr;
+
+          vcvtfs := @cvtsi32;
+          vcvtfd := @cvtdi32;
         end;
 {$ifdef fpc}
         otSQWord:
@@ -12090,6 +12282,7 @@ begin
           vcvts := @cvti64s;
           vcvtd := @cvti64d;
           toStr := @i64ToStr;
+
         end;
 {$endif}
       end;
@@ -12123,9 +12316,14 @@ begin
           vcvti32 := @cvtsi32;
           vcvts := @cvtss;
           vcvtd := @cvtsd;
+          vcvth := @cvtsh;
           toStr := @sToStr;
           checkInf := @IsInfinite;
           checkNan := @isNan;
+
+          vcvtfs := @cvtss;
+          vcvtfd := @cvtds;
+
         end;
         ftDouble:
         begin
@@ -12143,6 +12341,10 @@ begin
           toStr := @dToStr;
           checkInf := @IsInfinite;
           checkNan := @isNan;
+
+          vcvtfs := @cvtsd;
+          vcvtfd := @cvtdd;
+
         end;
 
       end;

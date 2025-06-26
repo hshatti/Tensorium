@@ -1,4 +1,5 @@
 unit nnOpenCL;
+{$Z4}
 {$ifdef FPC}
   {$mode Delphi}
   {$if defined(CPUX64) or defined(CPUX32)}
@@ -15,7 +16,7 @@ uses
   OpenCL
   {$endif}
   , OpenCLHelper
-  {$ifndef FPC}
+  {$ifdef MSWINDOWS}
   , windows
   {$else}
   , dl
@@ -31,6 +32,99 @@ uses
     CL_LIB_BLAS  = 1;
     CL_LIB_BLAST = 2;
     OCL_BLOCK    = $100;
+
+  const kernelNames : array[0..43] of PAnsiChar =(
+    'vars',
+    'means',
+    'power',
+    'fmav',
+    'mulv',
+    'cost_l2',
+    'backward_dropout',
+    'forward_dropout',
+    'forward_scale_add',
+    'forward_scale',
+    'add_dots',
+    'norm_delta',
+    'means_vars_delta',
+    'normblkvv',
+    'normvs',
+    'normvv',
+    'means_vars',
+    'fmavss',
+    'upsample',
+    'Xcol2imKernelNormal',
+    'Xcol2imKernelFlip',
+    'Xim2colKernelNormal',
+    'Xim2colKernelFlip',
+    'im2col',
+    'crossEntropySoftmax',
+    'softmaxBatch',
+    'backward_maxpool',
+    'forward_maxpool',
+    'copy',
+    'fill',
+    'crossEntropyLogistics',
+    'scale',
+    'axpy',
+    'subv',
+    'addv',
+    'backward_bias',
+    'gradient_array',
+    'array_avtivate_swish',
+    'activate_array',
+    'forward_bias',
+    'sgemm1_tn',
+    'sgemm1_nt',
+    'sgemm2_nn',
+    'sgemm1_nn'
+  );
+
+  KERNEL_vars                  = 0;
+  KERNEL_means                 = 1;
+  KERNEL_power                 = 2;
+  KERNEL_fmav                  = 3;
+  KERNEL_mulv                  = 4;
+  KERNEL_cost_l2               = 5;
+  KERNEL_backward_dropout      = 6;
+  KERNEL_forward_dropout       = 7;
+  KERNEL_forward_scale_add     = 8;
+  KERNEL_forward_scale         = 9;
+  KERNEL_add_dots              = 10;
+  KERNEL_norm_delta            = 11;
+  KERNEL_means_vars_delta      = 12;
+  KERNEL_normblkvv             = 13;
+  KERNEL_normvs                = 14;
+  KERNEL_normvv                = 15;
+  KERNEL_means_vars            = 16;
+  KERNEL_fmavss                = 17;
+  KERNEL_upsample              = 18;
+  KERNEL_Xcol2imKernelNormal   = 19;
+  KERNEL_Xcol2imKernelFlip     = 20;
+  KERNEL_Xim2colKernelNormal   = 21;
+  KERNEL_Xim2colKernelFlip     = 22;
+  KERNEL_im2col                = 23;
+  KERNEL_crossEntropySoftmax   = 24;
+  KERNEL_softmaxBatch          = 25;
+  KERNEL_backward_maxpool      = 26;
+  KERNEL_forward_maxpool       = 27;
+  KERNEL_copy                  = 28;
+  KERNEL_fill                  = 29;
+  KERNEL_crossEntropyLogistics = 30;
+  KERNEL_scale                 = 31;
+  KERNEL_axpy                  = 32;
+  KERNEL_subv                  = 33;
+  KERNEL_addv                  = 34;
+  KERNEL_backward_bias         = 35;
+  KERNEL_gradient_array        = 36;
+  KERNEL_array_avtivate_swish  = 37;
+  KERNEL_activate_array        = 38;
+  KERNEL_forward_bias          = 39;
+  KERNEL_sgemm1_tn             = 40;
+  KERNEL_sgemm1_nt             = 41;
+  KERNEL_sgemm2_nn             = 42;
+  KERNEL_sgemm1_nn             = 43;
+
 type
 
   TCLMemAccess = OpenCLHelper.TCLMemAccess;
@@ -153,8 +247,8 @@ var
   CLBlastDgemm :function (const layout: TCLBlastLayout; const a_transpose: TCLBlastTranspose; const b_transpose: TCLBlastTranspose; const m: SizeInt; const n: SizeInt; const k: SizeInt; const alpha: double; const a_buffer: cl_mem; const a_offset: SizeInt; const a_ld: SizeInt; const b_buffer: cl_mem; const b_offset: SizeInt; const b_ld: SizeInt; const beta: double; c_buffer: cl_mem; const c_offset: SizeInt; const c_ld: SizeInt; queue: Pcl_command_queue; event: Pcl_event):cl_int; winapi;
   CLBlastSgemmBatched :function (const layout: TCLBlastLayout; const a_transpose: TCLBlastTranspose; const b_transpose: TCLBlastTranspose; const m: SizeInt; const n: SizeInt; const k: SizeInt; const alphas: Psingle; const a_buffer: cl_mem; const a_offsets: PSizeInt; const a_ld: SizeInt; const b_buffer: cl_mem; const b_offsets: PSizeInt; const b_ld: SizeInt; const betas: Psingle; c_buffer: cl_mem; const c_offsets: PSizeInt; const c_ld: SizeInt; const batch_count: SizeInt; queue: Pcl_command_queue; event: Pcl_event):cl_int; winapi;
   CLBlastDgemmBatched :function (const layout: TCLBlastLayout; const a_transpose: TCLBlastTranspose; const b_transpose: TCLBlastTranspose; const m: SizeInt; const n: SizeInt; const k: SizeInt; const alphas: PDouble; const a_buffer: cl_mem; const a_offsets: PSizeInt; const a_ld: SizeInt; const b_buffer: cl_mem; const b_offsets: PSizeInt; const b_ld: SizeInt; const betas: PDouble; c_buffer: cl_mem; const c_offsets: PSizeInt; const c_ld: SizeInt; const batch_count: SizeInt; queue: Pcl_command_queue; event: Pcl_event):cl_int; winapi;
-  CLBlastSgemmStridedBatched :function (const layout: TCLBlastLayout; const a_transpose: TCLBlastTranspose; const b_transpose: TCLBlastTranspose; const m: SizeInt; const n: SizeInt; const k: SizeInt; const alpha: single; const a_buffer: cl_mem; const a_offset: SizeInt; const a_ld: SizeInt; const a_stride: SizeInt; const b_buffer: cl_mem; const b_offset: SizeInt; const b_ld: SizeInt; const b_stride: SizeInt; const beta: single; c_buffer: cl_mem; const c_offset: SizeInt; const c_ld: SizeInt; const c_stride: SizeInt; const batch_count: SizeInt; queue: Pcl_command_queue; event: Pcl_event):cl_int; winapi;
-  CLBlastDgemmStridedBatched: function (const layout: TCLBlastLayout; const a_transpose: TCLBlastTranspose; const b_transpose: TCLBlastTranspose; const m: SizeInt; const n: SizeInt; const k: SizeInt; const alpha: double; const a_buffer: cl_mem; const a_offset: SizeInt; const a_ld: SizeInt; const a_stride: SizeInt; const b_buffer: cl_mem; const b_offset: SizeInt; const b_ld: SizeInt; const b_stride: SizeInt; const beta: double; c_buffer: cl_mem; const c_offset: SizeInt; const c_ld: SizeInt; const c_stride: SizeInt; const batch_count: SizeInt; queue: Pcl_command_queue; event: Pcl_event):cl_int; winapi;
+  CLBlastSgemmStridedBatched : function (const layout: TCLBlastLayout; const a_transpose: TCLBlastTranspose; const b_transpose: TCLBlastTranspose; const m: SizeInt; const n: SizeInt; const k: SizeInt; const alpha: single; const a_buffer: cl_mem; const a_offset: SizeInt; const a_ld: SizeInt; const a_stride: SizeInt; const b_buffer: cl_mem; const b_offset: SizeInt; const b_ld: SizeInt; const b_stride: SizeInt; const beta: single; c_buffer: cl_mem; const c_offset: SizeInt; const c_ld: SizeInt; const c_stride: SizeInt; const batch_count: SizeInt; queue: Pcl_command_queue; event: Pcl_event):cl_int; winapi;
+  CLBlastDgemmStridedBatched : function (const layout: TCLBlastLayout; const a_transpose: TCLBlastTranspose; const b_transpose: TCLBlastTranspose; const m: SizeInt; const n: SizeInt; const k: SizeInt; const alpha: double; const a_buffer: cl_mem; const a_offset: SizeInt; const a_ld: SizeInt; const a_stride: SizeInt; const b_buffer: cl_mem; const b_offset: SizeInt; const b_ld: SizeInt; const b_stride: SizeInt; const beta: double; c_buffer: cl_mem; const c_offset: SizeInt; const c_ld: SizeInt; const c_stride: SizeInt; const batch_count: SizeInt; queue: Pcl_command_queue; event: Pcl_event):cl_int; winapi;
 
 implementation
 
@@ -202,7 +296,7 @@ end;
 procedure TNNOpenCL.ActivateArray(const N: SizeInt; const x: cl_mem;
   const offset: SizeInt; const activation: longint; const events: TCLEvents;
   event: PCLEvent);
-const kernelId = 5;
+const kernelId = KERNEL_activate_array;
 //var NN:SizeInt;
 begin
   {$ifdef USE_TELEMETRY}
@@ -230,7 +324,7 @@ end;
 procedure TNNOpenCL.activateArraySWISH(const N: SizeInt; const x: cl_mem;
   const offset: SizeInt; const output_sigmoid, output: cl_mem;
   const events: TCLEvents; event: PCLEvent);
-const kernelId = 6;
+const kernelId = KERNEL_array_avtivate_swish;
 var NN:SizeInt;
 begin
   {$ifdef USE_TELEMETRY}
@@ -259,7 +353,7 @@ end;
 procedure TNNOpenCL.DeriveArray(const N: SizeInt; const x: cl_mem;
   const offset: SizeInt; const activation: longint; delta: cl_mem;
   const events: TCLEvents; event: PCLEvent);
-const kernelId = 7;
+const kernelId = KERNEL_gradient_array;
 var NN:SizeInt;
 begin
   {$ifdef USE_TELEMETRY}
@@ -291,7 +385,7 @@ procedure TNNOpenCL.forwardBias(const dstSize: SizeInt; const dst: cl_mem;
   const offset: SizeInt; const srcSize: SizeInt; const src: cl_mem;
   const incb: SizeInt; const batch: SizeInt; const events: TCLEvents;
   event: PCLEvent);
-const kernelId=4;
+const kernelId=KERNEL_forward_bias;
 var
     blockSize, NN, MM , i, k,  bOffset:SizeInt;
     reshape:integer;
@@ -334,7 +428,7 @@ procedure TNNOpenCL.backwardBias(const dstSize: SizeInt; const dst: cl_mem;
   const srcSize: SizeInt; const src: cl_mem; const srcOffset: SizeInt;
   const incb: SizeInt; const batch: SizeInt; const events: TCLEvents;
   event: PCLEvent);
-const kernelId=8;
+const kernelId=KERNEL_backward_bias;
 var blockSize :SizeInt;
 begin
   {$ifdef USE_TELEMETRY}
@@ -367,7 +461,7 @@ end;
 var hLib : {$if defined(MSWINDOWS)}HMODULE {$else}Pointer{$endif};
     {$if defined(MSWINDOWS)}
       {$ifdef FPC}
-      getProc : function(Lib : HMODULE; const ProcName : AnsiString):pointer;WINAPI;
+      getProc : function(Lib : HMODULE; ProcName : LPCSTR):pointer;WINAPI;
       {$else}
       getProc : function (hModule: HMODULE; lpProcName: LPCSTR): FARPROC; winapi;
       {$endif}
@@ -441,19 +535,19 @@ begin
     if N > M then begin
       SetGlobalWorkGroupSizes(N, M);
       //SetLocalWorkGroupSizes(NN, MM);
-      kernelId :=1;
+      kernelId :=KERNEL_sgemm2_nn;
     end else begin
       SetGlobalWorkGroupSizes(M, N);
     //  SetLocalWorkGroupSizes(MM, NN);
-      kernelId :=0;
+      kernelId :=KERNEL_sgemm1_nn;
     end
 
   else if (not transA) and transB then begin
     SetGlobalWorkGroupSizes(M, N);
-    kernelId := 2;
+    kernelId :=KERNEL_sgemm1_nt;
   end else if transA and (not transB) then begin
     SetGlobalWorkGroupSizes(M, N);
-    kernelId := 3 ;
+    kernelId := KERNEL_sgemm1_tn ;
   end;
 
   FErr:=clSetKernelArg(Kernels[kernelId], 0, SizeOf(K)       , @K);CheckError();
@@ -554,19 +648,19 @@ begin
     if N > M then begin
       SetGlobalWorkGroupSizes(N, M);
       //SetLocalWorkGroupSizes(NN, MM);
-      kernelId :=1;
+      kernelId :=KERNEL_sgemm2_nn;
     end else begin
       SetGlobalWorkGroupSizes(M, N);
     //  SetLocalWorkGroupSizes(MM, NN);
-      kernelId :=0;
+      kernelId :=KERNEL_sgemm1_nn;
     end
 
   else if (not transA) and transB then begin
     SetGlobalWorkGroupSizes(M, N);
-    kernelId := 2;
+    kernelId := KERNEL_sgemm1_nt;
   end else if transA and (not transB) then begin
     SetGlobalWorkGroupSizes(M, N);
-    kernelId := 3 ;
+    kernelId := KERNEL_sgemm1_tn ;
   end;
 
   FErr:=clSetKernelArg(Kernels[kernelId], 0, SizeOf(K)       , @K);CheckError();
@@ -605,7 +699,7 @@ procedure TNNOpenCL.addvv(const N: SizeInt; const src1: cl_mem;
   const src1Offset, inca: SizeInt; const src2: cl_mem; const src2Offset,
   incb: SizeInt; dst: cl_mem; const dstOffset, incc: SizeInt;
   const events: TCLEvents; event: PCLEvent);
-const kernelId = 9;
+const kernelId = KERNEL_addv;
 var NN:SizeInt;
 begin
   {$ifdef USE_TELEMETRY}
@@ -639,7 +733,7 @@ procedure TNNOpenCL.subvv(const N: SizeInt; const src1: cl_mem;
   const src1Offset, inca: SizeInt; const src2: cl_mem; const src2Offset,
   incb: SizeInt; dst: cl_mem; const dstOffset, incc: SizeInt;
   const events: TCLEvents; event: PCLEvent);
-const kernelId = 10;
+const kernelId = KERNEL_subv;
 var NN:SizeInt;
 begin
   {$ifdef USE_TELEMETRY}
@@ -675,7 +769,7 @@ procedure TNNOpenCL.mulvv(const N: SizeInt; const src1: cl_mem;
   const src1Offset, inca: SizeInt; const src2: cl_mem; const src2Offset,
   incb: SizeInt; dst: cl_mem; const dstOffset, incc: SizeInt;
   const events: TCLEvents; event: PCLEvent);
-const kernelId = 39;
+const kernelId = KERNEL_mulv;
 var NN:SizeInt;
 begin
   {$ifdef USE_TELEMETRY}
@@ -712,7 +806,7 @@ procedure TNNOpenCL.fmavv(const N: SizeInt;
   const src3: cl_mem; const src3Offset, incc: SizeInt;
   dst: cl_mem; const dstOffset, incd: SizeInt;
   const events: TCLEvents; event: PCLEvent);
-const kernelId = 40;
+const kernelId = KERNEL_fmav;
 var NN:SizeInt;
 begin
   {$ifdef USE_TELEMETRY}
@@ -750,7 +844,7 @@ procedure TNNOpenCL.axpy(const N: SizeInt; const a: single; const x: cl_mem;
   const xOffset: SizeInt; const incx: SizeInt; const y: cl_mem;
   const yOffset: SizeInt; const incy: sizeInt; const events: TCLEvents;
   event: PCLEvent);
-const kernelId = 11;
+const kernelId = KERNEL_axpy;
 var NN:SizeInt;
 begin
   {$ifdef USE_TELEMETRY}
@@ -783,7 +877,7 @@ procedure TNNOpenCL.power(const N: SizeInt; const x: cl_mem;
   const xOffset: SizeInt; const incx: SizeInt; const a: single;
   const y: cl_mem; const yOffset: SizeInt; const incy: sizeInt;
   const events: TCLEvents; event: PCLEvent);
-const kernelId = 41;
+const kernelId = KERNEL_power;
 var NN:SizeInt;
 begin
   {$ifdef USE_TELEMETRY}
@@ -814,7 +908,7 @@ end;
 
 procedure TNNOpenCL.scale(const N: SizeInt; const a: Single; const x: cl_mem;
   const stride: SizeInt; const events: TCLEvents; event: PCLEvent);
-const kernelId = 12;
+const kernelId = KERNEL_scale;
 var NN:SizeInt;
 begin
   {$ifdef USE_TELEMETRY}
@@ -844,7 +938,7 @@ end;
 procedure TNNOpenCL.crossEntropyLogistic(const N: SizeInt; const pred,
   truth: cl_mem; delta, error: cl_mem; const events: TCLEvents; event: PCLEvent
   );
-const kernelId = 13;
+const kernelId = KERNEL_crossEntropyLogistics;
 var NN:SizeInt;
 begin
 
@@ -865,7 +959,7 @@ end;
 
 procedure TNNOpenCL.fill(const N: SizeInt; const x: cl_mem; const offset:SizeInt; const val: single;
   const stride: SizeInt; const events: TCLEvents; event: PCLEvent);
-const kernelId = 14;
+const kernelId = KERNEL_fill;
 var NN:SizeInt;
 begin
   {$ifdef USE_TELEMETRY}
@@ -895,7 +989,7 @@ end;
 procedure TNNOpenCL.copy(const N: SizeInt; const src: cl_mem; const srcOffset,
   inca: SizeInt; const dst: cl_mem; const dstOffset, incb: SizeInt;
   const events: TCLEvents; event: PCLEvent);
-const kernelId = 15;
+const kernelId = KERNEL_copy;
 var NN:SizeInt; sz : SizeInt;
 begin
   {$ifdef USE_TELEMETRY}
@@ -936,7 +1030,7 @@ procedure TNNOpenCL.softmaxBatch(const N: SizeInt; const input: cl_mem;
   const iOffset: SizeInt; const batch, batch_size, groups, group_size,
   stride: SizeInt; const temp: single; const output: cl_mem;
   const oOffset: SizeInt; const events: TCLEvents; event: PCLEvent);
-const kernelId = 18;
+const kernelId = KERNEL_softmaxBatch;
 var NN:SizeInt;
 begin
   SetGlobalWorkGroupSizes(batch, groups);
@@ -963,7 +1057,7 @@ end;
 procedure TNNOpenCL.crossEntropySoftmax(const N: SizeInt; const pred,
   truth: cl_mem; delta, error: cl_mem; const events: TCLEvents; event: PCLEvent
   );
-const kernelId = 19;
+const kernelId =  KERNEL_crossEntropySoftmax;
 var NN:SizeInt;
 begin
   SetGlobalWorkGroupSizes(N);
@@ -985,7 +1079,7 @@ procedure TNNOpenCL.forwardMaxPool(const aBatch, outC, outH, outW: SizeInt;
   const input: cl_mem; const c, h, w: SizeInt; const stride_x, stride_y,
   padding, kernelSize: SizeInt; indexes, output: cl_mem;
   const events: TCLEvents; event: PCLEvent);
-const kernelId = 16;
+const kernelId =  KERNEL_forward_maxpool;
 var NN, MM:SizeInt;
 begin
   SetGlobalWorkGroupSizes(ABatch * outC, outH, outW);
@@ -1010,7 +1104,7 @@ end;
 procedure TNNOpenCL.backwardMaxPool(const aBatch, outC, outH, outW: SizeInt;
   output: cl_mem; const indexes, delta: cl_mem; const events: TCLEvents;
   event: PCLEvent);
-const kernelId = 17;
+const kernelId =  KERNEL_backward_maxpool;
 var
     NN:SizeInt;
 begin
@@ -1076,7 +1170,7 @@ procedure TNNOpenCL.im2col(const aChannels, aHeight, aWidth, kernelHeight,
   dilationX: SizeInt; const im: cl_mem; const imOffset: SizeInt;
   const col: cl_mem; const colOffset: SizeInt; const events: TCLEvents;
   event: PCLEvent);
-const kernelId = 22;
+const kernelId =  KERNEL_Xim2colKernelNormal;
 var
     NN, size_h, padding_h, col_h, padding_w, size_w, col_w, ceiled_w,
       ceiled_h:SizeInt;
@@ -1145,7 +1239,7 @@ procedure TNNOpenCL.col2im(const aChannels, aHeight, aWidth, kernelHeight,
   dilationX: SizeInt; const col: cl_mem; const colOffset: SizeInt;
   const im: cl_mem; const imOffset: SizeInt; const events: TCLEvents;
   event: PCLEvent);
-const kernelId = 24;
+const kernelId =  KERNEL_Xcol2imKernelNormal;
 var
     NN, size_h, padding_h, col_h, size_w, padding_w, col_w,
       dilation_bez_h, dilation_bez_w, gcd_h, gcd_w, stride_bez_h,
@@ -1228,7 +1322,7 @@ procedure TNNOpenCL.upSample(const aBatch, aChannels, outHeight,
   outWidth: SizeInt; const &in: cl_mem; const stride: SizeInt;
   const isForward: longint; const scale: single; const &out: cl_mem;
   const zeroIn: boolean; const events: TCLEvents; event: PCLEvent);
-const kernelId = 25;
+const kernelId =  KERNEL_upsample;
 var
     NN:SizeInt;
 begin
@@ -1252,7 +1346,7 @@ end;
 procedure TNNOpenCL.fmavss(const N: SizeInt; const src: cl_mem;
   const offset: SizeInt; const scalar, bias: single; dst: cl_mem;
   const events: TCLEvents; event: PCLEvent);
-const kernelId = 26;
+const kernelId =  KERNEL_fmavss;
 var
     NN:SizeInt;
 begin
@@ -1283,7 +1377,7 @@ end;
 procedure TNNOpenCL.meansAndVars(const srcSize, dstSize, groups: sizeInt;
   const src: cl_mem; const offset: sizeInt; means, vars: cl_mem;
   const events: TCLEvents; event: PCLEvent);
-const kernelId = 27;
+const kernelId =  KERNEL_means_vars;
 var
   blockSize,  NN:SizeInt;
 begin
@@ -1321,7 +1415,7 @@ procedure TNNOpenCL.normalize(const srcSize, dstSize, groups: SizeInt;
   means: cl_mem; const meansStride: sizeInt; vars: cl_mem;
   const varsStride: SizeInt; dst: cl_mem; const dstOffset: sizeInt;
   const events: TCLEvents; event: PCLEvent);
-const kernelId = 30;
+const kernelId =  KERNEL_normblkvv;
 var
   blockSize,  NN:SizeInt;
 begin
@@ -1357,7 +1451,7 @@ end;
 procedure TNNOpenCL.meansAndVarsDelta(const srcSize, dstSize, groups: SizeInt;
   delta, x: cl_mem; const offset: SizeInt; mean, variance, mean_delta,
   variance_delta: cl_mem; const events: TCLEvents; event: PCLEvent);
-const kernelId = 31;
+const kernelId =  KERNEL_means_vars_delta;
 var
     blockSize, NN:SizeInt;
 begin
@@ -1396,7 +1490,7 @@ end;
 procedure TNNOpenCL.normalizeDelta(const deltaSize, meanSize, groups: SizeInt;
   const delta, x: cl_mem; const offset: SizeInt; mean, variance, mean_delta,
   variance_delta: cl_mem; const events: TCLEvents; event: PCLEvent);
-const kernelId = 32;
+const kernelId =  KERNEL_norm_delta;
 var
     blockSize, NN:SizeInt;
 begin
@@ -1433,7 +1527,7 @@ end;
 procedure TNNOpenCL.addDots(const N, nDst, groups: SizeInt; const src1,
   src2: cl_mem; const srcOffset: SizeInt; dst: cl_mem; const events: TCLEvents;
   event: PCLEvent);
-const kernelId = 33;
+const kernelId =  KERNEL_add_dots;
 var
     blockSize, NN:SizeInt;
 begin
@@ -1471,7 +1565,7 @@ procedure TNNOpenCL.forwardScale(const dstSize: SizeInt; const dst: cl_mem;
   const offset: SizeInt; const scaleSize: SizeInt; const scale: cl_mem;
   const incb: SizeInt; const batch: SizeInt; const events: TCLEvents;
   event: PCLEvent);
-const kernelId=34;
+const kernelId = KERNEL_forward_scale;
 var
     blockSize, NN, MM , i, k, bOffset:SizeInt;
     reshape:integer;
@@ -1515,7 +1609,7 @@ procedure TNNOpenCL.forwardScaleAdd(const dstSize: SizeInt; const dst: cl_mem;
   const offset: SizeInt; const scaleSize: SizeInt; const scales,
   biases: cl_mem; const incb: SizeInt; const batch: SizeInt;
   const events: TCLEvents; event: PCLEvent);
-const kernelId=35;
+const kernelId= KERNEL_forward_scale_add;
 var
     NN, MM , i, k, bOffset, blockSize:SizeInt;
     reshape:integer;
@@ -1565,9 +1659,10 @@ procedure TNNOpenCL.forwardDropout(const N: SizeInt; const src: cl_mem;
   const probability, scale: single; rnd: cl_mem; dst: cl_mem;
   const events: TCLEvents; event: PCLEvent);
 
-const kernelId=36;
+const kernelId= KERNEL_forward_dropout;
 var
     NN, MM :SizeInt;
+    seed : longword;
 begin
 
   {$ifdef USE_TELEMETRY}
@@ -1579,9 +1674,9 @@ begin
   //SetLocalWorkGroupSizes(NN);
 
   //randomize;
-  random(1000); // next randSeed
+  seed := random($100000); // next randSeed
 
-  FErr := clSetKernelArg(Kernels[kernelId], 0, SizeOf(randSeed)    , @RandSeed);    CheckError();
+  FErr := clSetKernelArg(Kernels[kernelId], 0, SizeOf(Seed)        , @Seed);        CheckError();
   FErr := clSetKernelArg(Kernels[kernelId], 1, SizeOf(probability) , @probability); CheckError();
   FErr := clSetKernelArg(Kernels[kernelId], 2, SizeOf(scale)       , @scale);       CheckError();
   FErr := clSetKernelArg(Kernels[kernelId], 3, SizeOf(src)         , @src);         CheckError();
@@ -1602,7 +1697,7 @@ end;
 procedure TNNOpenCL.backwardDropout(const N: SizeInt; const src: cl_mem;
   const probability, scale: single; const rnd: cl_mem; dst: cl_mem;
   const events: TCLEvents; event: PCLEvent);
-const kernelId=37;
+const kernelId= KERNEL_backward_dropout;
 var
     NN, MM :SizeInt;
 begin
@@ -1634,7 +1729,7 @@ end;
 
 procedure TNNOpenCL.costL2(const N: SizeInt; const pred, truth, delta,
   error: cl_mem; const events: TCLEvents; event: PCLEvent);
-const kernelId=38;
+const kernelId= KERNEL_cost_l2;
 var
     NN, MM :SizeInt;
 begin

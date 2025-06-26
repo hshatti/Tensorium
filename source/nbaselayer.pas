@@ -6,9 +6,6 @@ interface
 
 uses
   SysUtils, ntypes, ntensors, nActivation
-  {$ifdef USE_OPENCL}
-  , OpenCL
-  {$endif}
   {$ifdef USE_TELEMETRY}
   , nOpMetrics
   {$endif}
@@ -83,18 +80,14 @@ type
     cost                     : TArray<Single>;
     index                    : SizeInt;
     net                      : TObject;
-    {$if defined(USE_OPENCL) and defined(CL_EVENTS)}
-    events                   : TArray<cl_event>;
-    ev                       : TArray<cl_int>;
-    {$endif}
     constructor Create(); virtual;
+    procedure setBatch(ABatch :SizeInt); virtual; abstract;
     function getWorkspaceSize():SizeInt; virtual;
     procedure Activate(const offset: SizeInt =0);   virtual;
     procedure Derivative(const offset: SizeInt =0); virtual;
     procedure reGroup(const stepBatch :SizeInt);
 
     function LayerTypeStr:string;
-    procedure setBatch(ABatch :SizeInt); virtual; abstract;
     procedure freeBatchNorm;
     //destructor Destroy();override;
     procedure forward(var state : TNNetState); virtual; abstract;

@@ -50,11 +50,10 @@
             <LinkSmart Value="True"/>
           </Linking>
           <Other>
-            <CustomOptions Value="-CfVFP
--dUSE_OPENBLAS
+            <CustomOptions Value="-dUSE_AVX2
 -dUSE_MULTITHREADING
 -dUSE_TELEMETRY
--dBIG_MATRECIES"/>
+-dUSE_CUDART"/>
             <OtherDefines Count="10">
               <Define0 Value="USE_OPENCL"/>
               <Define1 Value="USE_AVX2"/>
@@ -109,9 +108,8 @@
         <UnitName Value="nOpMetrics"/>
       </Unit>
       <Unit>
-        <Filename Value="..\..\..\source\nrnnlayer.pas"/>
+        <Filename Value="..\..\..\source\nRNNLayer.pas"/>
         <IsPartOfProject Value="True"/>
-        <UnitName Value="nRNNLayer"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\nncuda.pas"/>
@@ -127,6 +125,15 @@
         <Filename Value="..\..\..\source\nattentionlayer.pas"/>
         <IsPartOfProject Value="True"/>
         <UnitName Value="nAttentionLayer"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\sixel.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\sortedmap.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="SortedMap"/>
       </Unit>
     </Units>
   </ProjectOptions>
@@ -163,13 +170,7 @@
       </Debugging>
     </Linking>
     <Other>
-      <CustomOptions Value="-CfVFP
--dUSE_MULTITHREADING
--dUSE_TELEMETRY
--dBIG_MATRECIES
--dUSE_CUDART
--dUSE_CUDA
--dDEBUG_GPU"/>
+      <CustomOptions Value="-dUSE_OPENCL"/>
       <OtherDefines Count="10">
         <Define0 Value="USE_OPENCL"/>
         <Define1 Value="USE_AVX2"/>

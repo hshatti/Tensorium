@@ -10,6 +10,7 @@ unit OpenCLHelper;
 {$IFDEF MSWINDOWS}
 
 {$endif}
+{$H+}
 {.$define debug}
 interface
 
@@ -111,6 +112,7 @@ type
     FDevicesType:array of TCLDeviceType;
     FContext:cl_context;
     FKernels:TArray<cl_kernel>;
+    FAutoEnumKernels : boolean; // if true, will enumerate all kernels in the program into FKernels upon Build, otherwise, kernels has to be manually obtained
     FDeviceType: TCLDeviceType;
     FProgramSource: ansistring;
     cinfo:TDeviceStr;
@@ -202,11 +204,12 @@ type
 
     function DeviceName(Index: integer): ansistring;
     function DeviceCount:integer;
-    function Build(const params:ansistring=''):boolean;
+    function Build(const params:ansistring=''; const withKernels:TArray<ansistring> = nil):boolean;
     function readLog:ansistring;
     property BuildLog:ansistring read FBuildLog;
     property LastError:cl_int read FErr;
     property Kernels:TArray<cl_kernel> read FKernels;
+    function getKernels(const Names:TArray<ansiString>):TArray<cl_kernel>;
     function KernelCount:integer;
     function KernelInfo(index:integer):TCLKernelInfo;
     property GlobalWorkGroupSizes:TWorkSizes read FGlobalWorkGroupSizes;
@@ -394,7 +397,7 @@ begin
   {$ifdef DEBUG}
   if FErr<>CL_SUCCESS then
     //writeln(msg, clErrorText(FErr));
-    raise Exception.Create(clErrorText(FErr));
+    raise Exception.Create(clErrorText(FErr)+msg);
   {$endif}
 end;
 
@@ -473,8 +476,8 @@ class function TOpenCL.getDeviceName(const device: cl_device_id): ansistring;
 var cname : array[0..cInfoSize-1] of ansichar;
    buffCnt :size_t;
 begin
-  clGetDeviceInfo(device, CL_DEVICE_NAME, cInfoSize, @cname, buffCnt);
-  result := cname;
+  clGetDeviceInfo(device, CL_DEVICE_NAME, cInfoSize, @cname[0], buffCnt);
+  result := ansistring(cname);
 end;
 
 class function TOpenCL.getDeviceExtensionStr(const device: cl_device_id): ansistring;
@@ -482,7 +485,7 @@ var cname : array[0..cInfoSize-1] of ansichar;
    buffCnt :size_t;
 begin
   clGetDeviceInfo(device, CL_DEVICE_EXTENSIONS, cInfoSize, @cname, buffCnt);
-  result := cname;
+  result := ansistring(cname);
 end;
 
 class function TOpenCL.getDeviceTypeName(const device: cl_device_id): ansistring;
@@ -510,11 +513,14 @@ constructor TOpenCL.Create(deviceType: TCLDeviceType);
 var i:integer;
 begin
   FDeviceType:=deviceType;
+  FProgram:=nil;
+  FAutoEnumKernels:=true;
   PlatformCount:=0;
   FillChar(FParamSizes,sizeof(FParamSizes),0);
   for i:=0 to high(FGlobalOffsets) do FGlobalOffsets[i]:=0;
   FErr:=clGetPlatformIDs(0,nil,@PlatformCount); checkError();
   assert(PlatformCount>0, 'No OpenCL supported platforms found!');
+
   if FErr=CL_SUCCESS then
     if PlatformCount>0 then begin
       SetLength(Platforms,PlatformCount);
@@ -656,7 +662,7 @@ begin
   result:=FDeviceCount
 end;
 
-function TOpenCL.Build(const params: ansistring): boolean;
+function TOpenCL.Build(const params: ansistring; const withKernels: TArray<ansistring>): boolean;
 var
   src, par : PAnsiChar;
   sz       : size_t;
@@ -682,12 +688,15 @@ begin
       readln
     end;
 {$endif}
-    FErr:=clCreateKernelsInProgram(FProgram,0, nil, FKernelCount);CheckError();
-    setLength(FKernels,FKernelCount);
-    FErr:=clCreateKernelsInProgram(FProgram,FKernelCount, @FKernels[0], szui);CheckError();
-    FActiveKernelId:=-1;
-    if FKernelCount>0 then
-      SetActiveKernelId(0);
+    if not assigned(withKernels) and FAutoEnumKernels then begin
+      FErr:=clCreateKernelsInProgram(FProgram,0, nil, FKernelCount);CheckError();
+      setLength(FKernels,FKernelCount);
+      FErr:=clCreateKernelsInProgram(FProgram,FKernelCount, @FKernels[0], szui);CheckError();
+      FActiveKernelId:=-1;
+      if FKernelCount>0 then
+        SetActiveKernelId(0);
+    end else if assigned(withKernels) then
+      FKernels := getKernels(withKernels);
     FIsBuilt:=True;
     Result:=True
   end;
@@ -700,6 +709,19 @@ var
 begin
   FErr:=clGetProgramBuildInfo(FProgram,FActiveDevice,CL_PROGRAM_BUILD_LOG,cInfoSize,@cinfo[0], sz);CheckError();
   result := cinfo
+end;
+
+function TOpenCL.getKernels(const Names: TArray<ansiString>): TArray<cl_kernel>;
+var i:SizeInt;res:cl_int;
+begin
+  assert(assigned(FProgram), 'No program was found, build a program from source 1st!.');
+  setLength(result, length(Names));
+  for i:=0 to high(Names) do begin
+    result[i] := clCreateKernel(FProgram, PAnsiChar(names[i]), FErr);
+    CheckError('Kernel ['+Names[i]+'] not found!');
+  end;
+  FKernelCount:=length(result);
+  FKernels:=result
 end;
 
 function TOpenCL.KernelCount: integer;
@@ -916,6 +938,8 @@ end;
 procedure TOpenCL.SetActiveKernelId(AValue: integer);
 begin
   if FActiveKernelId=AValue then exit;
+  if not AValue<length(FKernels) then
+    Exception.create('Kernel index out of bounds!');
   FActiveKernel:=FKernels[AValue];
   FActiveKernelId:=AValue;
   FActiveKernelInfo := KernelInfo(AValue)

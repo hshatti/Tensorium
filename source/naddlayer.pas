@@ -221,11 +221,11 @@ begin
 
   case weights_normalization of
     wnRELU_NORMALIZATION:
-      weights.Sums(pointer(weightSums), layers+1, relu);
+      weights.Sums(pointer(weightSums), layers+1, @relu);
     wnSOFTMAX_NORMALIZATION:
       begin
         weights.maxs(pointer(weightMaxes), layers+1);
-        weights.sums(pointer(weightSums), layers+1, softmax, pointer(weightMaxes));
+        weights.sums(pointer(weightSums), layers+1, @softmax, pointer(weightMaxes));
       end;
   end;
   if weights_normalization <> wnNO_NORMALIZATION then
@@ -238,8 +238,8 @@ begin
       for batch :=0 to output.groups -1 do
           for cId :=0 to _c -1 do begin
               w := relu(weights.data[cId]) / weightSums[cId];
-              OO := output.data + batch*outputs + cId*step;
-              II := input.data + batch*outputs + cId*step;
+              OO := pointer(output.data + batch*outputs + cId*step);
+              II := pointer(input.data + batch*outputs + cId*step);
               for i :=0 to step-1 do
                   OO[i] := II[i] * w
           end;
@@ -248,8 +248,8 @@ begin
         for batch :=0 to output.groups -1 do
             for cId :=0 to _c -1 do begin
                 w := exp(weights.data[cId]- weightMaxes[cId]) / weightSums[cId];
-                OO := output.data + batch*outputs + cId*step;
-                II := input.data + batch*outputs + cId*step;
+                OO := pointer(output.data + batch*outputs + cId*step);
+                II := pointer(input.data + batch*outputs + cId*step);
                 for i :=0 to step-1 do
                     OO[i] := II[i] * w
             end;
@@ -266,15 +266,15 @@ begin
           cId := 0;
           weights_index:= (i+1) * _c;
           while add_index< add_outputs do begin
-            add := layers_output[i].Data;
+            add := pointer(layers_output[i].Data);
             w := weights.data[weights_index];
             w := relu(w) / weightSums[cId];
             inc(weights_index);
-            OO := output.data + batch*outputs + add_index;
+            OO := pointer(output.data + batch*outputs + add_index);
             II := add + batch*add_outputs + add_index;
             //for src_i :=0 to step-1 do
             //    OO[src_i] := w * II[src_i] + OO[src_i];
-            TSingleTensor.axpysvv(step, w, II, 1, OO, 1);
+            TSingleTensor.axpysvv(step, w, pointer(II), 1, pointer(OO), 1);
             inc(add_index, step);
             inc(cId);
           end;
@@ -288,15 +288,15 @@ begin
           cId := 0;
           weights_index:= (i+1) * _c;
           while add_index< add_outputs do begin
-            add := layers_output[i].Data;
+            add := pointer(layers_output[i].Data);
             w := weights.data[weights_index];
             w := exp(w-weightMaxes[cId]) / weightSums[cId];
             inc(weights_index);
-            OO := output.data + batch*outputs + add_index;
+            OO := pointer(output.data + batch*outputs + add_index);
             II := add + batch*add_outputs + add_index;
             //for src_i :=0 to step-1 do
             //    OO[src_i] := w * II[src_i] + OO[src_i];
-            TSingleTensor.axpysvv(step, w, II, 1, OO, 1);
+            TSingleTensor.axpysvv(step, w, pointer(II), 1, pointer(OO), 1);
             inc(add_index, step);
             inc(cId);
           end;
@@ -337,11 +337,11 @@ begin
     // todo SIMDfy
     case weights_normalization of
       wnRELU_NORMALIZATION:
-        weights.Sums(pointer(weightSums), layers+1, relu);
+        weights.Sums(pointer(weightSums), layers+1, @relu);
       wnSOFTMAX_NORMALIZATION:
         begin
           weights.maxs(pointer(weightMaxes), layers+1);
-          weights.Sums(pointer(weightSums), layers+1, softmax, pointer(weightMaxes));
+          weights.Sums(pointer(weightSums), layers+1, @softmax, pointer(weightMaxes));
         end;
     end;
 
@@ -356,12 +356,12 @@ begin
             for cId :=0 to _c-1 do begin
                 w   := relu(weights.data[cId])/ weightSums[cId];
                 //grad := w;// exists only GPU kernel but not in CPU!, why?
-                DOO := delta_out.Data + batch*outputs + cId*step;
-                DII := delta_in.Data + batch*outputs + cId*step;
-                II  := input.Data + batch*outputs + cId*step;
+                DOO := pointer(delta_out.Data + batch*outputs + cId*step);
+                DII := pointer(delta_in.Data + batch*outputs + cId*step);
+                II  := pointer(input.Data + batch*outputs + cId*step);
                 //for i:=0 to step -1 do
                 //    DOO[i] := DOO[i] + DII[i] *w;
-                TSingleTensor.axpysvv(step, w, DII, 1, DOO, 1);
+                TSingleTensor.axpysvv(step, w, pointer(DII), 1, pointer(DOO), 1);
                 for i:=0 to step -1 do
                     weight_updates.Data[cId] :=  grad * DII[i]*II[i] + weight_updates.Data[cId]; // possible axypz>
             end;
@@ -371,12 +371,12 @@ begin
             for cId :=0 to _c-1 do begin
                 w   := exp(weights.data[cId] - weightMaxes[cId])/ weightSums[cId];
                 //grad := w*(1-w);// exists only GPU kernel but not in CPU!, why?
-                DOO := delta_out.Data + batch*outputs + cId*step;
-                DII := delta_in.Data + batch*outputs + cId*step;
-                II  := input.Data + batch*outputs + cId*step;
+                DOO := pointer(delta_out.Data + batch*outputs + cId*step);
+                DII := pointer(delta_in.Data + batch*outputs + cId*step);
+                II  := pointer(input.Data + batch*outputs + cId*step);
                 //for i:=0 to step -1 do
                     //DOO[i] := w * DII[i] + DOO[i];
-                TSingleTensor.axpysvv(step, w, DII, 1, DOO, 1);
+                TSingleTensor.axpysvv(step, w, pointer(DII), 1, pointer(DOO), 1);
                 for i:=0 to step -1 do
                     weight_updates.Data[cId] := grad * DII[i]*II[i] +  weight_updates.Data[cId];  //possible axypz?
             end;
@@ -394,16 +394,16 @@ begin
             cId           := 0;
             weights_index := (i+1) * _c;
             while add_index< add_outputs do begin
-              add := layers_output[i].Data + batch*add_outputs + add_index;
-              II  := layers_delta[i].Data  + batch*add_outputs + add_index;
-              DII := delta_in.Data         + batch*outputs     + add_index ;
+              add := pointer(layers_output[i].Data + batch*add_outputs + add_index);
+              II  := pointer(layers_delta[i].Data  + batch*add_outputs + add_index);
+              DII := pointer(delta_in.Data         + batch*outputs     + add_index);
 
               w   := weights.data[weights_index];
               w   := relu(w)/weightSums[cId];
               //grad                          := w;// exists only GPU kernel but not in CPU!, why?
               //for src_i:=0 to step-1 do
               //  II[src_i] := w * DII[src_i] + II[src_i]; // axpy
-              TSingleTensor.axpysvv(step, w, DII, 1, II, 1);
+              TSingleTensor.axpysvv(step, w, pointer(DII), 1, pointer(II), 1);
 
               for src_i:=0 to step-1 do
                 weight_updates.Data[weights_index] := grad * DII[src_i] * add[src_i] + weight_updates.Data[weights_index];  // possible axypz
@@ -427,16 +427,16 @@ begin
             cId           := 0;
             weights_index := (i+1) * _c;
             while add_index< add_outputs do begin
-              add := layers_output[i].Data + batch*add_outputs + add_index;
-              II  := layers_delta[i].Data  + batch*add_outputs + add_index;
-              DII := delta_in.Data         + batch*outputs     + add_index ;
+              add := pointer(layers_output[i].Data + batch*add_outputs + add_index);
+              II  := pointer(layers_delta[i].Data  + batch*add_outputs + add_index);
+              DII := pointer(delta_in.Data         + batch*outputs     + add_index);
 
               w   := weights.data[weights_index];
               w   := exp(w-weightMaxes[cId])/weightSums[cId];
               //grad                          := w*(1-w);// exists only GPU kernel but not in CPU!, why?
               //for src_i:=0 to step-1 do
                 //II[src_i] := w * DII[src_i] + II[src_i];   // axpy
-              TSingleTensor.axpysvv(step, w, DII, 1, II, 1);
+              TSingleTensor.axpysvv(step, w, pointer(DII), 1, pointer(II), 1);
 
               for src_i:=0 to step-1 do
                 weight_updates.data[weights_index] := grad * DII[src_i] * add[src_i] + weight_updates.data[weights_index];  // posible axypz

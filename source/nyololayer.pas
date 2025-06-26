@@ -996,7 +996,43 @@ begin
   state.delta.add(delta)
 end;
 
-{$if defined(USE_CUDART)}
+{$if defined(USE_OPENCL)}
+procedure TYoloLayer.forwardGPU(var state: TNNetState);
+var
+  _n, bbox_index, b, obj_index: SizeInt;
+begin
+  {$ifdef USE_TELEMETRY}
+  if benchmark then metrics.forward.start(layerType);
+  {$endif}
+  if not state.input.wasGPU() then state.input.pushToDevice;
+  output.setOCL;
+  ocl.copy(state.input.size(), state.input.devData, 0, 1, output.devData, 0, 1);
+  for b := 0 to batch -1 do
+      for _n := 0 to n -1 do
+          begin
+              bbox_index := entryIndex(b, _n * w * h, 0);
+              if not newCoords then
+                  begin
+                      ocl.ActivateArray(2 * w * h, output.devData, bbox_index, longint(acLOGISTIC));
+                      obj_index := entryIndex(b, _n * w * h, 4);
+                      ocl.ActivateArray((1+classes) * w * h, output.devData , obj_index, longint(acLOGISTIC))
+                  end;
+              //scal_add_cpu(2 * l.w * l.h, l.scale_x_y, -0.5 * (l.scale_x_y-1), l.output+bbox_index, 1)
+              if scaleXY<>1 then
+                  ocl.fmavss(2*w*h, output.devData, bbox_index, scaleXY, 0.5*(1-scaleXY), output.devData);
+          end;
+
+  {$ifdef USE_TELEMETRY}
+  ocl.finish();
+  if benchmark then metrics.forward.finish(layerType);
+  {$endif}
+end;
+
+procedure TYoloLayer.backwardGPU(var state: TNNetState);
+begin
+  ocl.axpy(state.delta.Size(), TNNet(state.net).lossScale*deltaNormalizer, delta.devData, 0, 1, state.delta.devData, 0, 1);
+end;
+{$elseif defined(USE_CUDART)}
 procedure TYoloLayer.forwardGPU(var state: TNNetState);
 var
   _n, bbox_index, b, obj_index: SizeInt;
@@ -1039,43 +1075,7 @@ end;
 
 procedure TYoloLayer.backwardGPU(var state: TNNetState);
 begin
-
-end;
-{$elseif defined(USE_OPENCL)}
-procedure TYoloLayer.forwardGPU(var state: TNNetState);
-var
-  _n, bbox_index, b, obj_index: SizeInt;
-begin
-  {$ifdef USE_TELEMETRY}
-  if benchmark then metrics.forward.start(layerType);
-  {$endif}
-  if not state.input.wasGPU() then state.input.pushToDevice;
-  output.setOCL;
-  ocl.copy(state.input.size(), state.input.devData, 0, 1, output.devData, 0, 1);
-  for b := 0 to batch -1 do
-      for _n := 0 to n -1 do
-          begin
-              bbox_index := entryIndex(b, _n * w * h, 0);
-              if not newCoords then
-                  begin
-                      ocl.ActivateArray(2 * w * h, output.devData, bbox_index, longint(acLOGISTIC));
-                      obj_index := entryIndex(b, _n * w * h, 4);
-                      ocl.ActivateArray((1+classes) * w * h, output.devData , obj_index, longint(acLOGISTIC))
-                  end;
-              //scal_add_cpu(2 * l.w * l.h, l.scale_x_y, -0.5 * (l.scale_x_y-1), l.output+bbox_index, 1)
-              if scaleXY<>1 then
-                  ocl.fmavss(2*w*h, output.devData, bbox_index, scaleXY, 0.5*(1-scaleXY), output.devData);
-          end;
-
-  {$ifdef USE_TELEMETRY}
-  ocl.finish();
-  if benchmark then metrics.forward.finish(layerType);
-  {$endif}
-end;
-
-procedure TYoloLayer.backwardGPU(var state: TNNetState);
-begin
-
+  cuda.axpy(state.delta.Size(), TNNet(state.net).lossScale*deltaNormalizer, delta.devData, 0, 1, state.delta.devData, 0, 1);
 end;
 {$endif}
 

@@ -10,7 +10,7 @@ uses
   , nLogisticLayer, nSoftmaxLayer, nCostLayer, nnet, nChrono, nConvolutionLayer, nUpSampleLayer, nDropOutLayer
   , nAttentionLayer, nModels, Keyboard, nParser, termesc, steroids
   {$if defined(MSWINDOWS)}
-  , ShellApi, uTokenizer
+  , ShellApi, uTokenizer, sixel, SortedMap
   //, cudnn_graph
   //, cudnn_adv
   //, cudnn_ops
@@ -75,11 +75,12 @@ begin
 end;
 
 var
-  img : TImageData;
+  //img : TImageData;
   coor : TArray<SizeInt>;
   trainingHistory , bmp: TSingleTensor;
-  drop: TDropoutLayer;
-  sn : TNNetState;
+  //drop: TDropoutLayer;
+  //sn : TNNetState;
+
   {$ifdef USE_OPENCL}
   dev : TArray<cl_device_id>;
   res1, res2 : single;
@@ -128,7 +129,7 @@ begin
 
   until (j>=0) and (j<length(dev)) ;
   initOpenCL(i, j);
-  ocl.useBLAS := 2;
+  ocl.useBLAS := CL_LIB_BLAST;
   //ocl.queueInOrder:=true;
   writeln('  - out of Order mode : ', not ocl.queueInOrder);
 
@@ -139,6 +140,7 @@ begin
 
 {$endif}
   sDigits := 6;
+
 
   //sleep(500);
   ////img.loadFromFile(['../../../../../data/dog.jpg', '../../../../../data/eagle.jpg'], 416, 416);
@@ -167,30 +169,30 @@ begin
   {$ifdef USE_TELEMETRY}
   benchmark:=true;
   {$endif}
+
+ //testing pseudorandom gen for dropout
+  //bmp := TSingleTensor.Create([80, 80]);
+  //drop := TDropoutLayer.Create(1, 0.1, 80*80);
+  //sn.input:=@bmp;
+  //sn.isTraining:=true;
+  //while true do begin
+  //  bmp.fill(1);
+  //  bmp.setCPU;
+  //  drop.forwardGPU(sn);
+  //  drop.output.pullFromDevice();
+  //  cursorHome();
+  //  drop.output.print(psGray);
+  //  readln;
+  //end;
+  //
+  //drop.free();
+  //exit;
+
   CF10 := TCIFAR10Data.Create('');
 
   speedOverSize:=true;
   Neural:=TNNet.Create(deepCIFAR10);
   //Neural:=TNNet.Create(leNetCIFAR10);
-
-(* //testing pseudorandom gen for dropout
-  bmp := TSingleTensor.Create([80, 80]);
-  drop := TDropoutLayer.Create(1, 0.2, 80*80);
-  sn.input:=@bmp;
-  sn.isTraining:=true;
-  while true do begin
-    bmp.fill(1);
-    bmp.setCPU;
-    drop.forwardGPU(sn);
-    drop.output.pullFromDevice();
-    cursorHome();
-    drop.output.print(psGray);
-    readln;
-  end;
-
-  drop.free();
-  exit;
-*)
 
   Neural.setTraining(true);
   Neural.batch       := READ_BATCH;
@@ -285,7 +287,7 @@ begin
       coor := trainingHistory.plot;
       {$ifdef USE_TELEMETRY}
       termesc.cursorAbsPos(1, 24);
-      writeln(sLineBreak, metrics.print(TELEMETRY_OPS or TELEMETRY_FWD or TELEMETRY_BWD or TELEMETRY_UPD));
+      writeln(sLineBreak, metrics.print(TELEMETRY_OPS {or TELEMETRY_FWD or TELEMETRY_BWD or TELEMETRY_UPD}));
       metrics.reset;
       {$endif}
       //writeln(sLineBreak, 'Predicted :');

@@ -2036,9 +2036,9 @@ function vmlGetErrorCallBack:VMLErrorCallBack;winapi; external {$ifdef libmkl} l
 
 function vmlClearErrorCallBack:VMLErrorCallBack;winapi; external {$ifdef libmkl} libmkl{$endif};
 
- function vmlSetMode(newmode:dword):dword;winapi; external {$ifdef libmkl} libmkl{$endif};
+ function vmlSetMode(newmode:UInt64):UInt64;winapi; external {$ifdef libmkl} libmkl{$endif};
 
-function vmlGetMode:dword;winapi; external {$ifdef libmkl} libmkl{$endif};
+function vmlGetMode:UInt64;winapi; external {$ifdef libmkl} libmkl{$endif};
 
 implementation
 

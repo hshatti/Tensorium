@@ -101,8 +101,9 @@
         <IsPartOfProject Value="True"/>
       </Unit>
       <Unit>
-        <Filename Value="..\..\..\source\nnOpenCL.pas"/>
+        <Filename Value="..\..\..\source\nnopencl.pas"/>
         <IsPartOfProject Value="True"/>
+        <UnitName Value="nnOpenCL"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\nopmetrics.pas"/>

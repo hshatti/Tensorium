@@ -35,6 +35,8 @@ type
   end;
 {$endif}
 
+  SizeInt = IntPtr;
+
 type
 
   PNNetState = ^TNNetState;
@@ -281,7 +283,7 @@ type
   TDetectionsHelper = record helper for TDetections
     //detections : TDetections;
   private
-    class function Comparer(const a, b: TDetection):SizeInt; static;
+    class function Comparer(const a, b: TDetection):SizeInt; static; WINAPI;
   public
     procedure doNMSObj(const classes: SizeInt; const thresh: single = 0.45);
     procedure doNMSSort(const classes: SizeInt; const thresh: single = 0.45);

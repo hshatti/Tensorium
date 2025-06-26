@@ -6,7 +6,7 @@ unit nSoftmaxLayer;
 interface
 
 uses
-  SysUtils, Math, nTensors, ntypes, nBaseLayer
+  SysUtils, Math, ntypes, nBaseLayer, nTensors
 
   {$if defined(USE_CUDART)}
   , nnCuda
@@ -23,8 +23,8 @@ type
     softmaxTree : TArray<TTree>;
     temperature : Single;
     constructor Create(const aBatch, aInputs:SizeInt; const aGroups:SizeInt=1);
-    procedure setBatch(ABatch: SizeInt); override;
     procedure setTrain(ATrain: boolean); override;
+    procedure setBatch(ABatch: SizeInt); override;
     procedure forward(var state: TNNetState); override;
     procedure backward(var state: TNNetState); override;
 {$if defined(USE_OPENCL)}
