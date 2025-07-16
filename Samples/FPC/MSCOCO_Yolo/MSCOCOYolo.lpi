@@ -53,22 +53,17 @@
 -OpCOREAVX2
 -dUSE_AVX2
 -dUSE_MULTITHREADING
--dUSE_TELEMETRY
--dBIG_MATRECIES
--dUSE_CUDART"/>
-            <OtherDefines Count="12">
+-dUSE_OPENCL
+-dBIG_MATRECIES"/>
+            <OtherDefines Count="8">
               <Define0 Value="USE_AVX2"/>
               <Define1 Value="USE_MULTITHREADING"/>
               <Define2 Value="USE_OPENBLAS"/>
               <Define3 Value="USE_OPENCL"/>
-              <Define4 Value="CLBLASTCONV"/>
-              <Define5 Value="USE_TELEMETRY"/>
-              <Define6 Value="MKL_ILP64"/>
-              <Define7 Value="USE_MKL"/>
-              <Define8 Value="BIG_MATRECIES"/>
-              <Define9 Value="CL_BLAST"/>
-              <Define10 Value="USE_NVBLAS"/>
-              <Define11 Value="USE_CUDART"/>
+              <Define4 Value="USE_TELEMETRY"/>
+              <Define5 Value="USE_MKL"/>
+              <Define6 Value="BIG_MATRECIES"/>
+              <Define7 Value="USE_CUDART"/>
             </OtherDefines>
           </Other>
         </CompilerOptions>
@@ -88,6 +83,22 @@
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\clblast.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\inc\cl_las.transposeSingle.inc"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\inc\cl_las.padTransposeSingle.inc"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\inc\cl_las.copySingle.inc"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\inc\cl_las.padSingle.inc"/>
         <IsPartOfProject Value="True"/>
       </Unit>
     </Units>
@@ -132,22 +143,18 @@
 -OpCOREAVX2
 -dUSE_AVX2
 -dUSE_MULTITHREADING
+-dUSE_OPENCL
 -dUSE_TELEMETRY
--dBIG_MATRECIES
--dUSE_CUDART"/>
-      <OtherDefines Count="12">
+-dBIG_MATRECIES"/>
+      <OtherDefines Count="8">
         <Define0 Value="USE_AVX2"/>
         <Define1 Value="USE_MULTITHREADING"/>
         <Define2 Value="USE_OPENBLAS"/>
         <Define3 Value="USE_OPENCL"/>
-        <Define4 Value="CLBLASTCONV"/>
-        <Define5 Value="USE_TELEMETRY"/>
-        <Define6 Value="MKL_ILP64"/>
-        <Define7 Value="USE_MKL"/>
-        <Define8 Value="BIG_MATRECIES"/>
-        <Define9 Value="CL_BLAST"/>
-        <Define10 Value="USE_NVBLAS"/>
-        <Define11 Value="USE_CUDART"/>
+        <Define4 Value="USE_TELEMETRY"/>
+        <Define5 Value="USE_MKL"/>
+        <Define6 Value="BIG_MATRECIES"/>
+        <Define7 Value="USE_CUDART"/>
       </OtherDefines>
     </Other>
   </CompilerOptions>

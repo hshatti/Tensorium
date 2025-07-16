@@ -509,7 +509,7 @@ extern "C" __global__ void activate_array(const long N, nfloat* x, long const of
 
 }
 
-extern "C" __global__ void array_avtivate_swish(const long N, nfloat* x, long const offset,  nfloat* output,  nfloat* output2)
+extern "C" __global__ void array_activate_swish(const long N, nfloat* x, long const offset,  nfloat* output,  nfloat* output2)
 {
     long i = blockDim.x * blockIdx.x + threadIdx.x;
     if (i>=N) return;
@@ -1798,6 +1798,22 @@ extern "C" __global__ void means_vars_delta_fast(
         }
         vars_delta[filter] *= -0.5f * pow(max(vars[filter] , sEPSILON), -1.5f);
     }
+}
+
+extern "C" __global__ void clip(const long N, const nfloat alpha, const nfloat* src, nfloat* dst, const long stride, const long offset ){
+   const long i = blockIdx.x*blockDim.x + threadIdx.x;
+   if(i>=N) return;
+   src += i*stride + offset;
+   dst += i*stride + offset;
+   *dst = max(min(*src, alpha), -alpha);
+}
+
+extern "C" __global__ void inverse_sqrt(const long N, const nfloat* src, nfloat* dst, const long stride, const long offset){
+   const long i = blockIdx.x*blockDim.x + threadIdx.x;
+   if(i>=N) return;
+   src += i*stride + offset;
+   dst += i*stride + offset;
+   *dst = 1/sqrt(max(*src, sEPSILON));
 }
 
 

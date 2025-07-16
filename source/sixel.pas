@@ -157,7 +157,7 @@ begin
 end;
 
 procedure printSixel(const buf: Pointer; const width, height: SizeInt; const Dither: boolean);
-const pixel = 3;
+const pixel = 1;
      pixcount = 6 div pixel;
      COLOR_SPACE : array[0..2] of byte = (8, 8, 4);
 var
@@ -483,7 +483,7 @@ initialization
   //repeat
   //  cursorHome();
   //  t := getTickCount64;
-  //  printSixel(bt.data, bt.h, bt.c);
+  //  printSixel(bt.data, bt.h, bt.c, true);
   //  write((GetTickCount64-t)/1000:1:3,'s');
   //  readln
   //until false;

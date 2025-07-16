@@ -50,10 +50,10 @@
             <LinkSmart Value="True"/>
           </Linking>
           <Other>
-            <CustomOptions Value="-dUSE_AVX2
+            <CustomOptions Value="-dUSE_OPENCL
+-dUSE_AVX2
 -dUSE_MULTITHREADING
--dUSE_TELEMETRY
--dUSE_CUDART"/>
+-dBIG_MATRECIES"/>
             <OtherDefines Count="10">
               <Define0 Value="USE_OPENCL"/>
               <Define1 Value="USE_AVX2"/>
@@ -64,7 +64,7 @@
               <Define6 Value="BIG_MATRECIES"/>
               <Define7 Value="USE_CUDNN"/>
               <Define8 Value="USE_CUDART"/>
-              <Define9 Value="USE_CUDA"/>
+              <Define9 Value="GPU_TEST"/>
             </OtherDefines>
           </Other>
         </CompilerOptions>
@@ -122,9 +122,8 @@
         <UnitName Value="uTokenizer"/>
       </Unit>
       <Unit>
-        <Filename Value="..\..\..\source\nattentionlayer.pas"/>
+        <Filename Value="..\..\..\source\nAttentionLayer.pas"/>
         <IsPartOfProject Value="True"/>
-        <UnitName Value="nAttentionLayer"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\sixel.pas"/>
@@ -134,6 +133,22 @@
         <Filename Value="..\..\..\source\sortedmap.pas"/>
         <IsPartOfProject Value="True"/>
         <UnitName Value="SortedMap"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\cl_las.xgemmsingle.inc"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\cl_las.xgemmhalf.inc"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\cl_las.XgemmDirectSingle.inc"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\cl_las.XgemmDirectHalf.inc"/>
+        <IsPartOfProject Value="True"/>
       </Unit>
     </Units>
   </ProjectOptions>
@@ -170,7 +185,11 @@
       </Debugging>
     </Linking>
     <Other>
-      <CustomOptions Value="-dUSE_OPENCL"/>
+      <CustomOptions Value="-dUSE_OPENCL
+-dUSE_AVX2
+-dUSE_MULTITHREADING
+-dBIG_MATRECIES
+-dUSE_CUDART"/>
       <OtherDefines Count="10">
         <Define0 Value="USE_OPENCL"/>
         <Define1 Value="USE_AVX2"/>
@@ -181,7 +200,7 @@
         <Define6 Value="BIG_MATRECIES"/>
         <Define7 Value="USE_CUDNN"/>
         <Define8 Value="USE_CUDART"/>
-        <Define9 Value="USE_CUDA"/>
+        <Define9 Value="GPU_TEST"/>
       </OtherDefines>
     </Other>
   </CompilerOptions>

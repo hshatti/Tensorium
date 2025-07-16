@@ -7,6 +7,7 @@ unit nnCuda;
 {$ModeSwitch typehelpers}
 {$endif}
 {$PointerMath ON}
+{$T-}
 interface
 
 uses
@@ -70,7 +71,7 @@ type
     class function cudaLibraryUnload(const &library : CUlibrary):CUResult; static;
     class function cudaStreamDestroy(const stream: CUStream):CUresult; static;
     //{$endif}
-    class function getCType():shortstring; static;
+    class function getTypeStr():shortstring; static;
     class function getType():TDataType;static;
   public
     //{$if defined(USE_CUDA)}
@@ -146,6 +147,8 @@ type
     procedure forwardDropout(const N: SizeInt; const src: TCUMem; const probability, scale: T; rnd: TCUMem; dst: TCUMem);
     procedure backwardDropout(const N: SizeInt; const src: TCUMem; const probability, scale: T; const rnd: TCUMem; dst: TCUMem);
     procedure costL2(const N:SizeInt; const pred ,truth, delta, error: TCUMem);
+    procedure clip(const N:SizeInt; const alpha :T; const src, dst: TCUMem; const stride: SizeInt =1; offset : SizeInt =0);
+    procedure inverseSqrt(const N:SizeInt; const alpha :T; const src, dst: TCUMem; const stride: SizeInt =1; offset : SizeInt =0);
 
     procedure finish();
     function compileToCUBIN(const code, name: ansistring; const headers: TArray<PAnsiChar> = nil; const includeNames: TArray<PAnsiChar> = nil): RawByteString;
@@ -155,7 +158,9 @@ type
     // procedure halfTest (//  const N : SizeInt; a:TCUMem; b:TCUMem ; c:TCUMem);
 
   const
-    kernelNames : array[0..44] of PAnsiChar =(
+    kernelNames : array[0..46] of PAnsiChar =(
+      'clip',
+      'inverse_sqrt',
       'means_vars_delta_fast',
       'vars',
       'means',
@@ -194,7 +199,7 @@ type
       'addv',
       'backward_bias',
       'gradient_array',
-      'array_avtivate_swish',
+      'array_activate_swish',
       'activate_array',
       'forward_bias',
       'sgemm1_tn',
@@ -209,7 +214,7 @@ const
     ('Unknowen', 'Half', 'BF16', 'Single', 'Double', 'ComplexHalf', 'ComplexSingle', 'ComplexBf16', 'ComplexDouble', 'INT16', 'INT8', 'INT4');
 
 procedure SAFE_CALL(const res : cudaError_t);inline;   overload;
-procedure SAFE_CALL(const res : cublasStatus_t); inline;  overload;
+procedure SAFE_CALL(const res : cublasStatus_t);  inline;overload;
 //{$if defined(USE_CUDA)}
 procedure SAFE_CALL(const res : CUresult);inline ; overload;
 //{$endif}
@@ -233,14 +238,14 @@ procedure SAFE_CALL(const res : cudaError_t);
 var str:PAnsiChar;
 begin
   str := cudaGetErrorString(res);
-  assert(res=cudaSuccess, str)
+  assert(res=cudaSuccess, string(str))
 end;
 
 procedure SAFE_CALL(const res : cublasStatus_t);
 var str:PAnsiChar;
 begin
   str := cublasGetStatusString(res);
-  assert(res=CUBLAS_STATUS_SUCCESS, str)
+  assert(res=CUBLAS_STATUS_SUCCESS, string(str))
 end;
 
 //{$if defined(USE_CUDA)}
@@ -248,7 +253,7 @@ procedure SAFE_CALL(const res : CUresult);
 var str:PAnsiChar;
 begin
   cuGetErrorString(res, @str);
-  assert(res=CUDA_SUCCESS, str)
+  assert(res=CUDA_SUCCESS, string(str))
 end;
 //{$endif}
 
@@ -265,7 +270,7 @@ var
   str:PAnsiChar;
 begin
   str := nvrtcGetErrorString(res);
-  assert(res=NVRTC_SUCCESS, str)
+  assert(res=NVRTC_SUCCESS, string(str))
 end;
 
 { TCudaParamsHelper }
@@ -411,7 +416,7 @@ begin
 end;
 //{$endif}
 
-class function TNNCuda<T>.getCType(): shortstring;
+class function TNNCuda<T>.getTypeStr(): shortstring;
 begin
   result := lowerCase(PTypeInfo(TypeInfo(T)).Name);
   if result = 'single' then
@@ -668,9 +673,16 @@ begin
 
   if useBLAS = 1 then begin
     case getType() of
-      dtHalf   : SAFE_CALL(cublasHgemm(cublas, cublasOperation_t(transB), cublasOperation_t(transA), N, M, K, @ALPHA, PHalf(B)+bOffset, ldb, PHalf(A)+aOffset, lda, @BETA, PHalf(C)+cOffset, ldc{, cublasComputeType_t.CUBLAS_COMPUTE_32F, cublasGemmAlgo_t.CUBLAS_GEMM_ALGO0}));
-      dtSingle : SAFE_CALL(cublasSgemm(cublas, cublasOperation_t(transB), cublasOperation_t(transA), N, M, K, @ALPHA, PSingle(B)+bOffset, ldb, PSingle(A)+aOffset, lda, @BETA, PSingle(C)+cOffset, ldc{, cublasComputeType_t.CUBLAS_COMPUTE_32F, cublasGemmAlgo_t.CUBLAS_GEMM_ALGO0}));
-
+      dtHalf   :
+        SAFE_CALL(cublasHgemm(cublas, cublasOperation_t(transB), cublasOperation_t(transA), N, M, K, @ALPHA, PHalf(B)+bOffset, ldb, PHalf(A)+aOffset, lda, @BETA, PHalf(C)+cOffset, ldc{, cublasComputeType_t.CUBLAS_COMPUTE_32F, cublasGemmAlgo_t.CUBLAS_GEMM_ALGO0}));
+      dtSingle :
+        SAFE_CALL(cublasSgemm(cublas, cublasOperation_t(transB), cublasOperation_t(transA), N, M, K, @ALPHA, PSingle(B)+bOffset, ldb, PSingle(A)+aOffset, lda, @BETA, PSingle(C)+cOffset, ldc{, cublasComputeType_t.CUBLAS_COMPUTE_32F, cublasGemmAlgo_t.CUBLAS_GEMM_ALGO0}));
+        //SAFE_CALL(cublasGemmEx(cublas, cublasOperation_t(transB), cublasOperation_t(transA)
+        //, N, M, K, @ALPHA, PSingle(B)+bOffset, CUDA_R_32F, ldb, PSingle(A)+aOffset, CUDA_R_32F, lda
+        //, @BETA, PSingle(C)+cOffset, CUDA_R_32F, ldc
+        //, CUBLAS_COMPUTE_32F_FAST_TF32, CUBLAS_GEMM_DEFAULT));
+      dtDouble :
+        SAFE_CALL(cublasDgemm(cublas, cublasOperation_t(transB), cublasOperation_t(transA), N, M, K, @ALPHA, PDouble(B)+bOffset, ldb, PDouble(A)+aOffset, lda, @BETA, PDouble(C)+cOffset, ldc{, cublasComputeType_t.CUBLAS_COMPUTE_32F, cublasGemmAlgo_t.CUBLAS_GEMM_ALGO0}));
     end;
     goto done;// yes goto! and there is nothing you can do about it!
   end;
@@ -732,20 +744,18 @@ begin
 
     //SAFE_CALL(cublasSetWorkspace(cublas, workspace, workspaceSize));
 
-    if useBLAS = 1 then
-    case getType() of
-      dtSingle :
-      begin
-        SAFE_CALL(cublasSgemmBatched_64(cublas, cublasOperation_t(transB), cublasOperation_t(transA), N, M, K,
-        @ALPHA, PPSingle(B), ldb, PPSingle(A), lda, @BETA, PPSingle(C), ldc, batchCount));
-        goto done;// yes goto! and there is nothing you can do about it!
+    if useBLAS = 1 then begin
+      case getType() of
+        dtHalf :
+          SAFE_CALL(cublasHgemmBatched(cublas, cublasOperation_t(transB), cublasOperation_t(transA), N, M, K, @ALPHA, PPHalf(B), ldb, PPHalf(A), lda, @BETA, PPHalf(C), ldc, batchCount));
+        dtSingle :
+          SAFE_CALL(cublasSgemmBatched_64(cublas, cublasOperation_t(transB), cublasOperation_t(transA), N, M, K, @ALPHA, PPSingle(B), ldb, PPSingle(A), lda, @BETA, PPSingle(C), ldc, batchCount));
+          //SAFE_CALL(cublasGemmBatchedEx(cublas, cublasOperation_t(transB), cublasOperation_t(transA), N, M, K, @ALPHA, PPointer(B), CUDA_R_32F, ldb, PPointer(A), CUDA_R_32F, lda
+          //, @BETA, PPointer(C), CUDA_R_32F, ldc, batchCount, CUBLAS_COMPUTE_32F_FAST_TF32, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
+        dtDouble :
+          SAFE_CALL(cublasDgemmBatched(cublas, cublasOperation_t(transB), cublasOperation_t(transA), N, M, K, @ALPHA, PPDouble(B), ldb, PPDouble(A), lda, @BETA, PPDouble(C), ldc, batchCount));
       end;
-      dtHalf :
-      begin
-        SAFE_CALL(cublasHgemmBatched_64(cublas, cublasOperation_t(transB), cublasOperation_t(transA), N, M, K,
-        @ALPHA, PPHalf(B), ldb, PPHalf(A), lda, @BETA, PPHalf(C), ldc, batchCount));
-        goto done;// yes goto! and there is nothing you can do about it!
-      end;
+      goto done;// yes goto! and there is nothing you can do about it!
     end;
 
     if (not transA) and (not transB)then
@@ -816,21 +826,32 @@ begin
 
     //SAFE_CALL(cublasSetWorkspace(cublas, workspace, workspaceSize));
 
-    if useBLAS = 1 then
-    case getType() of
-      dtSingle:
-        begin
-        SAFE_CALL(cublasSgemmStridedBatched(cublas, cublasOperation_t(transB), cublasOperation_t(transA), N, M, K,
-          @ALPHA, PSingle(B)+bOffset, ldb, strideB, PSingle(A)+aOffset, lda, strideA, @BETA, PSingle(C)+cOffset, ldc, strideC, batchCount));
-          goto done;// yes goto! and there is nothing you can do about it!
-        end;
-      dtHalf:
-        begin
-        SAFE_CALL(cublasHgemmStridedBatched(cublas, cublasOperation_t(transB), cublasOperation_t(transA), N, M, K,
-          @ALPHA, PHalf(B)+bOffset, ldb, strideB, PHalf(A)+aOffset, lda, strideA, @BETA, PHalf(C)+cOffset, ldc, strideC, batchCount));
-          goto done;// yes goto! and there is nothing you can do about it!
-        end;
+    if useBLAS = 1 then begin
+      //case getType() of
+      //  dtHalf:
+      //    for i:=0 to batchCount-1 do
+      //      cublasHgemm(cublas, cublasOperation_t(transB), cublasOperation_t(transA), N, M, K, @ALPHA, PHalf(B)+bOffset+i*strideB, ldb, PHalf(A)+aOffset+i*strideA, lda, @BETA, PHalf(C)+cOffset + i*strideC, ldc);
+      //  dtSingle:
+      //    for i:=0 to batchCount-1 do
+      //      cublasSgemm(cublas, cublasOperation_t(transB), cublasOperation_t(transA), N, M, K, @ALPHA, PSingle(B)+bOffset+i*strideB, ldb, PSingle(A)+aOffset+i*strideA, lda, @BETA, PSingle(C)+cOffset + i*strideC, ldc);
+      //  dtDouble:
+      //     for i:=0 to batchCount-1 do
+      //      cublasDgemm(cublas, cublasOperation_t(transB), cublasOperation_t(transA), N, M, K, @ALPHA, PDouble(B)+bOffset+i*strideB, ldb, PDouble(A)+aOffset+i*strideA, lda, @BETA, PDouble(C)+cOffset + i*strideC, ldc);
+      //end;
+
+      case getType() of
+        dtHalf:
+          SAFE_CALL(cublasHgemmStridedBatched(cublas, cublasOperation_t(transB), cublasOperation_t(transA), N, M, K, @ALPHA, PHalf(B)+bOffset, ldb, strideB, PHalf(A)+aOffset, lda, strideA, @BETA, PHalf(C)+cOffset, ldc, strideC, batchCount));
+        dtSingle:
+          SAFE_CALL(cublasSgemmStridedBatched(cublas, cublasOperation_t(transB), cublasOperation_t(transA), N, M, K, @ALPHA, PSingle(B)+bOffset, ldb, strideB, PSingle(A)+aOffset, lda, strideA, @BETA, PSingle(C)+cOffset, ldc, strideC, batchCount));
+          //SAFE_CALL(cublasGemmStridedBatchedEx(cublas, cublasOperation_t(transB), cublasOperation_t(transA), N, M, K, @ALPHA, PSingle(B)+bOffset, CUDA_R_32F, ldb, strideB, PSingle(A)+aOffset, CUDA_R_32F, lda, strideA
+          //, @BETA, PSingle(C)+cOffset, CUDA_R_32F, ldc, strideC, batchCount, CUBLAS_COMPUTE_32F_FAST_TF32, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
+        dtDouble:
+          SAFE_CALL(cublasDgemmStridedBatched(cublas, cublasOperation_t(transB), cublasOperation_t(transA), N, M, K, @ALPHA, PDouble(B)+bOffset, ldb, strideB, PDouble(A)+aOffset, lda, strideA, @BETA, PDouble(C)+cOffset, ldc, strideC, batchCount));
+      end;
+      goto done;// yes goto! and there is nothing you can do about it!
     end;
+
     if (not transA) and (not transB)then
       if N > M then begin
         dim := dim3.create(N, M);
@@ -1527,6 +1548,30 @@ begin
   SAFE_CALL(cudaLaunchKernel(FKernels[kernelId], dim3.create(num_grids), dim3.create(NUM_THREADS), ppointer(params), 0, stream));
 end;
 
+procedure TNNCuda<T>.clip(const N: SizeInt; const alpha: T; const src,
+  dst: TCUMem; const stride: SizeInt; offset: SizeInt);
+const kernelId = 45;
+var
+  num_grids:SizeInt;
+  params : array of pointer;
+begin
+  num_grids := (N + NUM_THREADS-1) div NUM_THREADS;
+  params := [@N, @alpha, @src, @dst, @stride, @offset];
+  SAFE_CALL(cudaLaunchKernel(FKernels[kernelId], dim3.create(num_grids), dim3.create(NUM_THREADS), ppointer(params), 0, stream));
+end;
+
+procedure TNNCuda<T>.inverseSqrt(const N: SizeInt; const alpha: T; const src,
+  dst: TCUMem; const stride: SizeInt; offset: SizeInt);
+const kernelId = 46;
+var
+  num_grids:SizeInt;
+  params : array of pointer;
+begin
+  num_grids := (N + NUM_THREADS-1) div NUM_THREADS;
+  params := [@N, @src, @dst, @stride, @offset];
+  SAFE_CALL(cudaLaunchKernel(FKernels[kernelId], dim3.create(num_grids), dim3.create(NUM_THREADS), ppointer(params), 0, stream));
+end;
+
 procedure TNNCuda<T>.finish();
 begin
   //SAFE_CALL(cudaDeviceSynchronize());
@@ -1546,6 +1591,7 @@ var
   paramsPtr : PPAnsiChar;
   log : ansistring;
 begin
+  result :='';
   //writeln('NVRTC compile start');
   SAFE_CALL_RTC(nvrtcCreateProgram(@prog, PAnsiChar(code), pAnsiChar(name), length(headers), Pointer(headers), Pointer(includeNames)));
 
@@ -1555,7 +1601,7 @@ begin
               PAnsiChar(Ansistring('-arch=sm_' + intToStr(properties.major)+intTostr(properties.minor))),
               '--use_fast_math',
               PAnsiChar(ansistring('-DBLOCK='+intToStr(NUM_THREADS))),
-              PAnsichar('-Dnfloat='+getCType())
+              PAnsichar('-Dnfloat='+getTypeStr())
               ]; // causes weird exception on linux
   paramsPtr := pointer(params);
   err :=nvrtcCompileProgram(prog, length(params), paramsPtr);

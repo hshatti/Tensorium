@@ -65,7 +65,7 @@ begin
       for ky := 0{-kh} to hKernel-1{kh} do begin
         srcIM := src + (i*yStr + ky*yDil)*wSrc + j*xStr + hP*wSrc + wp;
         ker2 := ker + ky*wKernel;
-        acc := acc + cblas_sdot(wKernel, ker2, 1, srcIm, xDil);
+        acc := acc + TSingleTensor.dotvv(wKernel, ker2, 1, srcIm, xDil);
         //for kx := 0{-kw} to wKernel-1{kw} do
         //  acc :=  plus(acc , ker2[kx]*srcIM[kx*xDil]);
       end;
@@ -129,7 +129,7 @@ begin
 
   until (j>=0) and (j<length(dev)) ;
   initOpenCL(i, j);
-  ocl.useBLAS := CL_LIB_BLAST;
+  ocl.useBLAS := CL_LIB_NONE;
   //ocl.queueInOrder:=true;
   writeln('  - out of Order mode : ', not ocl.queueInOrder);
 

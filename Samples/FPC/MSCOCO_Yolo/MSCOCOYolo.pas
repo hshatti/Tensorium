@@ -21,9 +21,6 @@ uses
   , nConcatLayer
   , nModels, Keyboard, nparser
   {$ifdef MSWINDOWS}, ShellApi {$endif}
-  {$ifdef USE_OPENCL}
-  , clblast
-  {$endif}
   { you can add units after this };
 
 
@@ -237,14 +234,14 @@ begin
         selected_detections_num[0] := selected_num;
 end;
 
-function compare_by_lefts(const a, b: TDetectionWithClass):SizeInt;
+function compare_by_lefts(const a, b: TDetectionWithClass):SizeInt; WINAPI;
 var delta: single;
 begin
     delta := (a.det.bbox.x-a.det.bbox.w / 2)-(b.det.bbox.x-b.det.bbox.w / 2);
     //exit(ifthen(delta < 0, -1, ifthen(delta > 0, 1, 0)))
 end;
 
-function compare_by_probs(const a, b: TDetectionWithClass):SizeInt;
+function compare_by_probs(const a, b: TDetectionWithClass):SizeInt; WINAPI;
 var
     delta: single;
 begin
@@ -387,7 +384,7 @@ var
   //kernel : cl_kernel;
   off, gws, lws : TArray<SizeInt>;
   //AA, BB, CC: cl_mem;
-  NN ,R, j, useBLAS: Integer;
+  NN ,R, j: Integer;
 
   conv : TConvolutionalLayer;
   state:TNNetState;
@@ -443,7 +440,7 @@ begin
 
   {$if defined(USE_OPENCL)}
   initOpenCL(0, 0);
-  ocl.useBLAS := 2;
+  ocl.useBLAS := 0;
   {$elseif defined(USE_CUDART)}
   initCUDART(0);
   cuda.useBLAS := 1;

@@ -355,10 +355,10 @@ begin
       rolling_variance.Multiply(1-bnMomentum);
       rolling_variance.axpy(bnMomentum, variance);
       output.CopyTo(x);
-      output.Normalize(mean, variance);
+      output.blockNormalize(mean, variance);
       output.copyTo(x_norm)
   end else
-      output.Normalize(rolling_mean, rolling_variance);
+      output.blockNormalize(rolling_mean, rolling_variance);
 
   //output.FusedMultiplyAdd(scales, biases);
   output.forwardScale(scales);
@@ -443,7 +443,7 @@ begin
     if not rolling_mean.wasGPU() then rolling_mean.pushToDevice;
     if not rolling_variance.wasGPU() then rolling_variance.pushToDevice;
 
-    if state.isTraining then begin
+    if state.isTraining and not state.adversarial then begin
         //output.MeansAndVars(mean, variance);
         ocl.meansAndVars(outputStep, mean.Size(), output.Groups, output.devData, offset, mean.devData, variance.devData);
 
@@ -578,7 +578,7 @@ state.input.copyTo(output);
   if not rolling_mean.wasGPU() then rolling_mean.pushToDevice;
   if not rolling_variance.wasGPU() then rolling_variance.pushToDevice;
 
-  if state.isTraining then begin
+  if state.isTraining and not state.adversarial then begin
       //cuda.meansAndVars(outputStep, mean.Size(), output.Groups, output.devData, offset, mean.devData, variance.devData);
       cuda.means(outputStep, mean.Size(), output.Groups, output.devData, offset, mean.devData);
       cuda.variances(outputStep, mean.Size(), output.Groups, output.devData, offset, mean.devData, variance.devData);

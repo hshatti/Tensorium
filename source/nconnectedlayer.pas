@@ -204,13 +204,13 @@ begin
           //copy_cpu(l.outputs * l.batch, l.output, 1, l.x, 1);
           output.CopyTo(x, offset, 1, offset, 1, outputStep);
           //normalize_cpu(output, mean, variance, batch, outputs, 1);
-          output.Normalize(mean, variance, offset, outputStep);
+          output.blockNormalize(mean, variance, offset, outputStep);
           //copy_cpu(l.outputs * l.batch, l.output, 1, l.x_norm, 1)
           output.copyTo(x_norm, offset, 1, offset, 1, outputStep) ;
       end else
           //normalize each column
           //normalize_cpu(output, rolling_mean, rolling_variance, batch, outputs, 1);
-          output.Normalize(rolling_mean, rolling_variance, offset, outputStep);
+          output.blockNormalize(rolling_mean, rolling_variance, offset, outputStep);
 
       //scale_bias(l.output, l.scales, l.batch, l.outputs, 1);
       output.forwardScale(scales, offset, outputStep);

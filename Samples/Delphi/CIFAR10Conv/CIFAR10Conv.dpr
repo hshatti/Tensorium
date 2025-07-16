@@ -131,7 +131,7 @@ begin
     end;
   until (j>=0) and (j<length(dev)) ;
   initOpenCL(i, j);
-  ocl.useBLAS := CL_LIB_BLAST;
+  ocl.useBLAS := CL_LIB_NONE;
   //ocl.queueInOrder:=true;
   writeln('  - out of Order mode : ', not ocl.queueInOrder);
 
