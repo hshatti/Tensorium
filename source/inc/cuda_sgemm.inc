@@ -1538,15 +1538,15 @@
 + '        vars_delta[filter] *= -0.5f * pow(max(vars[filter] , sEPSILON), -1.5f);'#10
 + '    }'#10
 + '}'#10
-+ 'extern "C" __global__ void clip(const long N, const nfloat alpha, const nfloat* src, nfloat* dst, const long stride, const long offset ){'#10
-+ '   const long i = blockIdx.x*blockDim.x + threadIdx.x;'#10
++ 'extern "C" __global__ void clamp(const long N, const nfloat alpha, const nfloat* src, nfloat* dst, const long stride, const long offset ){'#10
++ '   const int i = blockIdx.x*blockDim.x + threadIdx.x;'#10
 + '   if(i>=N) return;'#10
 + '   src += i*stride + offset;'#10
 + '   dst += i*stride + offset;'#10
-+ '   *dst = max(min(*src, alpha), -alpha);'#10
++ '   *dst = min(alpha, max(*src, -alpha));'#10
 + '}'#10
 + 'extern "C" __global__ void inverse_sqrt(const long N, const nfloat* src, nfloat* dst, const long stride, const long offset){'#10
-+ '   const long i = blockIdx.x*blockDim.x + threadIdx.x;'#10
++ '   const int i = blockIdx.x*blockDim.x + threadIdx.x;'#10
 + '   if(i>=N) return;'#10
 + '   src += i*stride + offset;'#10
 + '   dst += i*stride + offset;'#10

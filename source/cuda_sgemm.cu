@@ -1800,7 +1800,7 @@ extern "C" __global__ void means_vars_delta_fast(
     }
 }
 
-extern "C" __global__ void clip(const long N, const nfloat alpha, const nfloat* src, nfloat* dst, const long stride, const long offset ){
+extern "C" __global__ void clamp(const long N, const nfloat alpha, const nfloat* src, nfloat* dst, const long stride, const long offset ){
    const long i = blockIdx.x*blockDim.x + threadIdx.x;
    if(i>=N) return;
    src += i*stride + offset;

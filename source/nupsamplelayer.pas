@@ -62,11 +62,11 @@ end;
 procedure TUpSampleLayer.setBatch(ABatch: SizeInt);
 begin
   if ABatch = Batch then exit;
-  batch := ABatch;
-  output.reSize([batch, c, h, w], batch);
-  inputShape[0] := batch;;
+  output.reSize([Abatch, outC, outH, outW], Abatch);
+  inputShape[0] := Abatch;
   if FTrain then
-      Delta.reSize([batch, c,h, w], batch);
+      Delta.reSize([Abatch, outC, outH, outW], Abatch);
+  batch := ABatch;
 end;
 
 procedure TUpSampleLayer.setTrain(ATrain: boolean);
@@ -74,7 +74,7 @@ begin
   if FTrain=Atrain then exit;
   FTrain := ATrain;
   if FTrain then
-    delta := TSingleTensor.Create([batch, c, h, w], batch)
+    delta := TSingleTensor.Create([batch, outC, outH, outW], batch)
   else
     delta.free
 
@@ -152,6 +152,7 @@ begin
   {$endif}
   output.setOCL;
   if not state.input.wasGPU() then state.input.pushToDevice;
+
   if reverse then begin        // todo [forward_upsample_layer] why not using rverse as a parameter instead of [if else then]
       //ocl.fill(output.as2dHeight(), output.as2dWidth(), output.devData, 0, 1);
       ocl.upsample(batch, outC, outH, outW, output.devData, stride, 0, scale, state.input.devData, true)

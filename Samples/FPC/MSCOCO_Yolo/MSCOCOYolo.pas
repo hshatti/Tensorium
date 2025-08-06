@@ -19,17 +19,24 @@ uses
   , nAddLayer
   , nMaxPoolLayer
   , nConcatLayer
-  , nModels, Keyboard, nparser
-  {$ifdef MSWINDOWS}, ShellApi {$endif}
+  , nModels, Keyboard, nparser, nXML, termesc, sixel
+  {$ifdef MSWINDOWS}, ShellApi, nHttp, nRegionLayer {$endif}
   { you can add units after this };
 
 
 const
-    cfgFile = '../../../../../cfg/yolov7.cfg';
-    weightFile = '../../../../../yolov7.weights';
+    //cfgFile = '../../../../../cfg/yolov7.cfg';
+    //weightFile = '../../../../../yolov7.weights';
+    cfgFileVOC = '../../../../../cfg/yolov3-voc.cfg';
+    //cfgFile = '../../../../../cfg/yolov3.cfg';
+    //weightFile = '../../../../../yolov3.weights';
+    cfgFile = '../../../../../cfg/yolo9000.cfg';
+    weightFile = '../../../../../yolo9000.weights';
+
     images :TStringArray = ['eagle.jpg', 'kite.jpg', 'person.jpg', 'dog.jpg', 'giraffe.jpg', 'horses.jpg', 'startrek1.jpg'];
     imageRoot = '../../../../../data/';
-    classNamesFile = 'coco.names';
+    classNamesFile = '../cfg/9k.names';
+    //classNamesFile = '../cfg/coco.names';
     scaleDownSteps = 4.0 ;
 
     colors: array [0..5,0..2] of single = ( (1,0,1), (0,0,1),(0,1,1),(0,1,0),(1,1,0),(1,0,0) );
@@ -67,138 +74,6 @@ begin
     result := (1-ratio) * colors[i][c]+ratio * colors[j][c];
 end;
 
-procedure swap(var a,b:SizeInt); overload;
-var s:SizeInt;
-begin
-  s:=a;
-  a:=b;
-  b:=s
-end;
-
-procedure draw_line(const a: TImageData; x1, y1, x2, y2: SizeInt; const r, g, b: single; const alpha: single);
-var x, y, w, h, idx:  SizeInt;
-    aspect, v: single;
-    ver, hor:boolean;
-    c: Integer;
-    rgb:array[0..2] of single;
-begin
-  rgb[0]:=r;rgb[1]:=g;rgb[2]:=b;
-  if x1>x2 then swap(x1,x2);
-  if y1>y2 then swap(x1,x2);
-  x1:=EnsureRange(x1,0, a.w-1);
-  y1:=EnsureRange(y1,0, a.h-1);
-  x2:=EnsureRange(x2,0, a.w-1);
-  y2:=EnsureRange(y2,0, a.h-1);
-
-  w := x2 - x1;
-  h := y2 - y1;
-  ver := w=0;
-  hor := h=0;
-
-
-  if  hor then begin
-    for c :=0 to 2 do
-      for x:=x1 to x2 do begin
-          idx :=c*a.h*a.w + y1*a.w + x;
-          v:= a.data[idx];
-          a.data[idx] := (rgb[c]-v)*alpha +v;
-      end;
-    exit
-  end;
-
-  if ver then begin
-    for c :=0 to 2 do
-      for y:=y1 to y2 do begin
-          idx :=c*a.h*a.w + y*a.w + x1;
-          v:= a.data[idx];
-          a.data[idx] := (rgb[c]-v)*alpha +v;
-      end;
-    exit
-  end;
-
-  aspect := h/w;
-  for c :=0 to 2 do
-    for x:=x1 to x2 do begin
-        y:= y1 + round((x-x1)*aspect);
-        idx :=c*a.h*a.h + y*a.w + x;
-        v:= a.data[idx];
-        a.data[idx] := (rgb[c]-v)*alpha +v;
-    end;
-
-end;
-
-procedure draw_box(const a: TImageData; x1, y1, x2, y2: SizeInt; const r, g, b: single; const alpha: single);
-var
-    i, c: SizeInt;
-    r1, g1, b1, r2, g2, b2:single;
-begin
-    if alpha =0 then exit;
-
-    draw_line(a, x1,y1,x2,y1, r, g, b, alpha);
-    draw_line(a, x1,y2,x2,y2, r, g, b, alpha);
-
-    draw_line(a, x1,y1,x1,y2, r, g, b, alpha);
-    draw_line(a, x2,y1,x2,y2, r, g, b, alpha);
-
-end;
-
-procedure draw_box_width(const a: TImageData; const x1, y1, x2, y2, w: SizeInt;
-  const r, g, b: single; const alpha: single);
-var
-    i: SizeInt;
-begin
-    if alpha =0 then exit;
-    for i := 0 to w -1 do
-        draw_box(a, x1+i, y1+i, x2-i, y2-i, r, g, b, alpha)
-end;
-
-procedure draw_box_bw(const a: TImageData; x1, y1, x2, y2: SizeInt; const brightness: single);
-var
-    i: SizeInt;
-begin
-    if (x1 < 0) then
-        x1 := 0;
-    if (x1 >= a.w) then
-        x1 := a.w-1;
-    if x2 < 0 then
-        x2 := 0;
-    if x2 >= a.w then
-        x2 := a.w-1;
-    if y1 < 0 then
-        y1 := 0;
-    if y1 >= a.h then
-        y1 := a.h-1;
-    if y2 < 0 then
-        y2 := 0;
-    if y2 >= a.h then
-        y2 := a.h-1;
-    for i := x1 to x2 do
-        begin
-            a.data[i+y1 * a.w+0 * a.w * a.h] := brightness;
-            a.data[i+y2 * a.w+0 * a.w * a.h] := brightness
-        end;
-    for i := y1 to y2 do
-        begin
-            a.data[x1+i * a.w+0 * a.w * a.h] := brightness;
-            a.data[x2+i * a.w+0 * a.w * a.h] := brightness
-        end
-end;
-
-procedure draw_box_width_bw(const a: TImageData; const x1, y1, x2, y2, w: SizeInt; const brightness: single);
-var
-    i: SizeInt;
-    alternate_color: single;
-begin
-    for i := 0 to w -1 do
-        begin
-            if (w mod 2)<>0 then
-                alternate_color := (brightness)
-            else
-                alternate_color := (1.0-brightness);
-            draw_box_bw(a, x1+i, y1+i, x2-i, y2-i, alternate_color)
-        end
-end;
-
 function get_actual_detections(const dets: TArray<TDetection>; const dets_num: SizeInt; const thresh: single; const selected_detections_num: PSizeInt; const names: TArray<string>):TArray<TDetectionWithClass>;
 var
     selected_num: SizeInt;
@@ -206,7 +81,7 @@ var
     best_class: SizeInt;
     best_class_prob: single;
     j: SizeInt;
-    show: boolean;
+    //show: boolean;
 begin
     selected_num := 0;
     setLength(result, dets_num);
@@ -216,8 +91,8 @@ begin
             best_class_prob := thresh;
             for j := 0 to dets[i].classes -1 do
                 begin
-                    show := names[j] <> 'dont_show';
-                    if (dets[i].prob[j] > best_class_prob) and show then
+                    //show := names[j] <> 'dont_show';
+                    if (dets[i].prob[j] > best_class_prob) {and show} then
                         begin
                             best_class := j;
                             best_class_prob := dets[i].prob[j]
@@ -249,9 +124,7 @@ begin
     exit(ifthen(delta < 0, -1, ifthen(delta > 0, 1, 0)))
 end;
 
-procedure draw_detections_v3(const im: TImageData; const dets: TDetections; const num: SizeInt; const thresh: single; const names: TArray<string>;
-  const alphabet: TArray<TArray<TImageData>>; const classes: SizeInt;
-  labelAlpha: single; const ext_output: boolean);
+procedure draw_detections_v3(const im: TImageData; const dets: TDetections; const num: SizeInt; const thresh: single; const names: TArray<string>; const alphabet: TArray<TArray<TImageData>>; const classes: SizeInt; labelAlpha: single; const aBatch:sizeInt = 0);
 var
     frame_id, selected_detections_num, i, best_class, j, width, offset: SizeInt;
     red, green, blue: single;
@@ -320,9 +193,12 @@ begin
             if bot > im.h-1 then
                 bot := im.h-1;
             if im.c = 1 then
-                draw_box_width_bw(im, left, top, right, bot, 2{width}, 0.8)
+                //draw_box_width_bw(im, left, top, right, bot, 2{width}, 0.8)
+                im.rect(left, top, right, bot, 6{width}, 0.8, aBatch)
             else
-                draw_box_width(im, left, top, right, bot, 2{width}, red, green, blue, labelAlpha);
+                //draw_box_width(im, left, top, right, bot, 2{width}, red, green, blue, labelAlpha);
+                im.rect(left, top, right, bot, 6{width}, red, green, blue, labelAlpha, aBatch);
+
             //if assigned(alphabet) then
             //    begin
             //        labelstr:='';
@@ -351,27 +227,27 @@ begin
 end;
 
 
-procedure OnForward(var state :TNNetState);
-var
-  img: TSingleTensor;
-  l:TBaseLayer;
-  c:string;
-  i:sizeInt;
-begin
-  //write(#$1B'[1J'#$1B'[1H');
-  l := TNNet(state.net).layers[state.index];
-  writeln(state.index:3, ' : ', 100*state.index/darknet.Neural.layerCount():1:1,'%', ' ', l.LayerTypeStr);
-  //l.output.printStat();
-  //repeat
-  //  writeln('Enter index to Interrogate Output, or [Enter] for next layer:');
-  //  readln(C);
-  //  if TryStrToInt64(c, i) then
-  //      writeln(l.output.Data[i]:1:4);
-  //
-  //
-  //until C='';
-
-end;
+//procedure OnForward(var state :TNNetState);
+//var
+//  img: TSingleTensor;
+//  l:TBaseLayer;
+//  c:string;
+//  i:sizeInt;
+//begin
+//  //write(#$1B'[1J'#$1B'[1H');
+//  l := TNNet(state.net).layers[state.index];
+//  writeln(state.index:3, ' : ', 100*state.index/darknet.Neural.layerCount():1:1,'%', ' ', l.LayerTypeStr);
+//  //l.output.printStat();
+//  //repeat
+//  //  writeln('Enter index to Interrogate Output, or [Enter] for next layer:');
+//  //  readln(C);
+//  //  if TryStrToInt64(c, i) then
+//  //      writeln(l.output.Data[i]:1:4);
+//  //
+//  //
+//  //until C='';
+//
+//end;
 
 const thresh = 0.45;
     NMS =0.45;
@@ -389,6 +265,7 @@ var
   conv : TConvolutionalLayer;
   state:TNNetState;
 
+procedure inferYOLO;
 begin
 
   //write(#$1B'[1J');
@@ -497,7 +374,7 @@ begin
     //writeln('thresh ', thresh:1:3);
     //readln;
     t := clock;
-    draw_detections_v3(img, detections, length(detections), thresh, classNames, nil, length(classNames), 0.5, false);
+    draw_detections_v3(img, detections, length(detections), thresh, classNames, nil, length(classNames), 0.5);
     writeln('Drawing : [',(clock()-t)/CLOCKS_PER_SEC:1:3,'] Seconds.');
 
     {$ifdef USE_TELEMETRY}
@@ -539,5 +416,188 @@ begin
 *) //************************************
   darknet.free;
 
-end.
+end;
 
+function darkHash(const str:ansistring):longword;
+var i:integer;
+begin
+  result := 5381;
+  for i:=1 to length(str) do
+    result := longword((result shl 5) + result) + ord(str[i])
+end;
+
+const VOC_NAMES : TArray<string> = ['aeroplane', 'bicycle', 'bird', 'boat', 'bottle', 'bus', 'car', 'cat', 'chair', 'cow', 'diningtable', 'dog', 'horse', 'motorbike', 'person', 'pottedplant', 'sheep', 'sofa', 'train',  'tvmonitor'];
+
+
+function loadVOCBatch(const imgList:TArray<string>; const resizeWidth, resizeHeight, offset, batchSize, maxBoxes:SizeInt):TData;
+const MAX_OBJ = 4000;
+    TRUTH_SIZE = 4+2;
+var
+  img:TImageData;
+  i, j, k, left, top, right, bottom: integer;
+  xml : TNXml;
+  xmls : TArray<TNXml>;
+  xmlDir, xmlFile, name:string;
+  box : TBox;
+  id, trackId : integer;
+  dy, dx: SizeInt;
+  ratio: single;
+  t1: TSingleTensor;
+  t2 : TByteTensor;
+begin
+  result.X.reSize([batchSize, 3, resizeHeight, resizeWidth]);
+  result.Y.reSize([batchSize, maxBoxes, TRUTH_SIZE]);
+  for i:=offset to min(High(imgList), offset + batchSize-1) do begin
+    k:= i- offset;
+    xmlDir := ExtractFilePath(imgList[i])+'../Annotations/';
+    img.loadFromFile(imgList[i]);
+    img := img.letterBoxEx(resizeWidth, resizeHeight, ratio, dx, dy);
+    move(img.data[0], result.X.data[k*length(img.data)], length(img.data)*sizeof(Single));
+    xmlFile := ChangeFileExt(ExtractFileName(imgList[i]), '.xml');
+    trackId := (darkHash(xmlFile) mod MAX_OBJ)*MAX_OBJ;
+    xmlFile := xmlDir + xmlFile;
+    xml := TNXml.LoadFromFile(xmlFile);
+    xmls := xml['annotation'].querySelectorAll('object');
+    for j:=0 to min(high(xmls), maxBoxes) do begin
+      if (not boolean(xmls[j]['difficult'])) {and (not boolean(xmls[j]['truncated']))} then
+      begin
+        name := xmls[j]['name'];
+        id := TTools<string>.IndexOf(pointer(VOC_NAMES), length(VOC_NAMES), name);
+        assert(id>=0, 'VOC Parse : cannot find class "'+name+'"');
+        left   := dx + trunc(single(xmls[j]['bndbox']['xmin'])*ratio);
+        top    := dy + trunc(single(xmls[j]['bndbox']['ymin'])*ratio);
+        right  := dx + trunc(single(xmls[j]['bndbox']['xmax'])*ratio);
+        bottom := dy + trunc(single(xmls[j]['bndbox']['ymax'])*ratio);
+
+        box.x  := (left + right) / (2*img.w);
+        box.y  := (top + bottom) / (2*img.h);
+        box.w  := (right - left) / img.w;
+        box.h  := (bottom - top) / img.h;
+        result.Y.dyndata[(k*maxBoxes + j)*TRUTH_SIZE + 0] := box.x;
+        result.Y.dyndata[(k*maxBoxes + j)*TRUTH_SIZE + 1] := box.y;
+        result.Y.dyndata[(k*maxBoxes + j)*TRUTH_SIZE + 2] := box.w;
+        result.Y.dyndata[(k*maxBoxes + j)*TRUTH_SIZE + 3] := box.h;
+        result.Y.dyndata[(k*maxBoxes + j)*TRUTH_SIZE + 4] := id;
+        //result.Y.dyndata[(k*maxBoxes + j)*TRUTH_SIZE + 5] := trackId+j;
+        //img.rect(left, top, right, bottom, 4, 0.0, 1.0, 0.0, 0.4);
+      end;
+    end;
+//
+//    t1 := img.toTensor();
+//    t1.reshape([t1.c, t1.h, t1.w]);
+//    t1.Multiply($FF);
+//
+//    t2.resize(t1.Shape);
+//    t1.toBytes(t2.Data);
+//    writeln(i);
+//    printSixel(t2.Data, img.w, img.h, true, poCHW);
+//    readln
+
+ end;
+end;
+
+var history : TSingleTensor;
+
+procedure OnAfterOptimize(const net:TNNet; const batchId: SizeInt);
+var i:SizeInt;
+  detections : TDetections;
+  img : TImageData;
+begin
+  if batchId <2 then exit;
+  cursorClearUp();
+  cursorHome();
+  history.reSize([history.size+1]);
+  history.DynData[high(history.dynData)]:=net.cost()/(net.batch*net.subDivisions);
+  writeln('batchId : ', batchId, ', Seen : ', net.seen);
+  history.plot();
+  img.fromTensor(net.input);
+  if batchId mod 10 = 0 then begin
+    for i:=0 to net.batch-1 do begin
+      detections := darknet.Neural.Detections(img.w, img.h, 0.1, true, false, i);
+      if assigned(detections) then begin
+        detections.doNMSSort(darknet.Neural.classCount(), NMS);
+        draw_detections_v3(img, detections, length(detections), thresh, classNames, nil, length(classNames), 0.5, i);
+        img.toTensor.print(0.4, false, 2);
+      end;
+    end;
+  end;
+
+end;
+
+procedure OnForward(var state:TNNetState);
+begin
+  write('Forward [',state.index:3,'][',TNNet(state.net).layers[state.index].LayerTypeStr:20,'] : ', 100*state.index/TNNet(state.net).layerCount():1:2, '%', #13)
+end;
+
+procedure OnBackward(var state:TNNetState);
+begin
+  write('Backward [',state.index:3,'][',TNNet(state.net).layers[state.index].LayerTypeStr:20,']: ', 100*state.index/TNNet(state.net).layerCount():1:2, '%', #13)
+end;
+
+procedure OnAfterPropagation(var state:TNNetState);
+begin
+  write(setClearLineEnd, 100*TNNet(state.net).currentSubDivision/TNNet(state.net).subDivisions:1:2 , '%'#13);
+end;
+
+procedure trainYOLO;
+const
+    BATCH_SIZE=64;
+var path, imgDir, xmlFile, xmlDir : string;
+  sr : TSearchRec;
+  imgList : TArray<string>;
+  train: TData;
+begin
+
+  path := 'C:/development/Projects/VOCdevkit/VOC2012';
+  imgDir := path+'/JPEGImages/';
+  if FindFirst(imgDir+'*.jp*', faNormal, sr)=0 then begin
+    insert(imgDir + sr.Name, imgList, length(imgList));
+    try
+      while FindNext(sr)=0 do
+        insert(imgDir + sr.Name, imgList, length(imgList));
+    finally
+      FindClose(sr)
+    end;
+  end;
+
+  cfg := GetCurrentDir + PathDelim + cfgfileVOC;
+  if not FileExists(cfg) then begin
+    writeln('File [',cfg,'] doesn''t exist!');
+    readln();
+  end;
+
+
+  {$if defined(USE_OPENCL)}
+  initOpenCL(0, 0);
+  ocl.useBLAS :=0;
+  {$elseif defined(USE_CUDART)}
+  initCUDART(0);
+  cuda.useBLAS := 1;
+  {$endif}
+
+  t := clock;
+  //speedOverSize:=true;
+  darknet := TDarknetParser.Create(cfg, 1, 1);
+  darknet.neural.subDivisions:=32;
+  darknet.Neural.setTraining(True);
+  darknet.Neural.setBatch(BATCH_SIZE);
+  writeln('Model : ',cfg,' [',(clock()-t)/CLOCKS_PER_SEC:1:3,'] Seconds.', #13#10, 'Heap :', GetHeapStatus.TotalAllocated div 1000000, 'MB');
+  //readln;
+  darknet.Neural.OnAfterNetOptimization := OnAfterOptimize;
+  //darknet.Neural.OnForward := OnForward;
+  //darknet.Neural.OnBackward := OnBackward;
+  darknet.Neural.OnAfterPropagation:=OnAfterPropagation;
+  for i:=0 to length(imgList) div BATCH_SIZE-1 do begin
+    TSingleTensor.noDeviceAllocation := true;
+    train := loadVOCBatch(imgList, 416, 416, i*BATCH_SIZE, BATCH_SIZE, darknet.Neural.maxBoxes);
+    TSingleTensor.noDeviceAllocation := false;
+    if not assigned(darknet.Neural.truth.Data) then
+      darknet.Neural.truth.resize([darknet.Neural.batch, train.y.h, train.y.w], darknet.Neural.batch);
+    darknet.Neural.trainEpoch(train);
+  end;
+end;
+
+begin
+  //trainYOLO;
+  inferYOLO;
+end.

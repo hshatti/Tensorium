@@ -147,7 +147,7 @@ type
     procedure forwardDropout(const N: SizeInt; const src: TCUMem; const probability, scale: T; rnd: TCUMem; dst: TCUMem);
     procedure backwardDropout(const N: SizeInt; const src: TCUMem; const probability, scale: T; const rnd: TCUMem; dst: TCUMem);
     procedure costL2(const N:SizeInt; const pred ,truth, delta, error: TCUMem);
-    procedure clip(const N:SizeInt; const alpha :T; const src, dst: TCUMem; const stride: SizeInt =1; offset : SizeInt =0);
+    procedure clamp(const N:SizeInt; const alpha :T; const src, dst: TCUMem; const stride: SizeInt =1; offset : SizeInt =0);
     procedure inverseSqrt(const N:SizeInt; const alpha :T; const src, dst: TCUMem; const stride: SizeInt =1; offset : SizeInt =0);
 
     procedure finish();
@@ -159,7 +159,7 @@ type
 
   const
     kernelNames : array[0..46] of PAnsiChar =(
-      'clip',
+      'clamp',
       'inverse_sqrt',
       'means_vars_delta_fast',
       'vars',
@@ -1548,9 +1548,9 @@ begin
   SAFE_CALL(cudaLaunchKernel(FKernels[kernelId], dim3.create(num_grids), dim3.create(NUM_THREADS), ppointer(params), 0, stream));
 end;
 
-procedure TNNCuda<T>.clip(const N: SizeInt; const alpha: T; const src,
+procedure TNNCuda<T>.clamp(const N: SizeInt; const alpha: T; const src,
   dst: TCUMem; const stride: SizeInt; offset: SizeInt);
-const kernelId = 45;
+const kernelId = 46;
 var
   num_grids:SizeInt;
   params : array of pointer;
@@ -1562,7 +1562,7 @@ end;
 
 procedure TNNCuda<T>.inverseSqrt(const N: SizeInt; const alpha: T; const src,
   dst: TCUMem; const stride: SizeInt; offset: SizeInt);
-const kernelId = 46;
+const kernelId = 45;
 var
   num_grids:SizeInt;
   params : array of pointer;

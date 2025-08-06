@@ -11,14 +11,15 @@ uses
   {$ENDIF}
   SysUtils, ntensors, ntypes, nDatasets, nBaseLayer, nConnectedlayer
   , nLogisticLayer, nSoftmaxLayer, nCostLayer, nnet, nChrono, nConvolutionLayer, nUpSampleLayer, nDropOutLayer
-  , nAttentionLayer, nModels, {Keyboard, nParser,} termesc, steroids
+  , nAttentionLayer, nModels, {Keyboard, nParser,} termesc, steroids, nXML
   {$if defined(MSWINDOWS)}
-  , ShellApi, uTokenizer, sixel, SortedMap
+  , ShellApi
   //, cudnn_graph
   //, cudnn_adv
   //, cudnn_ops
   //, cudnn_cnn
   {$endif}
+  , uTokenizer, sixel, SortedMap, nhttp
   {$if defined(USE_OPENCL)}
   , OpenCLHelper, OpenCL, nnOpenCL, nOpMetrics//
   {$elseif defined(USE_CUDART)}
@@ -26,22 +27,62 @@ uses
   {$endif}
   { you can add units after this };
 
+
+
 const
   READ_BATCH   = 32;
   READ_MEASURE = 8;
   READ_TEST    = 3;
-var
-  Neural:TNNet;
-  CF10 : TCIFAR10Data;
-  i, j, k, l :SizeInt;
-  Data : TData;
-  cost :single;
-  costDelta : single;
-  s : clock_t;
-  Predicted, Truth : TInt64Tensor;
-  output  : PSingleTensor;
-  sampled : TSingleTensor;
-  c : shortstring;
+
+
+procedure trainYOLO;
+var path, imgDir, xmlFile, xmlDir : string;
+  imgList, xmlList : TArray<string>;
+  xml : TNXml;
+  xmls : TArray<TNXml>;
+  img:TImageData;
+  sr : TSearchRec;
+  t1: TSingleTensor;
+  t2 : TByteTensor;
+  i, j, left, top, right, bottom: integer;
+begin
+  path := 'C:/development/Projects/VOCdevkit/VOC2012';
+  imgDir := path+'/JPEGImages/';
+  xmlDir := path+'/Annotations/';
+  if FindFirst(imgDir+'*.jp*', faNormal, sr)=0 then begin
+    insert(sr.Name, imgList, length(imgList));
+    try
+      while FindNext(sr)=0 do
+        insert(sr.Name, imgList, length(imgList));
+    finally
+      FindClose(sr)
+    end;
+  end;
+
+  for i:=0 to High(imgList) do begin
+    img.loadFromFile(imgDir+imgList[i]);
+    xmlFile := ChangeFileExt(imgList[i],'.xml');
+    xml := TNXml.LoadFromFile(xmlDir+xmlFile);
+    xmls := xml['annotation'].querySelectorAll('object');
+    for j:=0 to high(xmls) do begin
+      left := xmls[j]['bndbox']['xmin'];
+      top := xmls[j]['bndbox']['ymin'];
+      right := xmls[j]['bndbox']['xmax'];
+      bottom := xmls[j]['bndbox']['ymax'];
+      img.rect(left, top, right, bottom, 4, 1, 0, 0, 0.3);
+    end;
+    t1 := img.toTensor();
+    t1.reshape([t1.c, t1.h, t1.w]);
+    t1.Multiply($FF);
+
+    t2.resize(t1.Shape);
+    t1.toBytes(pointer(t2.Data));
+    printSixel(t2.Data, img.w, img.h, true, poCHW);
+    readln
+
+  end;
+
+end;
 
 
 procedure _conv2d(const src: PSingle; ker: PSingle; var dest: PSingle;
@@ -77,8 +118,22 @@ begin
   end
 end;
 
+
+
+procedure inferYOLO();
 var
-  //img : TImageData;
+  Neural:TNNet;
+  CF10 : TCIFAR10Data;
+  i, j, k, l :SizeInt;
+  Data : TData;
+  cost :single;
+  costDelta : single;
+  s : clock_t;
+  Predicted, Truth : TInt64Tensor;
+  output  : PSingleTensor;
+  sampled : TSingleTensor;
+  c : shortstring;
+    //img : TImageData;
   coor : TArray<SizeInt>;
   trainingHistory , bmp: TSingleTensor;
   //drop: TDropoutLayer;
@@ -97,6 +152,8 @@ begin
   //initOpenCL(i, j);
 
   TSingleTensor.defaultDevice := cdOpenCL;
+
+  if TOpenCL.PlatformCount=0 then raise Exception.create('No OpenCL platforms found!');
   if TOpenCL.PlatformCount>1 then
   repeat
     writeln('Choose computing platform:');
@@ -112,9 +169,8 @@ begin
         i:=-1
       end
     end;
-  until (i>=0) and (i<TOpenCL.PlatformCount)
-  else
-    raise Exception.create('No OpenCL platforms found!');
+  until (i>=0) and (i<TOpenCL.PlatformCount);
+
   writeln('Using : ',  TOpenCL.PlatformName(i), #13#10'select device :');
   dev := TOpenCL.getDevices(i);
   repeat
@@ -367,4 +423,8 @@ begin
   Neural.free;
 
   //freeandnil(mp); freeandnil(mp2); freeandnil(mp3)
+end;
+
+begin
+  trainYOLO
 end.

@@ -367,11 +367,11 @@ begin
         end;
     setLength(a_avg, outw * outh * batch);
     setLength(g, outW * outH * batch);
-    maxboxes := net.numBoxes;
+    maxboxes := net.maxBoxes;
     truths := maxBoxes * (4+1);
     for b := 0 to batch -1 do
         begin
-            for t := 0 to net.numBoxes -1 do
+            for t := 0 to net.maxBoxes -1 do
                 begin
                     truth := TBox.fromFloat(Pointer(state.truth.data + t * (4+1)+b * truths), 1);
                     if truth.x=0 then

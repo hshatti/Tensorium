@@ -258,6 +258,7 @@ begin
   assert(delta.size() >= (state.step + 1) * outStepSize, '[TConnectedLayer.backward] step out of range!');
   assert(state.input.size() >= (state.inputStep + 1)*inStepSize, '[TConnectedLayer.backward] inputStep out of range!');
 
+  delta.Clamp(-1.0, 1.0);
   //gradient_array(l.output, l.outputs * l.batch, l.activation, l.delta);
   Derivative(outOffset);
   //for i := 0 to batch -1 do
@@ -489,7 +490,7 @@ begin
   if not bias_updates.wasGPU() then bias_updates.pushToDevice;
   if not weight_updates.wasGPU() then weight_updates.pushToDevice;
 
-
+  ocl.clamp(delta.Size(), 1, delta.devData, delta.devData);
   ocl.DeriveArray(outStepSize, output.devData, outOffset, longint(ActivationType), delta.devData);
 
   //ocl.waitForEvents(batch, pointer(events));
@@ -767,7 +768,7 @@ begin
   if not bias_updates.wasGPU() then bias_updates.pushToDevice;
   if not weight_updates.wasGPU() then weight_updates.pushToDevice;
 
-
+  cuda.clamp(delta.Size(), 1, delta.devData, delta.devData);
   cuda.DeriveArray(outStepSize, output.devData, outOffset, longint(ActivationType), delta.devData);
 
 {$ifdef DEBUG_GPU}

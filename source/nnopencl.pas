@@ -22,7 +22,7 @@ uses
   {$ifdef MSWINDOWS}
   , windows
   {$else}
-  , dl
+  {$ifdef FPC}, dl {$endif}
   {$endif}
   , fp16
 {$ifdef USE_TELEMETRY}
@@ -81,7 +81,7 @@ uses
     'sgemm1_nt',
     'sgemm2_nn',
     'sgemm1_nn',
-    'clip',
+    'clamp',
     'inverse_sqrt'
   );
 
@@ -129,7 +129,7 @@ uses
   KERNEL_sgemm1_nt             = 41;
   KERNEL_sgemm2_nn             = 42;
   KERNEL_sgemm1_nn             = 43;
-  KERNEL_clip                  = 44;
+  KERNEL_clamp                 = 44;
   KERNEL_isr                   = 45;
 
 type
@@ -228,6 +228,8 @@ type
     class function getTypeStr(): shortstring;    static;
     class function getType(): TDataType;       static;
     class procedure CLBLAST_CALL(const err:CLBlastStatusCode);static;
+    class procedure loadBlas; static;
+    class procedure loadBlast; static;
     constructor Create(deviceType:TCLDeviceType=dtGPU); override;
     destructor Destroy; override;
     procedure DoActiveDeviceChange(const newDevice: cl_device_id;
@@ -309,7 +311,7 @@ type
       const probability, scale: T; const rnd: cl_mem; dst: cl_mem; const events: TCLEvents = nil; event: PCLEvent = nil);
     procedure costL2(const N:SizeInt; const pred ,truth, delta, error: cl_mem;
       const events: TCLEvents = nil; event: PCLEvent = nil);
-    procedure clip(const N:SizeInt; const alpha:T ;const src, dst: cl_mem; const stride:SizeInt =1; const offset:SizeInt = 0; const events: TCLEvents = nil; event: PCLEvent = nil);
+    procedure clamp(const N:SizeInt; const alpha:T ;const src, dst: cl_mem; const stride:SizeInt =1; const offset:SizeInt = 0; const events: TCLEvents = nil; event: PCLEvent = nil);
     procedure inverseSqrt(const N:SizeInt; const src, dst: cl_mem; const stride:SizeInt =1; const offset:SizeInt = 0; const events: TCLEvents = nil; event: PCLEvent = nil);
     //procedure halfTest(
     //  const N : SizeInt; a:cl_mem; b:cl_mem ; c:cl_mem;
@@ -337,12 +339,12 @@ const COPY_DIMX = 8;
       COPY_DIMY = 8;
 
 var
-  hLib : {$if defined(MSWINDOWS)}HMODULE {$else}Pointer{$endif};
-{$if defined(MSWINDOWS)}
+  hLib : {$if defined(MSWINDOWS) or defined(POSIX)}HMODULE {$else}Pointer{$endif};
+{$if defined(MSWINDOWS) or defined(POSIX)}
   {$ifdef FPC}
   getProc : function(Lib : HMODULE; ProcName : LPCSTR):pointer;WINAPI;
   {$else}
-  getProc : function (hModule: HMODULE; lpProcName: LPCSTR): FARPROC; winapi;
+  getProc : function (hModule: HMODULE; lpProcName: PCHAR): pointer; {$if not defined(POSIX)}winapi;{$endif}
   {$endif}
 {$else}
   getProc : function(h :pointer; name:PAnsiChar):pointer;WINAPI;
@@ -590,15 +592,7 @@ begin
 
   if useBLAS = CL_LIB_BLAS then begin
       if not assigned(clBlasSGemm) then begin
-        {$if defined(MSWINDOWS)}
-          hLib := LoadLibrary('clBLAS.dll');
-          assert(hLib<>0, 'Cannot load [clBLAS] library!');
-          getProc := getProcAddress;
-        {$elseif defined(ANDROID) or defined(LINUX)}
-          hLib := dlopen('libclBLAS.so',RTLD_NOW);
-          assert(assigned(hLib), 'Cannot load [libclBLAS] library!');
-          getProc := dlsym;
-        {$endif}
+        loadBlas;
         clBlasSgemm:= getproc(hlib, 'clblasSgemm');
         clBlasDgemm:= getproc(hlib, 'clblasDgemm');
         clBlasHgemm:= getproc(hlib, 'clblasHgemm');
@@ -626,15 +620,7 @@ begin
 
   if useBLAS = CL_LIB_BLAST then begin
       if not assigned(clBlastSGemm) then begin
-        {$if defined(MSWINDOWS)}
-          hLib := LoadLibrary('clblast.dll');
-          assert(hLib<>0, 'Cannot load [clBLAST] library!');
-          getProc := getProcAddress;
-        {$elseif defined(ANDROID) or defined(LINUX)}
-          hLib := dlopen('libclblast.so', RTLD_NOW);
-          assert(assigned(hLib), 'Cannot load [libclBLAST] library!');
-          getProc := dlsym;
-        {$endif}
+        loadblast;
         CLBlastSgemm:= getproc(hlib, 'CLBlastSgemm');
         CLBlastHgemm:= getproc(hlib, 'CLBlastHgemm');
         CLBlastDgemm:= getproc(hlib, 'CLBlastDgemm');
@@ -766,15 +752,7 @@ begin
 
   if useBLAS = CL_LIB_BLAST then begin
       if not assigned(CLBlastSgemmStridedBatched) then begin
-        {$if defined(MSWINDOWS)}
-          hLib := LoadLibrary('clblast.dll');
-          assert(hLib<>0, 'Cannot load [clBLAST] library!');
-          getProc := getProcAddress;
-        {$elseif defined(ANDROID) or defined(LINUX)}
-          hLib := dlopen('libclblast.so', RTLD_NOW);
-          assert(assigned(hLib), 'Cannot load [libclBLAST] library!');
-          getProc := dlsym;
-        {$endif}
+        loadblast;
         CLBlastSgemm:= getproc(hlib, 'CLBlastSgemm');
         CLBlastHgemm:= getproc(hlib, 'CLBlastHgemm');
         CLBlastDgemm:= getproc(hlib, 'CLBlastDgemm');
@@ -2011,10 +1989,10 @@ begin
 
 end;
 
-procedure TNNOpenCL<T>.clip(const N: SizeInt; const alpha: T; const src,
+procedure TNNOpenCL<T>.clamp(const N: SizeInt; const alpha: T; const src,
   dst: cl_mem; const stride: SizeInt; const offset: SizeInt;
   const events: TCLEvents; event: PCLEvent);
-const kernelId= KERNEL_clip;
+const kernelId= KERNEL_clamp;
 var
     NN, MM :SizeInt;
 begin
@@ -2074,6 +2052,44 @@ begin
 
 end;
 
+
+class procedure TNNOpenCL<T>.loadBlas;
+begin
+        {$if defined(MSWINDOWS)}
+          hLib := LoadLibrary('clBLAS.dll');
+          assert(hLib<>0, 'Cannot load [clBLAS] library!');
+          getProc := getProcAddress;
+        {$elseif defined(ANDROID) or defined(LINUX)}
+          {$if defined(FPC)}
+          hLib := dlopen('libclBLAS.so',RTLD_NOW);
+          getProc := dlsym;
+          {$else}
+          hLib := loadlibrary('libclBLAS.so');
+          getProc := getProcAddress;
+          {$endif}
+          assert(hLib<>0, 'Cannot load [libclBLAS] library!');
+        {$endif}
+
+end;
+
+class procedure TNNOpenCL<T>.loadBlast;
+begin
+        {$if defined(MSWINDOWS)}
+          hLib := LoadLibrary('clblast.dll');
+          assert(hLib<>0, 'Cannot load [clBLAS] library!');
+          getProc := getProcAddress;
+        {$elseif defined(ANDROID) or defined(LINUX)}
+          {$if defined(FPC)}
+          hLib := dlopen('libclblast.so',RTLD_NOW);
+          getProc := dlsym;
+          {$else}
+          hLib := loadlibrary('libclblast.so');
+          getProc := getProcAddress;
+          {$endif}
+          assert(hLib<>0, 'Cannot load [libclBLAST] library!');
+        {$endif}
+
+end;
 
 //procedure TNNOpenCL<T>.halfTest(const N: SizeInt; a: cl_mem; b: cl_mem; c: cl_mem;
 //  const events: TCLEvents; event: PCLEvent);

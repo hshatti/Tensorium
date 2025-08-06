@@ -1499,7 +1499,7 @@
 + '   const n_int i = get_global_id(0);'#10
 + '   dst[i*dstStride + dstOffset] = pow(base[i*srcStride + srcOffset], expo);'#10
 + '}'#10
-+ '__kernel void clip(const nfloat alpha, __global const nfloat* src, __global nfloat* dst, const n_int stride, const n_int offset ){'#10
++ '__kernel void clamp(const nfloat alpha, __global const nfloat* src, __global nfloat* dst, const n_int stride, const n_int offset ){'#10
 + '   const n_int i = get_global_id(0);'#10
 + '   src += i*stride + offset;'#10
 + '   dst += i*stride + offset;'#10

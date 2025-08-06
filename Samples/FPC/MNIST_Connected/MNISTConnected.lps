@@ -24,8 +24,10 @@
       <Unit>
         <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
         <UnitName Value="nConnectedlayer"/>
+        <IsVisibleTab Value="True"/>
         <EditorIndex Value="11"/>
-        <CursorPos Y="11"/>
+        <TopLine Value="231"/>
+        <CursorPos X="27" Y="261"/>
         <UsageCount Value="101"/>
         <Loaded Value="True"/>
       </Unit>
@@ -38,8 +40,7 @@
         <Loaded Value="True"/>
       </Unit>
       <Unit>
-        <Filename Value="..\..\..\source\nlogisticlayer.pas"/>
-        <UnitName Value="nLogisticLayer"/>
+        <Filename Value="..\..\..\source\nLogisticLayer.pas"/>
         <EditorIndex Value="20"/>
         <TopLine Value="72"/>
         <CursorPos X="103" Y="169"/>
@@ -137,8 +138,7 @@
         <Loaded Value="True"/>
       </Unit>
       <Unit>
-        <Filename Value="..\..\..\source\nsoftmaxlayer.pas"/>
-        <UnitName Value="nSoftmaxLayer"/>
+        <Filename Value="..\..\..\source\nSoftmaxLayer.pas"/>
         <EditorIndex Value="21"/>
         <TopLine Value="11"/>
         <CursorPos X="15" Y="27"/>
@@ -256,6 +256,7 @@
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\nnOpenCL.pas"/>
+        <IsVisibleTab Value="True"/>
         <WindowIndex Value="1"/>
         <TopLine Value="479"/>
         <CursorPos X="21" Y="50"/>
@@ -265,11 +266,10 @@
       <Unit>
         <Filename Value="..\..\..\source\nncuda.pas"/>
         <UnitName Value="nnCuda"/>
-        <IsVisibleTab Value="True"/>
         <EditorIndex Value="1"/>
         <WindowIndex Value="1"/>
-        <TopLine Value="68"/>
-        <CursorPos X="15" Y="90"/>
+        <TopLine Value="69"/>
+        <CursorPos X="40" Y="74"/>
         <UsageCount Value="24"/>
         <Loaded Value="True"/>
       </Unit>
@@ -338,7 +338,6 @@
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\nRNNLayer.pas"/>
-        <IsVisibleTab Value="True"/>
         <EditorIndex Value="17"/>
         <TopLine Value="8"/>
         <CursorPos X="45" Y="35"/>
@@ -374,26 +373,6 @@
       <Define7 Value="USE_CUDART"/>
     </OtherDefines>
     <JumpHistory HistoryIndex="29">
-      <Position>
-        <Filename Value="..\..\..\source\ntensors.pas"/>
-        <Caret Line="682" Column="15" TopLine="659"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\ntensors.pas"/>
-        <Caret Line="8370" Column="14" TopLine="8356"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\ntensors.pas"/>
-        <Caret Line="11472" Column="67" TopLine="11431"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\ntensors.pas"/>
-        <Caret Line="254" Column="14" TopLine="231"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\ntensors.pas"/>
-        <Caret Line="6855" Column="46" TopLine="6816"/>
-      </Position>
       <Position>
         <Filename Value="..\..\..\source\ntensors.pas"/>
         <Caret Line="6860" Column="16" TopLine="6821"/>
@@ -493,6 +472,26 @@
       <Position>
         <Filename Value="..\..\..\source\nlogisticlayer.pas"/>
         <Caret Line="9" TopLine="5"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
+        <Caret Line="50" Column="26"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
+        <Caret Line="1056" Column="3" TopLine="1049"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
+        <Caret Line="31" Column="15" TopLine="24"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
+        <Caret Line="612" Column="3" TopLine="610"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
+        <Caret Line="32" Column="15" TopLine="4"/>
       </Position>
     </JumpHistory>
     <RunParams>

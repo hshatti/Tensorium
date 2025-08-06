@@ -172,7 +172,7 @@ begin
     s.inputStep:=j;
     outputLayer.forward(s);
     if state.isTraining then
-        write(#13, 'FW RNN [',state.index,'] ', 100*i/steps:3:0,'%');
+        //write(#13, 'FW RNN [',state.index,'] ', 100*i/steps:3:0,'%');
 
 end;
 
@@ -212,7 +212,7 @@ begin
   s.inputStep := i;
   s.deltaStep := i;
   inputLayer.backward(s);
-  write(#13, 'BW RNN [',state.index,'] ', 100*i/steps:3:0,'%');
+  //write(#13, 'BW RNN [',state.index,'] ', 100*i/steps:3:0,'%');
 end;
 
 procedure TRNNLayer.forward(var state: TNNetState);
@@ -489,7 +489,7 @@ begin
           s.inputStep:=j;
           outputLayer.forwardGPU(s);
 
-          if state.isTraining then write(#13, 'FW RNN [',state.index,'] ', 100*i/steps:3:0,'%')
+          //if state.isTraining then write(#13, 'FW RNN [',state.index,'] ', 100*i/steps:3:0,'%')
           //if l.steps = 1 then break;
 
           //state.input.data := state.input.data + inputStep;
@@ -598,7 +598,7 @@ begin
       //increment_layer(l.inputLayer, -1);
       //increment_layer(l.selfLayer, -1);
       //increment_layer(l.outputLayer, -1);
-      write(#13, 'BW RNN [',state.index,'] ', 100*i/steps:3:0,'%')
+      //write(#13, 'BW RNN [',state.index,'] ', 100*i/steps:3:0,'%')
 
   end;
   //finally
@@ -708,7 +708,7 @@ begin
           s.inputStep:=j;
           outputLayer.forwardGPU(s);
 
-          if state.isTraining then write(#13, 'FW RNN [',state.index,'] ', 100*i/steps:3:0,'%')
+          //if state.isTraining then write(#13, 'FW RNN [',state.index,'] ', 100*i/steps:3:0,'%')
           //if l.steps = 1 then break;
 
           //state.input.data := state.input.data + inputStep;
@@ -817,7 +817,7 @@ begin
       //increment_layer(l.inputLayer, -1);
       //increment_layer(l.selfLayer, -1);
       //increment_layer(l.outputLayer, -1);
-      write(#13, 'BW RNN [',state.index,'] ', 100*i/steps:3:0,'%')
+      //write(#13, 'BW RNN [',state.index,'] ', 100*i/steps:3:0,'%')
 
   end;
   //finally

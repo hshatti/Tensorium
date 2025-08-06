@@ -583,13 +583,11 @@ begin
   FillChar(FGlobalOffsets,sizeof(FGlobalOffsets),0);
   if z>0 then begin
     FWorkItemDimensions:=3;
-    exit
-  end;
+  end else
   if y>0 then begin
     FWorkItemDimensions:=2;
-    exit
-  end;
-  FWorkItemDimensions:=1;
+  end else
+    FWorkItemDimensions:=1;
   workItemSize := FLocalWorkGroupSizes[0];
   for i:=1 to FWorkItemDimensions-1 do
     workItemSize:=workItemSize*FLocalWorkGroupSizes[i];

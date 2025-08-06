@@ -1726,7 +1726,7 @@ __kernel void power(__global nfloat* base, const n_int srcOffset, const n_int sr
    dst[i*dstStride + dstOffset] = pow(base[i*srcStride + srcOffset], expo);
 }
 
-__kernel void clip(const nfloat alpha, __global const nfloat* src, __global nfloat* dst, const n_int stride, const n_int offset ){
+__kernel void clamp(const nfloat alpha, __global const nfloat* src, __global nfloat* dst, const n_int stride, const n_int offset ){
    const n_int i = get_global_id(0);
    src += i*stride + offset;
    dst += i*stride + offset;

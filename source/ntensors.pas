@@ -215,6 +215,13 @@ type
   TSingles = array of single;
   TDoubles = array of double;
 
+  PSingleTensor = ^TSingleTensor;
+  PDoubleTensor = ^TDoubleTensor;
+  PIntTensor = ^TIntTensor;
+  PInt64Tensor = ^TInt64Tensor;
+  PByteTensor = ^TByteTensor;
+  PShortIntTensor = ^TShortIntTensor;
+
   { TTensor }
   TTensor<T> = record
   const
@@ -286,6 +293,8 @@ type
       var outMin, outMax: T; var outArgMin, outArgMax: SizeInt);
     minmaxvss: procedure(const N: SizeInt; const src: PT; const stride: SizeInt;
       var outMin, outMax: T);
+
+    vClamp: procedure(const N:SizeInt; const src:PT; const srcStride:SizeInt; const dst:PT; const dstStride:SizeInt; const aMin,aMax:T);
     vcvtb: procedure(const N: SizeInt; const src: PT; const dst: pbyte);
     //vcvtl   : procedure(const N:SizeInt; const src:PT; const dst:PUint32);
     //vcvtq   : procedure(const N:SizeInt; const src:PT; const dst:PUint64);
@@ -690,6 +699,7 @@ type
     procedure toSingles(const dst: PSingle; const start: SizeInt = 0; N: SizeInt = 0);
     procedure toDoubles(const dst: PDouble; const start: SizeInt = 0; N: SizeInt = 0);
     procedure toHalfs(const dst: PHalf; const start: SizeInt = 0; N: SizeInt = 0);
+
     procedure axpy(const a: T; const x: PT; N: SizeInt = -1; const offset: SizeInt = 0; dstStride: SizeInt = 1; xStride: SizeInt = 1); overload;
     function dot(const src: PT; N: SizeInt = -1; const Stride: SizeInt = 1; const srcStride: SizeInt = 1): T; overload;
     function sumSqrDiff(const src: PT; N: SizeInt = 0; const Stride: SizeInt = 1; const srcStride: SizeInt = 1; const offset: SizeInt = 0): T; overload;
@@ -892,13 +902,6 @@ type
   end;
 
 
-  PSingleTensor = ^TSingleTensor;
-  PDoubleTensor = ^TDoubleTensor;
-  PIntTensor = ^TIntTensor;
-  PInt64Tensor = ^TInt64Tensor;
-  PByteTensor = ^TByteTensor;
-  PShortIntTensor = ^TShortIntTensor;
-
   TSingleTensor = TTensor<single>;
   TDoubleTensor = TTensor<double>;
   TIntTensor = TTensor<int32>;
@@ -936,6 +939,7 @@ type
   private
     class function _cmp(const a, b: T): SizeInt; static; WINAPI;
   public
+    class function indexOf(const arr : PT; const count:SizeInt; const val:T):SizeInt; static;
     class procedure QuickSort(Arr: PT; L, R: SizeInt; Compare: TComparefunc = nil; const Descending: boolean = False); static;
     class function BinSearch(const Arr:PT;const Val:T; R:SizeInt; Compare:TComparefunc = nil):integer;static;
   end;
@@ -2522,9 +2526,19 @@ begin
   until L >= R;
 end;
 
-class function TTools<T>._cmp(const a, b: T): SizeInt;
+class function TTools<T>._cmp(const a, b: T): SizeInt; WINAPI;
 begin
   result := TComparer<T>.default.Compare(a, b)
+end;
+
+class function TTools<T>.indexOf(const arr: PT; const count: SizeInt; const val: T): SizeInt;
+var
+  i:SizeInt;
+begin
+  i:= -1 ;
+  for i:=0 to count-1 do
+    if _cmp(arr[i], val)=0 then
+      exit(i);
 end;
 
 class function TTools<T>.BinSearch(const Arr: PT; const Val: T; R: SizeInt; Compare: TComparefunc): integer;
@@ -5218,6 +5232,101 @@ begin
     dst[i * dstStride] := power(src[i * srcStride], a);
 end;
 
+procedure vsClamp(const N:SizeInt; const src:PSingle; const srcStride:SizeInt; const dst:PSingle; const dstStride:SizeInt; const aMin,aMax:single);
+var i:SizeInt;
+begin
+  for i:=0 to N-1 do begin
+    dst[i*dstStride] := src[i*srcStride];
+    if dst[i*dstStride]< aMin then begin
+      dst[i*dstStride] := aMin;
+      continue
+    end;
+    if dst[i*srcStride]>aMax then begin
+      dst[i*dstStride] := aMax;
+      continue
+    end;
+  end;
+end;
+
+procedure vdClamp(const N:SizeInt; const src:PDouble; const srcStride:SizeInt; const dst:PDouble; const dstStride:SizeInt; const aMin,aMax: double);
+var i:SizeInt;
+begin
+  for i:=0 to N-1 do begin
+    dst[i*dstStride] := src[i*srcStride];
+    if dst[i*dstStride]< aMin then begin
+      dst[i*dstStride] := aMin;
+      continue
+    end;
+    if dst[i*srcStride]>aMax then begin
+      dst[i*dstStride] := aMax;
+      continue
+    end;
+  end;
+end;
+
+procedure vi32Clamp(const N:SizeInt; const src:PLongint; const srcStride:SizeInt; const dst:PLongint; const dstStride:SizeInt; const aMin,aMax: longint);
+var i:SizeInt;
+begin
+  for i:=0 to N-1 do begin
+    dst[i*dstStride] := src[i*srcStride];
+    if dst[i*dstStride]< aMin then begin
+      dst[i*dstStride] := aMin;
+      continue
+    end;
+    if dst[i*srcStride]>aMax then begin
+      dst[i*dstStride] := aMax;
+      continue
+    end;
+  end;
+end;
+
+procedure vi64Clamp(const N:SizeInt; const src:PInt64; const srcStride:SizeInt; const dst:PInt64; const dstStride:SizeInt; const aMin,aMax: Int64);
+var i:SizeInt;
+begin
+  for i:=0 to N-1 do begin
+    dst[i*dstStride] := src[i*srcStride];
+    if dst[i*dstStride]< aMin then begin
+      dst[i*dstStride] := aMin;
+      continue
+    end;
+    if dst[i*srcStride]>aMax then begin
+      dst[i*dstStride] := aMax;
+      continue
+    end;
+  end;
+end;
+
+procedure vi16Clamp(const N:SizeInt; const src:PSmallint; const srcStride:SizeInt; const dst:PSmallint; const dstStride:SizeInt; const aMin,aMax: smallint);
+var i:SizeInt;
+begin
+  for i:=0 to N-1 do begin
+    dst[i*dstStride] := src[i*srcStride];
+    if dst[i*dstStride]< aMin then begin
+      dst[i*dstStride] := aMin;
+      continue
+    end;
+    if dst[i*srcStride]>aMax then begin
+      dst[i*dstStride] := aMax;
+      continue
+    end;
+  end;
+end;
+
+procedure vbClamp(const N:SizeInt; const src:PByte; const srcStride:SizeInt; const dst:PByte; const dstStride:SizeInt; const aMin,aMax: Byte);
+var i:SizeInt;
+begin
+  for i:=0 to N-1 do begin
+    dst[i*dstStride] := src[i*srcStride];
+    if dst[i*dstStride]< aMin then begin
+      dst[i*dstStride] := aMin;
+      continue
+    end;
+    if dst[i*srcStride]>aMax then begin
+      dst[i*dstStride] := aMax;
+      continue
+    end;
+  end;
+end;
 { TTensor }
 
 function TTensor<T>.GetValue(idx: TSizes): T;
@@ -5985,14 +6094,14 @@ begin
 
   {$if defined(USE_OPENCL)}
   //if computingDevice = cdOpenCL then
-  if not noDeviceAllocation then begin
+  if assigned(ocl) and not noDeviceAllocation then begin
     devData := ocl.createDeviceBuffer(sz * sizeOf(T), TCLMemAccess.maReadWrite, nil);
   {$ifdef GPU_TEST}
   devTest := ocl.createDeviceBuffer(sz * sizeOf(T), TCLMemAccess.maReadWrite, nil);
   {$endif}
   end;
   {$elseif defined(USE_CUDART)}
-  if not noDeviceAllocation then begin
+  if assigned(cuda) and not noDeviceAllocation then begin
     devData := cuda.createDeviceBuffer(sz * sizeOf(T));
     {$ifdef GPU_TEST}
     devTest := cuda.createDeviceBuffer(sz * sizeOf(T));
@@ -6478,7 +6587,7 @@ begin
   Data := pointer(DynData);
   {$if defined(USE_OPENCL)}
   //if computingDevice = cdOpenCL then
-  if not noDeviceAllocation then begin
+  if assigned(ocl) and not noDeviceAllocation then begin
     if assigned(devData) then ocl.freeDeviceBuffer(devData);
     devData := ocl.createDeviceBuffer(SN * SizeOf(T));
     {$ifdef GPU_TEST}
@@ -6488,7 +6597,7 @@ begin
   end;
   {$elseif defined(USE_CUDART)}
   //if computingDevice = cdCUDA then
-  if not noDeviceAllocation then begin
+  if assigned(cuda) and not noDeviceAllocation then begin
     if assigned(devData) then cuda.freeDeviceBuffer(devData);
     devData := cuda.createDeviceBuffer(SN * SizeOf(T));
     {$ifdef GPU_TEST}
@@ -6584,6 +6693,7 @@ var
   newShape, newIndecies, indecies: TSizes;
   dst: ^TTensor<T> absolute dstTensor;
 begin
+  assert(length(newArrange)=length(FShape), 'New and old dimensions must be equal');
   setLength(newShape, length(newArrange));
   setLength(newIndecies, length(newArrange));
   setLength(indecies, length(newArrange));
@@ -9974,6 +10084,11 @@ begin
     D := Data
   else
     D := dst;
+  if assigned(vClamp) then begin
+    vClamp(Size(), Data, 1, D, 1, aMin, aMax);
+    exit
+  end;
+
   for i := 0 to Size() - 1 do
   begin
     D[i] := Data[i];
@@ -10655,6 +10770,7 @@ begin
   Result := plot(X);
 end;
 
+
 function TTensor<T>.print(const consolePixel: TTensorPrintStyle;
   tile: SizeInt; minVal: double; maxVal: double): TArray<SizeInt>;
 const
@@ -10676,10 +10792,10 @@ var
 const
   __shade: array[0..4] of string = (' ', '░', '▒', '▓', '█');
   // delphi will complain if no string type defined, MacOS will type rubbish if string type is defined!! :(
-  {$if defined(MSWINDOWS)}
+  {$if defined(MSWINDOWS) or defined(POSIX)}
   halfChar = '▀';
   {$else}
-  halfChar :ansistring= '▀';
+  halfChar :ansistring= '▀';   // this will fail to compile on delphi - android
   {$endif}
 begin
   if not assigned(Data) then exit;
@@ -10862,6 +10978,7 @@ begin
   writeln(toString());
 end;
 
+
 procedure TTensor<T>.printStat(N: SizeInt; const offset: SizeInt);
 var
   i, outArgMin, outArgMax: SizeInt;
@@ -10984,7 +11101,7 @@ var
   S: string;
 const
   __shade: array[0..4] of shortstring = (' ', '░', '▒', '▓', '█');
-  {$if defined(MSWINDOWS)}
+  {$if defined(MSWINDOWS) or defined(POSIX)}
   halfChar = '▀';
   {$else}
   halfChar : ansistring = '▀';
@@ -11000,7 +11117,7 @@ begin
       S := S + IntToStr(Shape[i]);
     end;
   S := S + ')';
-  Write(sup, sLineBreak{S, csi, length(S), 'D', dw});
+  Write({sup, sLineBreak,} S, csi, length(S), 'D', dw);
   ow := length(S);
   oh := 1;
   minMax(amin, amax, outArgMin, outArgMax);
@@ -11008,7 +11125,7 @@ begin
   vcvtd(1, @amax, @maxVal);
   S := '[min : ' + toStr(amin) + '@' + IntToStr(outArgMin) + ', max : ' +
     toStr(amax) + '@' + IntToStr(outArgMax) + ']';
-  Write(sup, sLinebreak{S, csi, length(S), 'D', dw});
+  Write({sup, sLinebreak,} S, csi, length(S), 'D', dw);
   ow := Math.max(ow, length(S));
   Inc(oh);
   _w := w();
@@ -11091,6 +11208,7 @@ begin
 
 end;
 
+
 function TTensor<T>.print(const scale: single; const idx: SizeInt): TArray<SizeInt>;
 const
   csi = #$1B'[';
@@ -11110,7 +11228,7 @@ var
   S: string;
 const
   __shade: array[0..4] of shortstring = (' ', '░', '▒', '▓', '█');
-  {$if defined(MSWINDOWS)}
+  {$if defined(MSWINDOWS) or defined(POSIX)}
   halfChar = '▀';
   {$else}
   halfChar :ansistring = '▀';
@@ -12441,6 +12559,8 @@ begin
   TTensor<shortint>.notv                    := @_not;
   TTensor<shortint>.shrvs                   := @_shr;
   TTensor<shortint>.shlvs                   := @_shl;
+  TTensor<shortint>.vClamp                  := @vi16Clamp;
+
 end;
 
 class procedure TTensorOps.initByte;
@@ -12467,6 +12587,8 @@ begin
   TTensor<byte>.notv                        := @_not;
   TTensor<byte>.shrvs                       := @_shr;
   TTensor<byte>.shlvs                       := @_shl;
+  TTensor<byte>.vClamp                      := @vbClamp;
+
 end;
 
 class procedure TTensorOps.initInt32;
@@ -12494,6 +12616,7 @@ begin
   TTensor<int32>.notv                       := @_not;
   TTensor<int32>.shrvs                      := @_shr;
   TTensor<int32>.shlvs                      := @_shl;
+  TTensor<int32>.vClamp                     := @vi32Clamp;
 
 end;
 
@@ -12522,6 +12645,7 @@ begin
   TTensor<int64>.notv                       := @_not;
   TTensor<int64>.shrvs                      := @_shr;
   TTensor<int64>.shlvs                      := @_shl;
+  TTensor<int64>.vClamp                     := @vi64Clamp;
 end;
 
 class procedure TTensorOps.initSingle;
@@ -12579,6 +12703,7 @@ begin
   TTensor<single>.MeansAndVarsDelta         := sMeanAndVarianceDelta;
   TTensor<single>.normalizeDelta            := sNormalizeDelta;
   TTensor<single>.minmaxvsi                 := @sminMaxI;
+  TTensor<single>.vClamp                    := @vsClamp;
   TTensor<single>.sinv                      := @vsin;
   TTensor<single>.cosv                      := @vcos;
   TTensor<single>.tanv                      := @vtan;
@@ -12693,6 +12818,8 @@ begin
     TTensor<double>.MeansAndVarsDelta         := dMeanAndVarianceDelta;
     TTensor<double>.normalizeDelta            := dNormalizeDelta;
     TTensor<double>.minmaxvsi                 := @dminMaxI;
+    TTensor<double>.vClamp                    := @vdClamp;
+
     TTensor<double>.sinv                      := @vsin;
     TTensor<double>.cosv                      := @vcos;
     TTensor<double>.tanv                      := @vtan;
@@ -12744,7 +12871,9 @@ var
   hConsole: THandle;
 
 initialization
+  {$if not defined(POSIX)}
   SetPrecisionMode(TFPUPrecisionMode.pmSingle);
+  {$endif}
   {$ifdef USE_MULTITHREADiNG}
   mp.setWorkers(GetSystemThreadCount{ div TILE_M});
   {$endif}

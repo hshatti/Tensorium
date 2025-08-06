@@ -8,9 +8,9 @@ interface
 uses
   SysUtils, Math, typInfo
   {$ifdef MSWINDOWS}, Windows{$endif}
-  , nTensors, nBaseLayer, NTypes, nYoloLayer
+  , nTensors, nBaseLayer, NTypes, nYoloLayer, nRegionLayer
   {$if defined(USE_OPENCL)}
-  , opencl, OpenCLHelper
+  , OpenCLHelper
   {$elseif defined(USE_CUDART)}
   , nnCuda
   {$endif}
@@ -32,7 +32,6 @@ type
     input, truth: TSingleTensor;
     layers: TArray<TBaseLayer>;
     seen: SizeInt;
-    numBoxes : SizeInt;
     maxCrop, minCrop : SizeInt;
     dynamicMiniBatch : SizeInt;
     currentIteration: SizeInt;
@@ -94,6 +93,7 @@ type
     function classCount(): SizeInt;
     function Detections(const aWidth, aHeight: SizeInt; const aThresh: single = 0.5; const aRelative: boolean=false; const aLetterBox : boolean=false ; const aBatch: SizeInt=0): TDetections;
     procedure freeLayers();
+    function maxBoxes : SizeInt;
     destructor Destroy; override;
 
     property batch: SizeInt read FBatch write setBatch;
@@ -159,19 +159,27 @@ end;
 
 procedure TNNet.setBatch(ABatch: SizeInt);
 var
-  i, wsSize: SizeInt;
+  i, wsSize, mini_batch: SizeInt;
+  shape : TSizes;
 begin
   wsSize :=0;
+  assert((ABatch mod subDivisions=0) and (ABatch>=subDivisions),'[setBatch] New Batch must be a multiple of subDivisions');
+  mini_batch := ABatch div subDivisions;
   try
     for i := 0 to High(Layers) do begin
-      Layers[i].setBatch(ABatch);
+      Layers[i].setBatch(mini_batch);
       wsSize := max(wsSize, layers[i].getWorkspaceSize());
     end;
   except on E : Exception do
     raise Exception.Create('['+Layers[i].ClassName+'] : ' + E.Message)
   end;
   if wsSize>0 then workspace.reSize([wsSize]);
-  FBatch := ABatch;
+  shape := copy(input.Shape);
+  if assigned(input.shape) then begin
+    shape[0]:=mini_batch;
+    input.reSize(shape, mini_batch);
+  end;
+  FBatch := mini_batch;
 end;
 
 function TNNet.layerCount(): SizeInt;
@@ -271,6 +279,7 @@ var
 begin
   state.workspace := workspace;
   state.step:=0;
+  state.seen := @seen;
   for i := 0 to High(Layers) do
   begin
     state.index := i;
@@ -286,6 +295,8 @@ begin
     end;
     if assigned(OnForward) then OnForward(state);
 
+    if state.isTraining then
+      write(#13, 'FW [', i:3, '] : ',currentLayer.LayerTypeStr:20);
     {$if defined(USE_OPENCL)}
     {$if defined(CL_EVENTS)}
     currentLayer.events := state.events;
@@ -317,6 +328,7 @@ begin
   original_delta := state.delta;
   state.workspace := workspace;
   state.step:=0;
+  state.seen := @seen;
   for i := High(Layers) downto 0 do
   begin
     state.index := i;
@@ -333,6 +345,7 @@ begin
     current := Layers[i];
     if current.backwardStop then break;
     if current.forwardOnly then continue;
+    write(#13, 'BW [', i:3, '] : ', current.LayerTypeStr:20);
     {$if defined(USE_OPENCL)}
     {$if defined(CL_EVENTS)}
     current.events := state.events;
@@ -462,7 +475,7 @@ function TNNet.trainEpoch(const Data: TData; const randomSample: boolean; batchC
 var
 
   err: single;
-  i: SizeInt;
+  i, updateId: SizeInt;
 
 begin
   //assert(Data.X.h() mod batch =
@@ -484,6 +497,7 @@ begin
   if not assigned(truth.data) then
     truth.resize(self.output().Shape, batch);
   Result := 0;
+  updateId := 0;
   for i := 0 to batchCount - 1 do
   begin
     if randomSample then
@@ -514,7 +528,8 @@ begin
 
     if seen mod (batch * subDivisions) = 0 then begin
       update();
-      if assigned(OnAfterNetOptimization) then OnAfterNetOptimization(Self, i);
+      if assigned(OnAfterNetOptimization) then OnAfterNetOptimization(Self, seen div (batch * subDivisions));
+      inc(updateId)
     end;
 
   end;
@@ -553,8 +568,16 @@ var i: SizeInt;
 begin
   result :=0;
   for i := high(Layers) downto 0 do
-    if Layers[i].layerType in [ltYolo{, ltGaussianYOLO, ltREGION, ltDETECTION}] then
-      exit(TYoloLayer(layers[I]).classes);
+    case Layers[i].layerType of
+      ltYOLO:
+        exit(TYoloLayer(layers[I]).classes);
+      //ltGaussianYOLO:
+      //  exit(TRegionLayer(layers[I]).classes);
+      //ltDETECTION:
+      //  exit(TRegionLayer(layers[I]).classes);
+      ltREGION:
+        exit(TRegionLayer(layers[I]).classes);
+    end;
 
 end;
 
@@ -588,7 +611,7 @@ begin
       ltREGION:
         begin
           if not assigned(l) then l := layers[i];
-          //detCount :=  detCount + TRegionLayer(layers[i]).getDetectionCount(aThresh, aBatch);
+          detCount := detCount + TRegionLayer(layers[i]).w*TRegionLayer(layers[i]).h*TRegionLayer(layers[i]).n;
 
         end;
     end;
@@ -596,22 +619,30 @@ begin
   if not assigned(result) then exit;
 
   for i := 0 to detCount -1 do
-      begin
-          setLength(result[i].prob, TYoloLayer(l).classes);
-          //if l.&type = ltGaussianYOLO then
-          //    setLength(result[i].uc, 4)
-          //else
-          //    result[i].uc := nil;
-          //if (l.layerType=ltDETECTION) and (TDetectionLayer(l).coords > 4) then
-          //    setLength(result[i].mask, l.coords-4)
-          //else
-          //    result[i].mask := nil;
-          if assigned(TYoloLayer(l).embeddingOutput.data) then
-              setLength(result[i].embeddings, TYoloLayer(l).embeddingSize)
-          else
-              result[i].embeddings := nil;
-          result[i].embedding_size := TYoloLayer(l).embeddingSize;
-      end;
+    case l.layerType of
+      ltYOLO:
+        begin
+              setLength(result[i].prob, TYoloLayer(l).classes);
+              //if l.&type = ltGaussianYOLO then
+              //    setLength(result[i].uc, 4)
+              //else
+              //    result[i].uc := nil;
+              //if (l.layerType=ltDETECTION) and (TDetectionLayer(l).coords > 4) then
+              //    setLength(result[i].mask, l.coords-4)
+              //else
+              //    result[i].mask := nil;
+              if assigned(TYoloLayer(l).embeddingOutput.data) then
+                  setLength(result[i].embeddings, TYoloLayer(l).embeddingSize)
+              else
+                  result[i].embeddings := nil;
+              result[i].embedding_size := TYoloLayer(l).embeddingSize;
+          end;
+      ltREGION:
+        begin
+            setLength(result[i].prob, TRegionLayer(l).classes);
+
+        end;
+    end;
   detCount := 0;
   for i:=0 to layerCount()-1 do
     case layers[i].layerType of
@@ -637,9 +668,8 @@ begin
       ltREGION:
         begin
           if detCount<length(result) then
-            //TRegionLayer(layers[i]).getDetections(aWidth, aHeight, self.input.w(), self.input.h(), thersh, nil, @result[detCpunt], true, true);
-          //detCount :=  detCount + TRegionLayer(layers[i]).getDetectionCount(aThresh, aBatch);
-
+          TRegionLayer(layers[i]).getDetections(aWidth, aHeight, self.input.w(), self.input.h(), aThresh, nil, 0, aRelative, @result[detCount], aLetterBox);
+          detCount := detCount + TRegionLayer(layers[i]).w*TRegionLayer(layers[i]).h*TRegionLayer(layers[i]).n;
         end;
     end;
 
@@ -654,6 +684,14 @@ begin
   for i := High(Layers) downto 0 do
     //Layers[i].free;
     FreeAndNil(Layers[i]);
+end;
+
+function TNNet.maxBoxes: SizeInt;
+var i:SizeInt;
+begin
+  for i:= high(Layers) downto 0 do
+    if Layers[i].layerType = ltYOLO then
+      exit(TYoloLayer(layers[i]).maxBoxes)
 end;
 
 destructor TNNet.Destroy;

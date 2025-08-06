@@ -30,6 +30,7 @@
           </SearchPaths>
           <Parsing>
             <SyntaxOptions>
+              <SyntaxMode Value="Delphi"/>
               <IncludeAssertionCode Value="True"/>
             </SyntaxOptions>
           </Parsing>
@@ -52,9 +53,8 @@
             <CustomOptions Value="-CfAVX2
 -OpCOREAVX2
 -dUSE_AVX2
--dUSE_MULTITHREADING
--dUSE_OPENCL
--dBIG_MATRECIES"/>
+-dBIG_MATRECIES
+-dUSE_CUDART"/>
             <OtherDefines Count="8">
               <Define0 Value="USE_AVX2"/>
               <Define1 Value="USE_MULTITHREADING"/>
@@ -101,6 +101,16 @@
         <Filename Value="..\..\..\source\inc\cl_las.padSingle.inc"/>
         <IsPartOfProject Value="True"/>
       </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\nhttp.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="nHttp"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\nregionlayer.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="nRegionLayer"/>
+      </Unit>
     </Units>
   </ProjectOptions>
   <CompilerOptions>
@@ -142,9 +152,7 @@
       <CustomOptions Value="-CfAVX2
 -OpCOREAVX2
 -dUSE_AVX2
--dUSE_MULTITHREADING
--dUSE_OPENCL
--dUSE_TELEMETRY
+-dUSE_MKL
 -dBIG_MATRECIES"/>
       <OtherDefines Count="8">
         <Define0 Value="USE_AVX2"/>

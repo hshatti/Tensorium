@@ -39,6 +39,8 @@ type
 
   end;
 
+procedure softmax(const n: SizeInt; const input: PSingle; const temp: single; const stride: SizeInt; const output: PSingle);
+
 implementation
 
 

@@ -54,7 +54,6 @@
 -dUSE_AVX2
 -dUSE_MKL
 -dUSE_MULTITHREADING
--dUSE_TELEMETRY
 -dUSE_CUDART"/>
             <OtherDefines Count="13">
               <Define0 Value="USE_OPENCL"/>
@@ -113,9 +112,8 @@
         <UnitName Value="nOpMetrics"/>
       </Unit>
       <Unit>
-        <Filename Value="..\..\..\source\nrnnlayer.pas"/>
+        <Filename Value="..\..\..\source\nRNNLayer.pas"/>
         <IsPartOfProject Value="True"/>
-        <UnitName Value="nRNNLayer"/>
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\nlstmlayer.pas"/>
@@ -166,12 +164,9 @@
       <CustomOptions Value="-CfAVX2
 -OpCOREAVX2
 -OoFASTMATH
+-dUSE_OPENCL
 -dUSE_AVX2
--dUSE_MKL
--dUSE_MULTITHREADING
--dUSE_TELEMETRY
--dDEBUG
--dUSE_CUDART"/>
+-dUSE_MULTITHREADING"/>
       <OtherDefines Count="13">
         <Define0 Value="USE_OPENCL"/>
         <Define1 Value="USE_AVX2"/>

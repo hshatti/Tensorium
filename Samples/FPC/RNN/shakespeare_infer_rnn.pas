@@ -187,7 +187,7 @@ begin
     parser.saveWeights(SAVE_FILE+'.' + intToStr(batchId mod ROTATION));
     parser.saveWeights(SAVE_FILE);
   end else begin
-    curserDown();
+    cursorDown();
     writeln('batch [', currBatch,']');
   end;
 
@@ -321,7 +321,7 @@ const BATCH = 9;
       B = BATCH*IM;
       S = B*STEPS;
 var t1, t2, t3, t4, t5, t6 :TSingleTensor;
-  h1, h2, h3 : TTensor<Half>;
+  h1, h2, h3 : TTensor<Single>;
 begin
   DeleteFile('heap.trc');
 

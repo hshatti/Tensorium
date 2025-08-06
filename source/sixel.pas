@@ -17,9 +17,10 @@ uses
   {$endif}
   ;
 
+type
+  TPixelOrder = (poHWC, poCHW);
 
-
-procedure printSixel(const buf:Pointer; const width, height:SizeInt; const Dither:boolean = false);
+procedure printSixel(const buf:Pointer; const width, height:SizeInt; const Dither:boolean = false; const pixelOrder:TPixelOrder = poHWC);
 
 implementation
 
@@ -156,12 +157,14 @@ begin
   result := sysutils.intToStr(int)
 end;
 
-procedure printSixel(const buf: Pointer; const width, height: SizeInt; const Dither: boolean);
+procedure printSixel(const buf: Pointer; const width, height: SizeInt;
+  const Dither: boolean; const pixelOrder: TPixelOrder);
 const pixel = 1;
      pixcount = 6 div pixel;
      COLOR_SPACE : array[0..2] of byte = (8, 8, 4);
 var
   P                      : PSixel;
+  bytes                  : PByte;
 //  bitPix  : array of byte;
   pos                    : SizeInt;
   colorPal               : TColorMap;
@@ -174,6 +177,18 @@ var
     result := p[y*width + x]
   end;
 
+  function getSixelHWC(const data: PSixel; const y, x :SizeInt; const aHeight, aWidth:SizeInt): TSixel;
+  begin
+    result := data[y*aWidth + x]
+  end;
+
+  function getSixelCHW(const data: PByte;const y, x :SizeInt; const aHeight, aWidth:SizeInt): TSixel;
+  begin
+    result.r := data[y*aWidth + x];
+    result.g := data[aHeight*aWidth + y*width + x];
+    result.b := data[2*aHeight*aWidth + y*width + x];
+  end;
+
   procedure encodeNum(const ctl : ansichar; const num:longint);
   var sz : SizeInt;
   begin
@@ -183,6 +198,7 @@ var
     if num>99 then sz := 3 else if num>9 then sz:=2 else sz := 1;
     move(intToAnsistr(num)[1], plt[pos], sz); inc(pos,sz);
   end;
+
   procedure encodeChar(const ctl:ansichar; const num:longint; const str :ansichar);
   var sz : SizeInt;
   begin
@@ -235,14 +251,31 @@ var
   begin
     //clrCount := 0;
     colorPal.Clear;
-    mi.r := p[0].r;
-    mi.g := p[0].g;
-    mi.b := p[0].b;
-    ma.r := p[0].r;
-    ma.g := p[0].g;
-    ma.b := p[0].b;
+    case pixelOrder of
+      pohwc :
+        begin
+          mi := p[0];
+          ma := p[0];
+        end;
+      poCHW :
+        begin
+          mi := getSixelCHW(bytes,0, 0, height, width);
+          ma := mi;
+        end;
+    end;
+    //mi.r := p[0].r;
+    //mi.g := p[0].g;
+    //mi.b := p[0].b;
+    //ma.r := p[0].r;
+    //ma.g := p[0].g;
+    //ma.b := p[0].b;
     for i:=1 to height*width-1 do begin
-      sx := p[i];
+      case pixelOrder of
+        poHWC :
+          sx := p[i];
+        poCHW:
+          sx := getSixelCHW(bytes, 0, i, 1, height*width);
+      end;
       mi.r := Math.min(sx.r, mi.r);
       mi.g := Math.min(sx.g, mi.g);
       mi.b := Math.min(sx.b, mi.b);
@@ -298,10 +331,17 @@ begin
   setLength(dith, width*height);
   pos:=1;
   //move(buf^, dith[0], width*height*sizeOf(p[0]));
-  p := pointer(buf);
+  p := pointer(buf); bytes := pointer(buf);
   reCalcPalette(sxlMin, sxlMax, sxlScaler);
 
-  for i:=0 to high(dith) do dith[i] := clr100(p[i]);
+  case pixelOrder of
+    poHWC:
+      for i:=0 to high(dith) do dith[i] := clr100(p[i]);
+    poCHW:
+      for i:=0 to height*width-1 do
+         dith[i] := clr100(getSixelCHW(buf, 0, i, 1, height*width));
+  end;
+
   p := pointer(dith);
 
   if Dither then
