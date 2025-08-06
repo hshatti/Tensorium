@@ -2,6 +2,7 @@ unit nUpSampleLayer;
 {$ifdef FPC}
 {$mode Delphi}
 {$endif}
+{$pointermath on}
 interface
 
 uses
@@ -61,11 +62,11 @@ end;
 procedure TUpSampleLayer.setBatch(ABatch: SizeInt);
 begin
   if ABatch = Batch then exit;
-  batch := ABatch;
-  output.reSize([batch, c, h, w], batch);
-  inputShape[0] := batch;;
+  output.reSize([Abatch, outC, outH, outW], Abatch);
+  inputShape[0] := Abatch;
   if FTrain then
-      Delta.reSize([batch, c,h, w], batch);
+      Delta.reSize([Abatch, outC, outH, outW], Abatch);
+  batch := ABatch;
 end;
 
 procedure TUpSampleLayer.setTrain(ATrain: boolean);
@@ -73,7 +74,7 @@ begin
   if FTrain=Atrain then exit;
   FTrain := ATrain;
   if FTrain then
-    delta := TSingleTensor.Create([batch, c, h, w], batch)
+    delta := TSingleTensor.Create([batch, outC, outH, outW], batch)
   else
     delta.free
 
@@ -119,10 +120,10 @@ begin
   //fill_cpu(l.outputs * l.batch, 0, l.output, 1);
   if reverse then begin        // todo [forward_upsample_layer] why not using rverse as a parameter instead of [if else then]
       output.fill(0);
-      upsample(output.data, outW, outH, outC, batch, stride, false, scale, state.input.data)
+      upsample(pointer(output.data), outW, outH, outC, batch, stride, false, scale, pointer(state.input.data))
   end
   else
-      upsample(state.input.data, w, h, c, batch, stride, true, scale, output.data);
+      upsample(pointer(state.input.data), w, h, c, batch, stride, true, scale, pointer(output.data));
 
   {$ifdef USE_TELEMETRY}
   if benchmark then metrics.forward.finish(layerType);
@@ -135,14 +136,54 @@ begin
   if benchmark then metrics.backward.start(layerType);
   {$endif}
   if reverse then  // todo [backward_upsample] why not passing l.reverse to the function instead of [if then else]
-      upsample(delta.data, outW, outH, outC, batch, stride, true, scale, state.delta.data)
+      upsample(pointer(delta.data), outW, outH, outC, batch, stride, true, scale, pointer(state.delta.data))
   else
-      upsample(state.delta.data, w, h, c, batch, stride, false, scale, delta.data) ;
+      upsample(pointer(state.delta.data), w, h, c, batch, stride, false, scale, pointer(delta.data)) ;
   {$ifdef USE_TELEMETRY}
   if benchmark then metrics.backward.finish(layerType);
   {$endif}
 end;
-{$if defined(USE_CUDART)}
+
+{$if defined(USE_OPENCL)}
+procedure TUpSampleLayer.forwardGPU(var state: TNNetState);
+begin
+  {$ifdef USE_TELEMETRY}
+  if benchmark then metrics.forward.start(layerType);
+  {$endif}
+  output.setOCL;
+  if not state.input.wasGPU() then state.input.pushToDevice;
+
+  if reverse then begin        // todo [forward_upsample_layer] why not using rverse as a parameter instead of [if else then]
+      //ocl.fill(output.as2dHeight(), output.as2dWidth(), output.devData, 0, 1);
+      ocl.upsample(batch, outC, outH, outW, output.devData, stride, 0, scale, state.input.devData, true)
+  end
+  else
+      ocl.upsample(batch, c, h, w, state.input.devData, stride, 1, scale, output.devData);
+
+  {$ifdef USE_TELEMETRY}
+  ocl.finish();
+  if benchmark then metrics.forward.finish(layerType);
+  {$endif}
+end;
+
+procedure TUpSampleLayer.backwardGPU(var state: TNNetState);
+begin
+  {$ifdef USE_TELEMETRY}
+  if benchmark then metrics.backward.start(layerType);
+  {$endif}
+  if not delta.wasGPU() then delta.pushToDevice;
+  if not state.delta.wasGPU() then state.delta.pushToDevice;
+  if reverse then  // todo [backward_upsample] why not passing l.reverse to the function instead of [if then else]
+      ocl.upsample(batch, outC, outH, outW, delta.devData, stride, 1, scale, state.delta.devData)
+  else
+      ocl.upsample(batch, c, h, w, state.delta.devData, stride, 0, scale, delta.devData) ;
+  {$ifdef USE_TELEMETRY}
+  ocl.finish();
+  if benchmark then metrics.backward.finish(layerType);
+  {$endif}
+end;
+
+{$elseif defined(USE_CUDART)}
 procedure TUpSampleLayer.forwardGPU(var state: TNNetState);
 begin
   {$ifdef USE_TELEMETRY}
@@ -183,44 +224,6 @@ begin
       cuda.upsample(batch, c, h, w, state.delta.devData, stride, 0, scale, delta.devData) ;
   {$ifdef USE_TELEMETRY}
   cuda.finish();
-  if benchmark then metrics.backward.finish(layerType);
-  {$endif}
-end;
-
-{$elseif defined(USE_OPENCL)}
-procedure TUpSampleLayer.forwardGPU(var state: TNNetState);
-begin
-  {$ifdef USE_TELEMETRY}
-  if benchmark then metrics.forward.start(layerType);
-  {$endif}
-  output.setOCL;
-  if not state.input.wasGPU() then state.input.pushToDevice;
-  if reverse then begin        // todo [forward_upsample_layer] why not using rverse as a parameter instead of [if else then]
-      //ocl.fill(output.as2dHeight(), output.as2dWidth(), output.devData, 0, 1);
-      ocl.upsample(batch, outC, outH, outW, output.devData, stride, 0, scale, state.input.devData, true)
-  end
-  else
-      ocl.upsample(batch, c, h, w, state.input.devData, stride, 1, scale, output.devData);
-
-  {$ifdef USE_TELEMETRY}
-  ocl.finish();
-  if benchmark then metrics.forward.finish(layerType);
-  {$endif}
-end;
-
-procedure TUpSampleLayer.backwardGPU(var state: TNNetState);
-begin
-  {$ifdef USE_TELEMETRY}
-  if benchmark then metrics.backward.start(layerType);
-  {$endif}
-  if not delta.wasGPU() then delta.pushToDevice;
-  if not state.delta.wasGPU() then state.delta.pushToDevice;
-  if reverse then  // todo [backward_upsample] why not passing l.reverse to the function instead of [if then else]
-      ocl.upsample(batch, outC, outH, outW, delta.devData, stride, 1, scale, state.delta.devData)
-  else
-      ocl.upsample(batch, c, h, w, state.delta.devData, stride, 0, scale, delta.devData) ;
-  {$ifdef USE_TELEMETRY}
-  ocl.finish();
   if benchmark then metrics.backward.finish(layerType);
   {$endif}
 end;

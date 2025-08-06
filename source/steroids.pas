@@ -1,4 +1,3 @@
-
 { <Steroids : (Thread Pooling wrapper for Freepascal/Delphi) >
   Copyright (c) <2022> <Haitham Shatti  <haitham.shatti at gmail dot com> >
   Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"),
@@ -137,8 +136,8 @@ type
      A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U:Pointer;
   end;
   TMPParamsArray = array[0..$80] of TMPParams;
-  {$if defined(MSWindows) or defined(linux)}
-  TGroupPriority = TThreadPriority;
+  {$if defined(POSIX)}
+
   {$else}
   TGroupPriority = TThreadPriority;
   {$endif}
@@ -189,7 +188,7 @@ end;
 TOPool = class
 type
   TCPUFreq= record
-     base, max, bus, xtal : dword;
+     base, max, bus, xtal : longword;
      ratio: double;
   end;
   TBuff = array[0..47] of ansichar;
@@ -222,7 +221,11 @@ public
   procedure &For(const proc: TThreadProcNested; const start, count: IntPtr; const args: Pointer=nil; const step: IntPtr=1; const sync: TThreadMethod=nil);overload;
 
   function isBusy:boolean;
+  {$ifdef POSIX}
+  procedure setPriority(const priority:integer);
+  {$else}
   procedure setPriority(const priority:TGroupPriority);
+  {$endif}
   property Workers:longint read getWorkers write SetWorkers;
   property PendingWorkCount:integer read OTCount;
   //FCriticalSection:TRTLCriticalSection;
@@ -403,7 +406,7 @@ end;
 destructor TOPool.Destroy;
 var i:integer;
 begin
-  for i:=0 to High(Pool) do begin
+  for i:=High(Pool) downto 0 do begin
     Pool[i].Terminate;
 
     {$ifdef FPC}
@@ -411,13 +414,14 @@ begin
     {$else}
     {$ifdef MSWINDOWS}setEvent(Pool[i].Fire){$else}Pool[i].Fire.SetEvent{$endif};
     {$endif}
+    //pool[i].free
     //freeandNil(Pool[i]);
   end;
   dec(globalId);
   {$ifdef FPC}
   RTLEventDestroy(PoolDone);
   {$else}
-  FreeAndNil(PoolDone)
+  FreeAndNil(PoolDone);
   {$endif}
   inherited Destroy;
 
@@ -456,10 +460,12 @@ procedure TOThread.Execute;
 begin
   if assigned(FThreadProc) then begin
     FThreadProc(FParams);
+    FThreadProc := nil;
     exit
   end;
   if assigned(FMethod2) then begin
     FMethod2(FParams);
+    FMethod2 := nil;
     exit
   end;
   while true do begin
@@ -571,7 +577,11 @@ begin
       exit(true)
 end;
 
+{$ifdef POSIX}
+procedure TOPool.setPriority(const priority: integer);
+{$else}
 procedure TOPool.setPriority(const priority: TGroupPriority);
+{$endif}
 var i:integer;
 begin
   for i:=0 to length(Pool)-1 do
@@ -781,7 +791,10 @@ initialization
 
 
 finalization
-  if assigned(mp3) then freeAndNil(MP3);
-  if assigned(mp2) then freeAndNil(MP2);
-  if assigned(mp) then freeAndNil(MP);
+  if assigned(mp3) then
+     freeAndNil(MP3);
+  if assigned(mp2) then
+     freeAndNil(MP2);
+  if assigned(mp) then
+     freeAndNil(MP);
 end.

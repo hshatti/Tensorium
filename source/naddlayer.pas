@@ -15,7 +15,7 @@ type
 
   TAddLayer=class(TBaseImageLayer)
     inputLayers, inputSizes     : TArray<SizeInt>;
-    LayersOutput, layersDelta   : TArray<TSingleTensor>;
+    layersOutput, layersDelta   : TArray<TSingleTensor>;
     weightSums                  : TArray<single>;
     weightMaxes                 : TArray<single>;
     weightsType                 : TWeightsType;
@@ -23,7 +23,6 @@ type
     activationInput             : TSingleTensor;
     constructor Create(const aBatch: SizeInt; const aInputLayers,
       aInputSizes: TArray<SizeInt>; const aWidth, aHeight, aChannels: SizeInt;
-      const aLayersOutput, aLayersDelta: TArray<TSingleTensor>;
       const aWeightsType: TWeightsType;
       const aWeightsNormalization: TWeightsNormalization;
       const aActivation: TActivationType; const ATrain: boolean);
@@ -50,9 +49,8 @@ uses math, nnet
 
 { TAddLayer }
 
-constructor TAddLayer.Create(const aBatch: SizeInt;
-  const aInputLayers, aInputSizes: TArray<SizeInt>; const aWidth, aHeight,
-  aChannels: SizeInt; const aLayersOutput, aLayersDelta: TArray<TSingleTensor>;
+constructor TAddLayer.Create(const aBatch: SizeInt; const aInputLayers,
+  aInputSizes: TArray<SizeInt>; const aWidth, aHeight, aChannels: SizeInt;
   const aWeightsType: TWeightsType;
   const aWeightsNormalization: TWeightsNormalization;
   const aActivation: TActivationType; const ATrain: boolean);
@@ -62,8 +60,6 @@ begin
   ActivationType := aActivation;
   inputLayers := ainputLayers;
   inputSizes := aInputSizes;
-  layersOutput := aLayersOutput;
-  layersDelta := alayersDelta;
   weightsType := aWeightsType;
   weightsNormalization := aWeightsNormalization;
   learningRateScale := 1;
@@ -72,10 +68,13 @@ begin
   c := aChannels; outC := c;
   outputs := w * h * c;
   inputs := outputs;
-  FTrain := ATrain;
-  //index := inputLayers[0];
   inputShape := [batch, c, h, w];
   output := TSingleTensor.Create([batch, c, h, w], batch);
+
+  FTrain := ATrain;
+  if FTrain then
+    delta:= TSingleTensor.Create([batch, c, h, w], batch);
+  //index := inputLayers[0];
   //nweights := 0;
 
   case weightsType of
@@ -118,8 +117,12 @@ begin
       wtPER_CHANNEL:
         weight_updates := TSingleTensor.Create([(length(inputSizes)+1), c]);
     end;
-  end else
+    delta.resize([batch, c, h, w], batch);
+    weight_updates.resize([length(inputSizes)+1, c]);
+  end else begin
+    delta.free;
     weight_updates.Free()
+  end;
 
 end;
 
@@ -129,6 +132,9 @@ begin
   batch := ABatch;
   inputShape[0] := batch;
   output.resize([batch, c, h, w], batch);
+  if FTrain then
+    delta.resize([batch, c, h, w], batch);
+
   {$ifndef GPU}
     if (weightsType <> wtNO_WEIGHTS) and (ActivationType in [acSWISH, acMISH]) then
         activationInput.resize([batch, c, h, w], batch);
@@ -221,11 +227,11 @@ begin
 
   case weights_normalization of
     wnRELU_NORMALIZATION:
-      weights.Sums(pointer(weightSums), layers+1, relu);
+      weights.Sums(pointer(weightSums), layers+1, @relu);
     wnSOFTMAX_NORMALIZATION:
       begin
         weights.maxs(pointer(weightMaxes), layers+1);
-        weights.sums(pointer(weightSums), layers+1, softmax, pointer(weightMaxes));
+        weights.sums(pointer(weightSums), layers+1, @softmax, pointer(weightMaxes));
       end;
   end;
   if weights_normalization <> wnNO_NORMALIZATION then
@@ -238,8 +244,8 @@ begin
       for batch :=0 to output.groups -1 do
           for cId :=0 to _c -1 do begin
               w := relu(weights.data[cId]) / weightSums[cId];
-              OO := output.data + batch*outputs + cId*step;
-              II := input.data + batch*outputs + cId*step;
+              OO := pointer(output.data + batch*outputs + cId*step);
+              II := pointer(input.data + batch*outputs + cId*step);
               for i :=0 to step-1 do
                   OO[i] := II[i] * w
           end;
@@ -248,8 +254,8 @@ begin
         for batch :=0 to output.groups -1 do
             for cId :=0 to _c -1 do begin
                 w := exp(weights.data[cId]- weightMaxes[cId]) / weightSums[cId];
-                OO := output.data + batch*outputs + cId*step;
-                II := input.data + batch*outputs + cId*step;
+                OO := pointer(output.data + batch*outputs + cId*step);
+                II := pointer(input.data + batch*outputs + cId*step);
                 for i :=0 to step-1 do
                     OO[i] := II[i] * w
             end;
@@ -266,15 +272,15 @@ begin
           cId := 0;
           weights_index:= (i+1) * _c;
           while add_index< add_outputs do begin
-            add := layers_output[i].Data;
+            add := pointer(layers_output[i].Data);
             w := weights.data[weights_index];
             w := relu(w) / weightSums[cId];
             inc(weights_index);
-            OO := output.data + batch*outputs + add_index;
+            OO := pointer(output.data + batch*outputs + add_index);
             II := add + batch*add_outputs + add_index;
             //for src_i :=0 to step-1 do
             //    OO[src_i] := w * II[src_i] + OO[src_i];
-            TSingleTensor.axpysvv(step, w, II, 1, OO, 1);
+            TSingleTensor.axpysvv(step, w, pointer(II), 1, pointer(OO), 1);
             inc(add_index, step);
             inc(cId);
           end;
@@ -288,15 +294,15 @@ begin
           cId := 0;
           weights_index:= (i+1) * _c;
           while add_index< add_outputs do begin
-            add := layers_output[i].Data;
+            add := pointer(layers_output[i].Data);
             w := weights.data[weights_index];
             w := exp(w-weightMaxes[cId]) / weightSums[cId];
             inc(weights_index);
-            OO := output.data + batch*outputs + add_index;
+            OO := pointer(output.data + batch*outputs + add_index);
             II := add + batch*add_outputs + add_index;
             //for src_i :=0 to step-1 do
             //    OO[src_i] := w * II[src_i] + OO[src_i];
-            TSingleTensor.axpysvv(step, w, II, 1, OO, 1);
+            TSingleTensor.axpysvv(step, w, pointer(II), 1, pointer(OO), 1);
             inc(add_index, step);
             inc(cId);
           end;
@@ -337,11 +343,11 @@ begin
     // todo SIMDfy
     case weights_normalization of
       wnRELU_NORMALIZATION:
-        weights.Sums(pointer(weightSums), layers+1, relu);
+        weights.Sums(pointer(weightSums), layers+1, @relu);
       wnSOFTMAX_NORMALIZATION:
         begin
           weights.maxs(pointer(weightMaxes), layers+1);
-          weights.Sums(pointer(weightSums), layers+1, softmax, pointer(weightMaxes));
+          weights.Sums(pointer(weightSums), layers+1, @softmax, pointer(weightMaxes));
         end;
     end;
 
@@ -356,12 +362,12 @@ begin
             for cId :=0 to _c-1 do begin
                 w   := relu(weights.data[cId])/ weightSums[cId];
                 //grad := w;// exists only GPU kernel but not in CPU!, why?
-                DOO := delta_out.Data + batch*outputs + cId*step;
-                DII := delta_in.Data + batch*outputs + cId*step;
-                II  := input.Data + batch*outputs + cId*step;
+                DOO := pointer(delta_out.Data + batch*outputs + cId*step);
+                DII := pointer(delta_in.Data + batch*outputs + cId*step);
+                II  := pointer(input.Data + batch*outputs + cId*step);
                 //for i:=0 to step -1 do
                 //    DOO[i] := DOO[i] + DII[i] *w;
-                TSingleTensor.axpysvv(step, w, DII, 1, DOO, 1);
+                TSingleTensor.axpysvv(step, w, pointer(DII), 1, pointer(DOO), 1);
                 for i:=0 to step -1 do
                     weight_updates.Data[cId] :=  grad * DII[i]*II[i] + weight_updates.Data[cId]; // possible axypz>
             end;
@@ -371,12 +377,12 @@ begin
             for cId :=0 to _c-1 do begin
                 w   := exp(weights.data[cId] - weightMaxes[cId])/ weightSums[cId];
                 //grad := w*(1-w);// exists only GPU kernel but not in CPU!, why?
-                DOO := delta_out.Data + batch*outputs + cId*step;
-                DII := delta_in.Data + batch*outputs + cId*step;
-                II  := input.Data + batch*outputs + cId*step;
+                DOO := pointer(delta_out.Data + batch*outputs + cId*step);
+                DII := pointer(delta_in.Data + batch*outputs + cId*step);
+                II  := pointer(input.Data + batch*outputs + cId*step);
                 //for i:=0 to step -1 do
                     //DOO[i] := w * DII[i] + DOO[i];
-                TSingleTensor.axpysvv(step, w, DII, 1, DOO, 1);
+                TSingleTensor.axpysvv(step, w, pointer(DII), 1, pointer(DOO), 1);
                 for i:=0 to step -1 do
                     weight_updates.Data[cId] := grad * DII[i]*II[i] +  weight_updates.Data[cId];  //possible axypz?
             end;
@@ -394,16 +400,16 @@ begin
             cId           := 0;
             weights_index := (i+1) * _c;
             while add_index< add_outputs do begin
-              add := layers_output[i].Data + batch*add_outputs + add_index;
-              II  := layers_delta[i].Data  + batch*add_outputs + add_index;
-              DII := delta_in.Data         + batch*outputs     + add_index ;
+              add := pointer(layers_output[i].Data + batch*add_outputs + add_index);
+              II  := pointer(layers_delta[i].Data  + batch*add_outputs + add_index);
+              DII := pointer(delta_in.Data         + batch*outputs     + add_index);
 
               w   := weights.data[weights_index];
               w   := relu(w)/weightSums[cId];
               //grad                          := w;// exists only GPU kernel but not in CPU!, why?
               //for src_i:=0 to step-1 do
               //  II[src_i] := w * DII[src_i] + II[src_i]; // axpy
-              TSingleTensor.axpysvv(step, w, DII, 1, II, 1);
+              TSingleTensor.axpysvv(step, w, pointer(DII), 1, pointer(II), 1);
 
               for src_i:=0 to step-1 do
                 weight_updates.Data[weights_index] := grad * DII[src_i] * add[src_i] + weight_updates.Data[weights_index];  // possible axypz
@@ -427,16 +433,16 @@ begin
             cId           := 0;
             weights_index := (i+1) * _c;
             while add_index< add_outputs do begin
-              add := layers_output[i].Data + batch*add_outputs + add_index;
-              II  := layers_delta[i].Data  + batch*add_outputs + add_index;
-              DII := delta_in.Data         + batch*outputs     + add_index ;
+              add := pointer(layers_output[i].Data + batch*add_outputs + add_index);
+              II  := pointer(layers_delta[i].Data  + batch*add_outputs + add_index);
+              DII := pointer(delta_in.Data         + batch*outputs     + add_index);
 
               w   := weights.data[weights_index];
               w   := exp(w-weightMaxes[cId])/weightSums[cId];
               //grad                          := w*(1-w);// exists only GPU kernel but not in CPU!, why?
               //for src_i:=0 to step-1 do
                 //II[src_i] := w * DII[src_i] + II[src_i];   // axpy
-              TSingleTensor.axpysvv(step, w, DII, 1, II, 1);
+              TSingleTensor.axpysvv(step, w, pointer(DII), 1, pointer(II), 1);
 
               for src_i:=0 to step-1 do
                 weight_updates.data[weights_index] := grad * DII[src_i] * add[src_i] + weight_updates.data[weights_index];  // posible axypz
@@ -660,13 +666,13 @@ end;
 
 procedure TAddLayer.forward(var state: TNNetState);
 var
+    lOutput: TBaseLayer;
+    i: SizeInt;
+    net : TNNet;
+    //a,b:PSingle;
     //from_w: longint;
     //from_h: longint;
     //from_c: longint;
-    lOutput: TBaseLayer;
-    a,b:PSingle;
-    i: longint;
-    net : TNNet;
 begin
     {$ifdef USE_TELEMETRY}
     if benchmark then metrics.forward.start(layerType);
@@ -694,7 +700,14 @@ begin
           //output.Add(lOutput.output);
         end
     else
+      begin
+        if not assigned(layersOutput) then begin
+          setLength(layersOutput, length(inputLayers));
+          for i:=0 to high(layersOutput) do
+            layersOutput[i]:=net.layers[inputLayers[i]].output;
+        end;
         add_multilayer(layersOutput, state.input^, output, weights, weightsNormalization, weightSums, weightMaxes);
+      end;
 
     case ActivationType of
       acSWISH :
@@ -712,6 +725,8 @@ begin
 end;
 
 procedure TAddLayer.backward(var state: TNNetState);
+var i:SizeInt;
+    net : TNNet;
 begin
   {$ifdef USE_TELEMETRY}
   if benchmark then metrics.backward.start(layerType);
@@ -723,6 +738,12 @@ begin
       gradient_array_mish(outputs * batch, activationInput, delta)
   else
     Derivative;
+  end;
+  net := TNNet(state.net);
+  if not assigned(layersDelta) then begin
+    setLength(layersDelta, length(inputLayers));
+    for i:=0 to high(layersDelta) do
+      layersDelta[i] := net.layers[inputLayers[i]].output;
   end;
   backward_add_multilayer(layersDelta, state.delta^, delta, weights, weight_updates, state.input^, layersOutput, weightsNormalization, weightMaxes, weightSums);
   {$ifdef USE_TELEMETRY}
@@ -758,27 +779,29 @@ end;
 procedure TAddLayer.forwardGPU(var state: TNNetState);
 var
     lOutput: TBaseLayer;
-    a,b:PSingle;
     i: longint;
     net : TNNet;
+    //a,b:PSingle;
 begin
     {$ifdef USE_TELEMETRY}
     if benchmark then metrics.forward.start(layerType);
     {$endif}
     output.setOCL;
     net := TNNet(state.net);
-    assert(length(inputLayers)=1, '[AddLayerGPU] multiple layer add is not yet implemented');
-    lOutput := net.layers[inputLayers[0]];
-    if {(length(inputLayers)=1) and} (lOutput.output.Size()=Output.Size()) then
-        for i:=0 to high(inputLayers) do begin
-          if not lOutput.output.wasGPU() then lOutput.output.pushToDevice;
-          ocl.addvv(state.input.size(), state.input.devData, 0, 1, lOutput.output.devData, 0, 1, output.devData, 0, 1);
-          //state.input.copyTo(output);
-          //output.Add(lOutput.output);
-        end
-    else
-        add_multilayer(layersOutput, state.input^, output, weights, weightsNormalization, weightSums, weightMaxes);
-
+    //assert(length(inputLayers)=1, '[AddLayerGPU] multiple layer add is not yet implemented');
+    if weightsNormalization=wnNO_NORMALIZATION then begin
+      ocl.copy(state.input.size(), state.input.devData, 0, 1, output.devData, 0, 1);
+      for i:=0 to high(inputLayers) do begin
+        lOutput := net.layers[inputLayers[0]];
+        if not lOutput.output.wasGPU() then lOutput.output.pushToDevice;
+        ocl.addvv(output.size(), output.devData, 0, 1, lOutput.output.devData, 0, 1, output.devData, 0, 1);
+        //state.input.copyTo(output);
+        //output.Add(lOutput.output);
+      end
+    end else begin
+      assert(false, '[add_multilayer_gpu] not implemented');
+      add_multilayer(layersOutput, state.input^, output, weights, weightsNormalization, weightSums, weightMaxes);
+    end;
     case ActivationType of
       acSWISH :
         ocl.activateArraySWISH(output.size(), output.devData, 0, activationInput.devData, output.devData);
@@ -797,6 +820,8 @@ end;
 
 procedure TAddLayer.backwardGPU(var state: TNNetState);
 var i:SizeInt;
+    net:TNNet;
+    lDelta : TBaseLayer;
 begin
   {$ifdef USE_TELEMETRY}
   if benchmark then metrics.backward.start(layerType);
@@ -813,10 +838,12 @@ begin
       ocl.DeriveArray(output.size(), output.devData, 0, longint(ActivationType), delta.devData)
   end;
   ocl.addvv(state.delta.size(), delta.devData, 0, 1, state.delta.devData, 0, 1, state.delta.devData, 0, 1);
-  for i := 0 to high(layersDelta) do begin
-    if not layersDelta[i].wasGPU() then
-      layersDelta[i].pushToDevice;
-    ocl.addvv(delta.size(), layersDelta[i].devData, 0, 1, delta.devData, 0, 1, layersDelta[i].devData, 0, 1);
+  net := TNNet(state.net);
+  for i := 0 to high(inputLayers) do begin ;
+    lDelta := net.layers[inputLayers[i]];
+    if not lDelta.delta.wasGPU() then
+      lDelta.delta.pushToDevice;
+    ocl.addvv(delta.size(), lDelta.delta.devData, 0, 1, delta.devData, 0, 1, lDelta.delta.devData, 0, 1);
   end;
   //backward_add_multilayer(layersDelta, state.delta^, delta, weights, weight_updates, state.input^, layersOutput, weightsNormalization, weightMaxes, weightSums)
   {$ifdef USE_TELEMETRY}
@@ -859,18 +886,20 @@ begin
   {$endif}
   output.setCUDA;
   net := TNNet(state.net);
-  assert(length(inputLayers)=1, '[AddLayerGPU] multiple layer add is not yet implemented');
-  lOutput := net.layers[inputLayers[0]];
-  if {(length(inputLayers)=1) and} (lOutput.output.Size()=Output.Size()) then
-      for i:=0 to high(inputLayers) do begin
-        if not lOutput.output.wasGPU() then lOutput.output.pushToDevice;
-        cuda.addvv(state.input.size(), state.input.devData, 0, 1, lOutput.output.devData, 0, 1, output.devData, 0, 1);
-//state.input.copyTo(output);
-//output.Add(lOutput.output);
-      end
-  else
-      add_multilayer(layersOutput, state.input^, output, weights, weightsNormalization, weightSums, weightMaxes);
-
+  //assert(length(inputLayers)=1, '[AddLayerGPU] multiple layer add is not yet implemented');
+  if weightsNormalization=wnNO_NORMALIZATION then begin
+    cuda.copy(state.input.size(), state.input.devData, 0, 1, output.devData, 0, 1);
+    for i:=0 to high(inputLayers) do begin
+      lOutput := net.layers[inputLayers[0]];
+      if not lOutput.output.wasGPU() then lOutput.output.pushToDevice;
+      cuda.addvv(output.size(), output.devData, 0, 1, lOutput.output.devData, 0, 1, output.devData, 0, 1);
+      //state.input.copyTo(output);
+      //output.Add(lOutput.output);
+    end
+  end else begin
+    assert(false, '[add_multilayer_gpu] not implemented');
+    add_multilayer(layersOutput, state.input^, output, weights, weightsNormalization, weightSums, weightMaxes);
+  end;
   case ActivationType of
     acSWISH :
       cuda.activateArraySWISH(output.size(), output.devData, 0, activationInput.devData, output.devData);
@@ -894,6 +923,8 @@ end;
 
 procedure TAddLayer.backwardGPU(var state: TNNetState);
 var i:SizeInt;
+  net:TNNet;
+  lDelta : TBaseLayer;
 begin
   {$ifdef USE_TELEMETRY}
   if benchmark then metrics.backward.start(layerType);
@@ -910,10 +941,12 @@ begin
       cuda.DeriveArray(output.size(), output.devData, 0, longint(ActivationType), delta.devData)
   end;
   cuda.addvv(state.delta.size(), delta.devData, 0, 1, state.delta.devData, 0, 1, state.delta.devData, 0, 1);
-  for i := 0 to high(layersDelta) do begin
-    if not layersDelta[i].wasGPU() then
-      layersDelta[i].pushToDevice;
-    cuda.addvv(delta.size(), layersDelta[i].devData, 0, 1, delta.devData, 0, 1, layersDelta[i].devData, 0, 1);
+  net := TNNet(state.net);
+  for i := 0 to high(inputLayers) do begin ;
+    lDelta := net.layers[inputLayers[i]];
+    if not lDelta.delta.wasGPU() then
+      lDelta.delta.pushToDevice;
+    cuda.addvv(delta.size(), lDelta.delta.devData, 0, 1, delta.devData, 0, 1, lDelta.delta.devData, 0, 1);
   end;
   //backward_add_multilayer(layersDelta, state.delta^, delta, weights, weight_updates, state.input^, layersOutput, weightsNormalization, weightMaxes, weightSums)
   {$ifdef USE_TELEMETRY}

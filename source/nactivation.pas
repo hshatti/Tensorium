@@ -43,8 +43,8 @@ const
   //MAX_EXP =  8.8722839052068352E+001;
   //MIN_EXP = -8.7336544750553102E+001;
 
-  MAX_EXP =  8.87E+001;
-  MIN_EXP = -8.73E+001;
+  MAX_EXP =  8.872283E+001;
+  MIN_EXP = -8.733654E+001;
 
   one :array[0..7] of single = (1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0);
   zero:array[0..7] of single = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
@@ -1051,6 +1051,9 @@ begin
         end;
     {$ifdef USE_TELEMETRY} if benchmark then metrics.grad.finish(acNORM_CHAN_SOFTMAX);{$endif}
 end;
+
+initialization
+
 
 end.
 

@@ -1,4 +1,4 @@
-(*
+﻿(*
  * Copyright 1993-2022 NVIDIA Corporation.  All rights reserved.
  *
  * NOTICE TO LICENSEE:
@@ -47,9 +47,12 @@
  * Users Notice.
  *)
  (* NVIDIA driver API functions *)
+{$Z4}
 {$ifdef FPC}
 {$packrecords C}
 {$mode delphi}
+{$else}
+
 {$endif}
 unit cuda;
 interface
@@ -2026,7 +2029,7 @@ type
 
   CUlaunchAttributeValue_union = record
   case longint of
-    0 : ( pad : array[0..63] of char );
+    0 : ( pad : array[0..63] of ansichar );
     1 : ( accessPolicyWindow : CUaccessPolicyWindow );
     2 : ( cooperative : longint );
     3 : ( syncPolicy : CUsynchronizationPolicy );
@@ -2050,7 +2053,7 @@ type
 
   CUlaunchAttribute_st = record
       id     : CUlaunchAttributeID                                 ;
-      pad    : array[0..8-sizeof(CUlaunchAttributeID)-1] of char   ;
+      pad    : array[0..8-sizeof(CUlaunchAttributeID)-1] of ansichar   ;
       value  : CUlaunchAttributeValue
   end;
   CUlaunchAttribute = CUlaunchAttribute_st;

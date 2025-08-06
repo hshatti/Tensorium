@@ -1,4 +1,4 @@
-
+﻿
 {$ifdef FPC}
 {$mode delphi}
 {$PackRecords C}
@@ -22,6 +22,17 @@ type
   {$if not defined(size_t)}
   size_t = UIntPtr;
   {$endif}
+  {$if not declared(SizeInt)}
+  PSizeInt = ^SizeInt;
+  SizeInt = IntPtr;
+  {$endif}
+
+  {$if not declared(SizeUInt)}
+  PSizeUInt = ^SizeUInt;
+  SizeUInt = UIntPtr;
+  {$endif}
+
+
   PcudaArray_t  = ^cudaArray_t;
   PcudaArrayMemoryRequirements  = ^cudaArrayMemoryRequirements;
   PcudaArraySparseProperties  = ^cudaArraySparseProperties;
@@ -638,7 +649,7 @@ cudaDeviceSetSharedMemConfig : function(config:cudaSharedMemConfig):cudaError_t;
  * ::cuDeviceGetByPCIBusId
   }
 (* Const before type ignored *)
-cudaDeviceGetByPCIBusId : function(device:Plongint; pciBusId:Pchar):cudaError_t;WINAPI;
+cudaDeviceGetByPCIBusId : function(device:Plongint; pciBusId:PAnsiChar):cudaError_t;WINAPI;
 {*
  * \brief Returns a PCI Bus Id string for the device
  *
@@ -667,7 +678,7 @@ cudaDeviceGetByPCIBusId : function(device:Plongint; pciBusId:Pchar):cudaError_t;
  * ::cudaDeviceGetByPCIBusId,
  * ::cuDeviceGetPCIBusId
   }
-cudaDeviceGetPCIBusId : function(pciBusId:Pchar; len:longint; device:longint):cudaError_t;WINAPI;
+cudaDeviceGetPCIBusId : function(pciBusId:PAnsiChar; len:longint; device:longint):cudaError_t;WINAPI;
 {*
  * \brief Gets an interprocess handle for a previously allocated event
  *
@@ -866,7 +877,7 @@ cudaIpcGetMemHandle : function(handle:PcudaIpcMemHandle_t; devPtr:pointer):cudaE
  * ::cudaDeviceCanAccessPeer,
  * ::cuIpcOpenMemHandle
   }
-cudaIpcOpenMemHandle : function(devPtr:Ppointer; handle:cudaIpcMemHandle_t; flags:dword):cudaError_t;WINAPI;
+cudaIpcOpenMemHandle : function(devPtr:Ppointer; handle:cudaIpcMemHandle_t; flags:longword):cudaError_t;WINAPI;
 {*
  * \brief Attempts to close memory mapped with cudaIpcOpenMemHandle
  * 
@@ -1286,7 +1297,7 @@ cudaPeekAtLastError : function:cudaError_t;WINAPI;
  * ::cuGetErrorName
   }
 (* Const before type ignored *)
-cudaGetErrorName : function(error:cudaError_t):Pchar;WINAPI;
+cudaGetErrorName : function(error:cudaError_t):PAnsiChar;WINAPI;
 {*
  * \brief Returns the description string for an error code
  *
@@ -1302,7 +1313,7 @@ cudaGetErrorName : function(error:cudaError_t):Pchar;WINAPI;
  * ::cuGetErrorString
   }
 (* Const before type ignored *)
-cudaGetErrorString : function(error:cudaError_t):Pchar;WINAPI;
+cudaGetErrorString : function(error:cudaError_t):PAnsiChar;WINAPI;
 {* @  }{ END CUDART_ERROR  }
 {*
  * \addtogroup CUDART_DEVICE 
@@ -2043,7 +2054,7 @@ cudaChooseDevice : function(device:Plongint; prop:PcudaDeviceProp):cudaError_t;W
  * ::cudaChooseDevice, ::cudaSetDevice
  * ::cuCtxSetCurrent
   }
-cudaInitDevice : function(device:longint; deviceFlags:dword; flags:dword):cudaError_t;WINAPI;
+cudaInitDevice : function(device:longint; deviceFlags:longword; flags:longword):cudaError_t;WINAPI;
 {*
  * \brief Set device to be used for GPU executions
  *
@@ -2205,7 +2216,7 @@ cudaSetValidDevices : function(device_arr:Plongint; len:longint):cudaError_t;WIN
  * ::cudaChooseDevice,
  * ::cuDevicePrimaryCtxSetFlags
   }
-cudaSetDeviceFlags : function(flags:dword):cudaError_t;WINAPI;
+cudaSetDeviceFlags : function(flags:longword):cudaError_t;WINAPI;
 {*
  * \brief Gets the flags for the current device
  *
@@ -2249,7 +2260,7 @@ cudaSetDeviceFlags : function(flags:dword):cudaError_t;WINAPI;
  * ::cuCtxGetFlags,
  * ::cuDevicePrimaryCtxGetState
   }
-cudaGetDeviceFlags : function(flags:Pdword):cudaError_t;WINAPI;
+cudaGetDeviceFlags : function(flags:PLongword):cudaError_t;WINAPI;
 {* @  }{ END CUDART_DEVICE  }
 {*
  * \defgroup CUDART_STREAM Stream Management
@@ -2318,7 +2329,7 @@ cudaStreamCreate : function(pStream:PcudaStream_t):cudaError_t;WINAPI;
  * ::cudaStreamDestroy,
  * ::cuStreamCreate
   }
-cudaStreamCreateWithFlags : function(pStream:PcudaStream_t; flags:dword):cudaError_t;WINAPI;
+cudaStreamCreateWithFlags : function(pStream:PcudaStream_t; flags:longword):cudaError_t;WINAPI;
 {*
  * \brief Create an asynchronous stream with the specified priority
  *
@@ -2363,7 +2374,7 @@ cudaStreamCreateWithFlags : function(pStream:PcudaStream_t; flags:dword):cudaErr
  * ::cudaStreamDestroy,
  * ::cuStreamCreateWithPriority
   }
-cudaStreamCreateWithPriority : function(pStream:PcudaStream_t; flags:dword; priority:longint):cudaError_t;WINAPI;
+cudaStreamCreateWithPriority : function(pStream:PcudaStream_t; flags:longword; priority:longint):cudaError_t;WINAPI;
 {*
  * \brief Query the priority of a stream
  *
@@ -2413,7 +2424,7 @@ cudaStreamGetPriority : function(hStream:cudaStream_t; priority:Plongint):cudaEr
  * ::cudaStreamGetPriority,
  * ::cuStreamGetFlags
   }
-cudaStreamGetFlags : function(hStream:cudaStream_t; flags:Pdword):cudaError_t;WINAPI;
+cudaStreamGetFlags : function(hStream:cudaStream_t; flags:PLongword):cudaError_t;WINAPI;
 {*
  * \brief Query the Id of a stream
  *
@@ -2449,7 +2460,7 @@ cudaStreamGetFlags : function(hStream:cudaStream_t; flags:Pdword):cudaError_t;WI
  * ::cudaStreamGetFlags,
  * ::cuStreamGetId
   }
-cudaStreamGetId : function(hStream:cudaStream_t; streamId:Pqword):cudaError_t;WINAPI;
+cudaStreamGetId : function(hStream:cudaStream_t; streamId:PUInt64):cudaError_t;WINAPI;
 {*
  * \brief Resets all persisting lines in cache to normal status.
  *
@@ -2585,7 +2596,7 @@ cudaStreamDestroy : function(stream:cudaStream_t):cudaError_t;WINAPI;
  * \sa ::cudaStreamCreate, ::cudaStreamCreateWithFlags, ::cudaStreamQuery, ::cudaStreamSynchronize, ::cudaStreamAddCallback, ::cudaStreamDestroy,
  * ::cuStreamWaitEvent
   }
-cudaStreamWaitEvent : function(stream:cudaStream_t; event:cudaEvent_t; flags:dword):cudaError_t;WINAPI;
+cudaStreamWaitEvent : function(stream:cudaStream_t; event:cudaEvent_t; flags:longword):cudaError_t;WINAPI;
 {*
  * Type of stream callback functions.
  * \param stream The stream as passed to ::cudaStreamAddCallback, may be NULL.
@@ -2661,7 +2672,7 @@ type
  * ::cudaLaunchHostFunc, ::cuStreamAddCallback
   }
 var
-cudaStreamAddCallback : function(stream:cudaStream_t; callback:cudaStreamCallback_t; userData:pointer; flags:dword):cudaError_t;WINAPI;
+cudaStreamAddCallback : function(stream:cudaStream_t; callback:cudaStreamCallback_t; userData:pointer; flags:longword):cudaError_t;WINAPI;
 {*
  * \brief Waits for stream tasks to complete
  *
@@ -2789,7 +2800,7 @@ cudaStreamQuery : function(stream:cudaStream_t):cudaError_t;WINAPI;
  * \sa ::cudaStreamCreate, ::cudaStreamCreateWithFlags, ::cudaStreamWaitEvent, ::cudaStreamSynchronize, ::cudaStreamAddCallback, ::cudaStreamDestroy, ::cudaMallocManaged,
  * ::cuStreamAttachMemAsync
   }
-{= cudaMemAttachSingle }cudaStreamAttachMemAsync : function(stream:cudaStream_t; devPtr:pointer; length:size_t; flags:dword):cudaError_t;WINAPI;
+{= cudaMemAttachSingle }cudaStreamAttachMemAsync : function(stream:cudaStream_t; devPtr:pointer; length:size_t; flags:longword):cudaError_t;WINAPI;
 {*
  * \brief Begins graph capture on a stream
  *
@@ -2986,7 +2997,7 @@ cudaStreamIsCapturing : function(stream:cudaStream_t; pCaptureStatus:PcudaStream
  * ::cudaStreamUpdateCaptureDependencies
   }
 (* Const before type ignored *)
-cudaStreamGetCaptureInfo : function(stream:cudaStream_t; captureStatus_out:PcudaStreamCaptureStatus; id_out:Pqword; graph_out:PcudaGraph_t; dependencies_out:PPcudaGraphNode_t; 
+cudaStreamGetCaptureInfo : function(stream:cudaStream_t; captureStatus_out:PcudaStreamCaptureStatus; id_out:PUInt64; graph_out:PcudaGraph_t; dependencies_out:PPcudaGraphNode_t;
     numDependencies_out:PSizeUint):cudaError_t;WINAPI;
 {*
  * \brief Update the set of dependencies in a capturing stream (11.3+)
@@ -3018,7 +3029,7 @@ cudaStreamGetCaptureInfo : function(stream:cudaStream_t; captureStatus_out:Pcuda
  * ::cudaStreamBeginCapture,
  * ::cudaStreamGetCaptureInfo,
   }
-cudaStreamUpdateCaptureDependencies : function(stream:cudaStream_t; dependencies:PcudaGraphNode_t; numDependencies:size_t; flags:dword):cudaError_t;WINAPI;
+cudaStreamUpdateCaptureDependencies : function(stream:cudaStream_t; dependencies:PcudaGraphNode_t; numDependencies:size_t; flags:longword):cudaError_t;WINAPI;
 {* @  }{ END CUDART_STREAM  }
 {*
  * \defgroup CUDART_EVENT Event Management
@@ -3089,7 +3100,7 @@ cudaEventCreate : function(event:PcudaEvent_t):cudaError_t;WINAPI;
  * ::cudaStreamWaitEvent,
  * ::cuEventCreate
   }
-cudaEventCreateWithFlags : function(event:PcudaEvent_t; flags:dword):cudaError_t;WINAPI;
+cudaEventCreateWithFlags : function(event:PcudaEvent_t; flags:longword):cudaError_t;WINAPI;
 {*
  * \brief Records an event
  *
@@ -3173,7 +3184,7 @@ cudaEventRecord : function(event:cudaEvent_t; stream:cudaStream_t):cudaError_t;W
  * ::cudaEventRecord,
  * ::cuEventRecord,
   }
-cudaEventRecordWithFlags : function(event:cudaEvent_t; stream:cudaStream_t; flags:dword):cudaError_t;WINAPI;
+cudaEventRecordWithFlags : function(event:cudaEvent_t; stream:cudaStream_t; flags:longword):cudaError_t;WINAPI;
 {*
  * \brief Queries an event's status
  *
@@ -3858,7 +3869,7 @@ cudaImportExternalSemaphore : function(extSem_out:PcudaExternalSemaphore_t; semH
   }
 (* Const before type ignored *)
 (* Const before type ignored *)
-cudaSignalExternalSemaphoresAsync : function(extSemArray:PcudaExternalSemaphore_t; paramsArray:PcudaExternalSemaphoreSignalParams; numExtSems:dword; stream:cudaStream_t):cudaError_t;WINAPI;
+cudaSignalExternalSemaphoresAsync : function(extSemArray:PcudaExternalSemaphore_t; paramsArray:PcudaExternalSemaphoreSignalParams; numExtSems:longword; stream:cudaStream_t):cudaError_t;WINAPI;
 {*
  * \brief Waits on a set of external semaphore objects
  *
@@ -3935,7 +3946,7 @@ cudaSignalExternalSemaphoresAsync : function(extSemArray:PcudaExternalSemaphore_
   }
 (* Const before type ignored *)
 (* Const before type ignored *)
-cudaWaitExternalSemaphoresAsync : function(extSemArray:PcudaExternalSemaphore_t; paramsArray:PcudaExternalSemaphoreWaitParams; numExtSems:dword; stream:cudaStream_t):cudaError_t;WINAPI;
+cudaWaitExternalSemaphoresAsync : function(extSemArray:PcudaExternalSemaphore_t; paramsArray:PcudaExternalSemaphoreWaitParams; numExtSems:longword; stream:cudaStream_t):cudaError_t;WINAPI;
 {*
  * \brief Destroys an external semaphore
  *
@@ -4244,7 +4255,7 @@ cudaLaunchCooperativeKernel : function(func:pointer; gridDim:dim3; blockDim:dim3
  * ::cudaLaunchCooperativeKernel,
  * ::cuLaunchCooperativeKernelMultiDevice
   }
-cudaLaunchCooperativeKernelMultiDevice : function(launchParamsList:PcudaLaunchParams; numDevices:dword; flags:dword):cudaError_t;WINAPI;
+cudaLaunchCooperativeKernelMultiDevice : function(launchParamsList:PcudaLaunchParams; numDevices:longword; flags:longword):cudaError_t;WINAPI;
 {*
  * \brief Sets the preferred cache configuration for a device function
  *
@@ -4653,7 +4664,7 @@ cudaOccupancyAvailableDynamicSMemPerBlock : function(dynamicSmemSize:PSizeUInt; 
  * ::cuOccupancyMaxActiveBlocksPerMultiprocessorWithFlags
   }
 (* Const before type ignored *)
-cudaOccupancyMaxActiveBlocksPerMultiprocessorWithFlags : function(numBlocks:Plongint; func:pointer; blockSize:longint; dynamicSMemSize:size_t; flags:dword):cudaError_t;WINAPI;
+cudaOccupancyMaxActiveBlocksPerMultiprocessorWithFlags : function(numBlocks:Plongint; func:pointer; blockSize:longint; dynamicSMemSize:size_t; flags:longword):cudaError_t;WINAPI;
 {*
  * \brief Given the kernel function (\p func) and launch configuration
  * (\p config), return the maximum cluster size in \p *clusterSize.
@@ -4845,7 +4856,7 @@ cudaOccupancyMaxActiveClusters : function(numClusters:Plongint; func:pointer; la
  * ::cudaFreeHost, ::cudaHostAlloc, ::cudaDeviceGetAttribute, ::cudaStreamAttachMemAsync,
  * ::cuMemAllocManaged
   }
-{= cudaMemAttachGlobal }cudaMallocManaged : function(devPtr:Ppointer; size:size_t; flags:dword):cudaError_t;WINAPI;
+{= cudaMemAttachGlobal }cudaMallocManaged : function(devPtr:Ppointer; size:size_t; flags:longword):cudaError_t;WINAPI;
 {*
  * \brief Allocate memory on the device
  *
@@ -5000,7 +5011,7 @@ cudaMallocPitch : function(devPtr:Ppointer; pitch:PSizeUInt; width:size_t; heigh
  * ::cuArrayCreate
   }
 (* Const before type ignored *)
-cudaMallocArray : function(&array:PcudaArray_t; desc:PcudaChannelFormatDesc; width:size_t; height:size_t; flags:dword):cudaError_t;WINAPI;
+cudaMallocArray : function(&array:PcudaArray_t; desc:PcudaChannelFormatDesc; width:size_t; height:size_t; flags:longword):cudaError_t;WINAPI;
 {*
  * \brief Frees memory on the device
  *
@@ -5167,7 +5178,7 @@ cudaFreeMipmappedArray : function(mipmappedArray:cudaMipmappedArray_t):cudaError
  * ::cudaGetDeviceFlags,
  * ::cuMemHostAlloc
   }
-cudaHostAlloc : function(pHost:Ppointer; size:size_t; flags:dword):cudaError_t;WINAPI;
+cudaHostAlloc : function(pHost:Ppointer; size:size_t; flags:longword):cudaError_t;WINAPI;
 {*
  * \brief Registers an existing host memory range for use by CUDA
  *
@@ -5263,7 +5274,7 @@ cudaHostAlloc : function(pHost:Ppointer; size:size_t; flags:dword):cudaError_t;W
  * \sa ::cudaHostUnregister, ::cudaHostGetFlags, ::cudaHostGetDevicePointer,
  * ::cuMemHostRegister
   }
-cudaHostRegister : function(ptr:pointer; size:size_t; flags:dword):cudaError_t;WINAPI;
+cudaHostRegister : function(ptr:pointer; size:size_t; flags:longword):cudaError_t;WINAPI;
 {*
  * \brief Unregisters a memory range that was registered with cudaHostRegister
  *
@@ -5329,7 +5340,7 @@ cudaHostUnregister : function(ptr:pointer):cudaError_t;WINAPI;
  * \sa ::cudaSetDeviceFlags, ::cudaHostAlloc,
  * ::cuMemHostGetDevicePointer
   }
-cudaHostGetDevicePointer : function(pDevice:Ppointer; pHost:pointer; flags:dword):cudaError_t;WINAPI;
+cudaHostGetDevicePointer : function(pDevice:Ppointer; pHost:pointer; flags:longword):cudaError_t;WINAPI;
 {*
  * \brief Passes back flags used to allocate pinned host memory allocated by
  * cudaHostAlloc
@@ -5350,7 +5361,7 @@ cudaHostGetDevicePointer : function(pDevice:Ppointer; pHost:pointer; flags:dword
  * \sa ::cudaHostAlloc,
  * ::cuMemHostGetFlags
   }
-cudaHostGetFlags : function(pFlags:Pdword; pHost:pointer):cudaError_t;WINAPI;
+cudaHostGetFlags : function(pFlags:PLongword; pHost:pointer):cudaError_t;WINAPI;
 {*
  * \brief Allocates logical 1D, 2D, or 3D memory objects on the device
  *
@@ -5533,7 +5544,7 @@ cudaMalloc3D : function(pitchedDevPtr:PcudaPitchedPtr; extent:cudaExtent):cudaEr
  * ::cuArray3DCreate
   }
 (* Const before type ignored *)
-cudaMalloc3DArray : function(&array:PcudaArray_t; desc:PcudaChannelFormatDesc; extent:cudaExtent; flags:dword):cudaError_t;WINAPI;
+cudaMalloc3DArray : function(&array:PcudaArray_t; desc:PcudaChannelFormatDesc; extent:cudaExtent; flags:longword):cudaError_t;WINAPI;
 {*
  * \brief Allocate a mipmapped array on the device
  *
@@ -5678,7 +5689,7 @@ cudaMalloc3DArray : function(&array:PcudaArray_t; desc:PcudaChannelFormatDesc; e
  * ::cuMipmappedArrayCreate
   }
 (* Const before type ignored *)
-cudaMallocMipmappedArray : function(mipmappedArray:PcudaMipmappedArray_t; desc:PcudaChannelFormatDesc; extent:cudaExtent; numLevels:dword; flags:dword):cudaError_t;WINAPI;
+cudaMallocMipmappedArray : function(mipmappedArray:PcudaMipmappedArray_t; desc:PcudaChannelFormatDesc; extent:cudaExtent; numLevels:longword; flags:longword):cudaError_t;WINAPI;
 {*
  * \brief Gets a mipmap level of a CUDA mipmapped array
  *
@@ -5710,7 +5721,7 @@ cudaMallocMipmappedArray : function(mipmappedArray:PcudaMipmappedArray_t; desc:P
  * ::make_cudaExtent,
  * ::cuMipmappedArrayGetLevel
   }
-cudaGetMipmappedArrayLevel : function(levelArray:PcudaArray_t; mipmappedArray:cudaMipmappedArray_const_t; level:dword):cudaError_t;WINAPI;
+cudaGetMipmappedArrayLevel : function(levelArray:PcudaArray_t; mipmappedArray:cudaMipmappedArray_const_t; level:longword):cudaError_t;WINAPI;
 {*
  * \brief Copies data between 3D objects
  *
@@ -6050,7 +6061,7 @@ cudaMemGetInfo : function(free:PSizeUInt; total:PSizeUInt):cudaError_t;WINAPI;
  * ::cuArrayGetDescriptor,
  * ::cuArray3DGetDescriptor
   }
-cudaArrayGetInfo : function(desc:PcudaChannelFormatDesc; extent:PcudaExtent; flags:Pdword; &array:cudaArray_t):cudaError_t;WINAPI;
+cudaArrayGetInfo : function(desc:PcudaChannelFormatDesc; extent:PcudaExtent; flags:PLongword; &array:cudaArray_t):cudaError_t;WINAPI;
 {*
  * \brief Gets a CUDA array plane from a CUDA array
  *
@@ -6078,7 +6089,7 @@ cudaArrayGetInfo : function(desc:PcudaChannelFormatDesc; extent:PcudaExtent; fla
  * \sa
  * ::cuArrayGetPlane
   }
-cudaArrayGetPlane : function(pPlaneArray:PcudaArray_t; hArray:cudaArray_t; planeIdx:dword):cudaError_t;WINAPI;
+cudaArrayGetPlane : function(pPlaneArray:PcudaArray_t; hArray:cudaArray_t; planeIdx:longword):cudaError_t;WINAPI;
 {*
  * \brief Returns the memory requirements of a CUDA array
  *
@@ -8068,7 +8079,7 @@ cudaMallocFromPoolAsync : function(ptr:Ppointer; size:size_t; memPool:cudaMemPoo
  *
  * \sa ::cuMemPoolExportToShareableHandle, ::cudaMemPoolImportFromShareableHandle, ::cudaMemPoolExportPointer, ::cudaMemPoolImportPointer
   }
-cudaMemPoolExportToShareableHandle : function(shareableHandle:pointer; memPool:cudaMemPool_t; handleType:cudaMemAllocationHandleType; flags:dword):cudaError_t;WINAPI;
+cudaMemPoolExportToShareableHandle : function(shareableHandle:pointer; memPool:cudaMemPool_t; handleType:cudaMemAllocationHandleType; flags:longword):cudaError_t;WINAPI;
 {*
  * \brief imports a memory pool from a shared handle.
  *
@@ -8090,7 +8101,7 @@ cudaMemPoolExportToShareableHandle : function(shareableHandle:pointer; memPool:c
  *
  * \sa ::cuMemPoolImportFromShareableHandle, ::cudaMemPoolExportToShareableHandle, ::cudaMemPoolExportPointer, ::cudaMemPoolImportPointer
   }
-cudaMemPoolImportFromShareableHandle : function(memPool:PcudaMemPool_t; shareableHandle:pointer; handleType:cudaMemAllocationHandleType; flags:dword):cudaError_t;WINAPI;
+cudaMemPoolImportFromShareableHandle : function(memPool:PcudaMemPool_t; shareableHandle:pointer; handleType:cudaMemAllocationHandleType; flags:longword):cudaError_t;WINAPI;
 {*
  * \brief Export data to share a memory pool allocation between processes.
  *
@@ -8366,7 +8377,7 @@ cudaDeviceCanAccessPeer : function(canAccessPeer:Plongint; device:longint; peerD
  * ::cudaDeviceDisablePeerAccess,
  * ::cuCtxEnablePeerAccess
   }
-cudaDeviceEnablePeerAccess : function(peerDevice:longint; flags:dword):cudaError_t;WINAPI;
+cudaDeviceEnablePeerAccess : function(peerDevice:longint; flags:longword):cudaError_t;WINAPI;
 {*
  * \brief Disables direct access to memory allocations on a peer device.
  *
@@ -8472,7 +8483,7 @@ cudaGraphicsUnregisterResource : function(resource:cudaGraphicsResource_t):cudaE
  * ::cudaGraphicsMapResources,
  * ::cuGraphicsResourceSetMapFlags
   }
-cudaGraphicsResourceSetMapFlags : function(resource:cudaGraphicsResource_t; flags:dword):cudaError_t;WINAPI;
+cudaGraphicsResourceSetMapFlags : function(resource:cudaGraphicsResource_t; flags:longword):cudaError_t;WINAPI;
 {*
  * \brief Map graphics resources for access by CUDA
  *
@@ -8612,7 +8623,7 @@ cudaGraphicsResourceGetMappedPointer : function(devPtr:Ppointer; size:PSizeUInt;
  * ::cudaGraphicsResourceGetMappedPointer,
  * ::cuGraphicsSubResourceGetMappedArray
   }
-cudaGraphicsSubResourceGetMappedArray : function(&array:PcudaArray_t; resource:cudaGraphicsResource_t; arrayIndex:dword; mipLevel:dword):cudaError_t;WINAPI;
+cudaGraphicsSubResourceGetMappedArray : function(&array:PcudaArray_t; resource:cudaGraphicsResource_t; arrayIndex:longword; mipLevel:longword):cudaError_t;WINAPI;
 {*
  * \brief Get a mipmapped array through which to access a mapped graphics resource.
  *
@@ -9185,7 +9196,7 @@ cudaRuntimeGetVersion : function(runtimeVersion:Plongint):cudaError_t;WINAPI;
  * ::cudaGraphGetEdges,
  * ::cudaGraphClone
   }
-cudaGraphCreate : function(pGraph:PcudaGraph_t; flags:dword):cudaError_t;WINAPI;
+cudaGraphCreate : function(pGraph:PcudaGraph_t; flags:longword):cudaError_t;WINAPI;
 {*
  * \brief Creates a kernel execution node and adds it to a graph
  *
@@ -11117,7 +11128,7 @@ cudaGraphDestroyNode : function(node:cudaGraphNode_t):cudaError_t;WINAPI;
  * ::cudaGraphLaunch,
  * ::cudaGraphExecDestroy
   }
-cudaGraphInstantiate : function(pGraphExec:PcudaGraphExec_t; graph:cudaGraph_t; flags:qword):cudaError_t;WINAPI;
+cudaGraphInstantiate : function(pGraphExec:PcudaGraphExec_t; graph:cudaGraph_t; flags:uint64):cudaError_t;WINAPI;
 {*
  * \brief Creates an executable graph from a graph
  *
@@ -11186,7 +11197,7 @@ cudaGraphInstantiate : function(pGraphExec:PcudaGraphExec_t; graph:cudaGraph_t; 
  * ::cudaGraphLaunch,
  * ::cudaGraphExecDestroy
   }
-cudaGraphInstantiateWithFlags : function(pGraphExec:PcudaGraphExec_t; graph:cudaGraph_t; flags:qword):cudaError_t;WINAPI;
+cudaGraphInstantiateWithFlags : function(pGraphExec:PcudaGraphExec_t; graph:cudaGraph_t; flags:uint64):cudaError_t;WINAPI;
 {*
  * \brief Creates an executable graph from a graph
  *
@@ -11313,7 +11324,7 @@ cudaGraphInstantiateWithParams : function(pGraphExec:PcudaGraphExec_t; graph:cud
  * ::cudaGraphInstantiateWithFlags,
  * ::cudaGraphInstantiateWithParams
   }
-cudaGraphExecGetFlags : function(graphExec:cudaGraphExec_t; flags:Pqword):cudaError_t;WINAPI;
+cudaGraphExecGetFlags : function(graphExec:cudaGraphExec_t; flags:PUInt64):cudaError_t;WINAPI;
 {*
  * \brief Sets the parameters for a kernel node in the given graphExec
  *
@@ -11917,7 +11928,7 @@ cudaGraphExecExternalSemaphoresWaitNodeSetParams : function(hGraphExec:cudaGraph
  * ::cudaGraphInstantiate
  * ::cudaGraphLaunch
   }
-cudaGraphNodeSetEnabled : function(hGraphExec:cudaGraphExec_t; hNode:cudaGraphNode_t; isEnabled:dword):cudaError_t;WINAPI;
+cudaGraphNodeSetEnabled : function(hGraphExec:cudaGraphExec_t; hNode:cudaGraphNode_t; isEnabled:longword):cudaError_t;WINAPI;
 {*
  * \brief Query whether a node in the given graphExec is enabled
  *
@@ -11948,7 +11959,7 @@ cudaGraphNodeSetEnabled : function(hGraphExec:cudaGraphExec_t; hNode:cudaGraphNo
  * ::cudaGraphInstantiate
  * ::cudaGraphLaunch
   }
-cudaGraphNodeGetEnabled : function(hGraphExec:cudaGraphExec_t; hNode:cudaGraphNode_t; isEnabled:Pdword):cudaError_t;WINAPI;
+cudaGraphNodeGetEnabled : function(hGraphExec:cudaGraphExec_t; hNode:cudaGraphNode_t; isEnabled:PLongword):cudaError_t;WINAPI;
 {*
  * \brief Check whether an executable graph can be updated with a graph and perform the update if possible
  *
@@ -12144,7 +12155,7 @@ cudaGraphDestroy : function(graph:cudaGraph_t):cudaError_t;WINAPI;
  * ::cudaErrorOperatingSystem
   }
 (* Const before type ignored *)
-cudaGraphDebugDotPrint : function(graph:cudaGraph_t; path:Pchar; flags:dword):cudaError_t;WINAPI;
+cudaGraphDebugDotPrint : function(graph:cudaGraph_t; path:PAnsiChar; flags:longword):cudaError_t;WINAPI;
 {*
  * \brief Create a user object
  *
@@ -12179,7 +12190,7 @@ cudaGraphDebugDotPrint : function(graph:cudaGraph_t; path:Pchar; flags:dword):cu
  * ::cudaGraphReleaseUserObject,
  * ::cudaGraphCreate
   }
-cudaUserObjectCreate : function(object_out:PcudaUserObject_t; ptr:pointer; destroy:cudaHostFn_t; initialRefcount:dword; flags:dword):cudaError_t;WINAPI;
+cudaUserObjectCreate : function(object_out:PcudaUserObject_t; ptr:pointer; destroy:cudaHostFn_t; initialRefcount:longword; flags:longword):cudaError_t;WINAPI;
 {*
  * \brief Retain a reference to a user object
  *
@@ -12202,7 +12213,7 @@ cudaUserObjectCreate : function(object_out:PcudaUserObject_t; ptr:pointer; destr
  * ::cudaGraphReleaseUserObject,
  * ::cudaGraphCreate
   }
-{__dv(1) }cudaUserObjectRetain : function(&object:cudaUserObject_t; count:dword):cudaError_t;WINAPI;
+{__dv(1) }cudaUserObjectRetain : function(&object:cudaUserObject_t; count:longword):cudaError_t;WINAPI;
 {*
  * \brief Release a reference to a user object
  *
@@ -12229,7 +12240,7 @@ cudaUserObjectCreate : function(object_out:PcudaUserObject_t; ptr:pointer; destr
  * ::cudaGraphReleaseUserObject,
  * ::cudaGraphCreate
   }
-{__dv(1) }cudaUserObjectRelease : function(&object:cudaUserObject_t; count:dword):cudaError_t;WINAPI;
+{__dv(1) }cudaUserObjectRelease : function(&object:cudaUserObject_t; count:longword):cudaError_t;WINAPI;
 {*
  * \brief Retain a reference to a user object from a graph
  *
@@ -12256,7 +12267,7 @@ cudaUserObjectCreate : function(object_out:PcudaUserObject_t; ptr:pointer; destr
  * ::cudaGraphReleaseUserObject,
  * ::cudaGraphCreate
   }
-{__dv(1) }cudaGraphRetainUserObject : function(graph:cudaGraph_t; &object:cudaUserObject_t; count:dword; flags:dword):cudaError_t;WINAPI;
+{__dv(1) }cudaGraphRetainUserObject : function(graph:cudaGraph_t; &object:cudaUserObject_t; count:longword; flags:longword):cudaError_t;WINAPI;
 {*
  * \brief Release a user object reference from a graph
  *
@@ -12280,7 +12291,7 @@ cudaUserObjectCreate : function(object_out:PcudaUserObject_t; ptr:pointer; destr
  * ::cudaGraphRetainUserObject,
  * ::cudaGraphCreate
   }
-{__dv(1) }cudaGraphReleaseUserObject : function(graph:cudaGraph_t; &object:cudaUserObject_t; count:dword):cudaError_t;WINAPI;
+{__dv(1) }cudaGraphReleaseUserObject : function(graph:cudaGraph_t; &object:cudaUserObject_t; count:longword):cudaError_t;WINAPI;
 {* @  }{ END CUDART_GRAPH  }
 {*
  * \defgroup CUDART_DRIVER_ENTRY_POINT Driver Entry Point Access
@@ -12355,7 +12366,7 @@ cudaUserObjectCreate : function(object_out:PcudaUserObject_t; ptr:pointer; destr
  * ::cuGetProcAddress
   }
 (* Const before type ignored *)
-{= NULL }cudaGetDriverEntryPoint : function(symbol:Pchar; funcPtr:Ppointer; flags:qword; driverStatus:PcudaDriverEntryPointQueryResult):cudaError_t;WINAPI;
+{= NULL }cudaGetDriverEntryPoint : function(symbol:PAnsiChar; funcPtr:Ppointer; flags:uint64; driverStatus:PcudaDriverEntryPointQueryResult):cudaError_t;WINAPI;
 {* @  }{ END CUDART_DRIVER_ENTRY_POINT  }
 {* \cond impl_private  }
 (* Const before type ignored *)
@@ -12625,7 +12636,7 @@ cudaGetKernel : function(kernelPtr:PcudaKernel_t; entryFuncAddr:pointer):cudaErr
  * \sa
  * ::cuGetProcAddress
  *)
-cudaGetDriverEntryPointByVersion : function (const symbol : pchar ; funcPtr : PPointer ; cudaVersion : longword ; flags : UInt64; driverStatus : PcudaDriverEntryPointQueryResult ):cudaError_t; WINAPI;
+cudaGetDriverEntryPointByVersion : function (const symbol : PAnsiChar ; funcPtr : PPointer ; cudaVersion : longword ; flags : UInt64; driverStatus : PcudaDriverEntryPointQueryResult ):cudaError_t; WINAPI;
 
 (** @} *) (* END CUDART_DRIVER_ENTRY_POINT *)
 
@@ -12755,7 +12766,7 @@ cudaLibraryLoadData : function (&library : PcudaLibrary_t ; const code : pointer
  * ::cudaLibraryUnload,
  * ::cuLibraryLoadFromFile
  *)
-cudaLibraryLoadFromFile : function (&library : pcudaLibrary_t; const fileName:pchar; jitOptions : pcudaJitOption; jitOptionsValues : PPointer; numJitOptions: longword ; libraryOptions : pcudaLibraryOption ; libraryOptionValues:PPointer; numLibraryOptions : longword):cudaError_t; WINAPI;
+cudaLibraryLoadFromFile : function (&library : pcudaLibrary_t; const fileName:PAnsiChar; jitOptions : pcudaJitOption; jitOptionsValues : PPointer; numJitOptions: longword ; libraryOptions : pcudaLibraryOption ; libraryOptionValues:PPointer; numLibraryOptions : longword):cudaError_t; WINAPI;
 
 (**
  * \brief Unloads a library
@@ -12799,7 +12810,7 @@ cudaLibraryUnload : function (&library : cudaLibrary_t):cudaError_t; WINAPI;
  * ::cudaLibraryUnload,
  * ::cuLibraryGetKernel
  *)
-cudaLibraryGetKernel : function (pKernel : pcudaKernel_t; &library : cudaLibrary_t; const name : pchar):cudaError_t; WINAPI;
+cudaLibraryGetKernel : function (pKernel : pcudaKernel_t; &library : cudaLibrary_t; const name : PAnsiChar):cudaError_t; WINAPI;
 
 (**
  * \brief Returns a global device pointer
@@ -12833,7 +12844,7 @@ cudaLibraryGetKernel : function (pKernel : pcudaKernel_t; &library : cudaLibrary
  * ::cudaLibraryGetManaged,
  * ::cuLibraryGetGlobal
  *)
-cudaLibraryGetGlobal : function (dptr :PPointer; bytes: pSizeUint ; &library : cudaLibrary_t; const name:Pchar):cudaError_t; WINAPI;
+cudaLibraryGetGlobal : function (dptr :PPointer; bytes: pSizeUint ; &library : cudaLibrary_t; const name:PAnsiChar):cudaError_t; WINAPI;
 
 (**
  * \brief Returns a pointer to managed memory
@@ -12866,7 +12877,7 @@ cudaLibraryGetGlobal : function (dptr :PPointer; bytes: pSizeUint ; &library : c
  * ::cudaLibraryGetGlobal,
  * ::cuLibraryGetManaged
  *)
-cudaLibraryGetManaged : function (dptr :PPointer; bytes :PSizeUint; &library : cudaLibrary_t; const name:PChar):cudaError_t; WINAPI;
+cudaLibraryGetManaged : function (dptr :PPointer; bytes :PSizeUint; &library : cudaLibrary_t; const name:PAnsiChar):cudaError_t; WINAPI;
 
 (**
  * \brief Returns a pointer to a unified function
@@ -12893,7 +12904,7 @@ cudaLibraryGetManaged : function (dptr :PPointer; bytes :PSizeUint; &library : c
  * ::cudaLibraryUnload,
  * ::cuLibraryGetUnifiedFunction
  *)
-cudaLibraryGetUnifiedFunction : function (fptr:ppointer; &library :cudaLibrary_t; const symbol:pchar):cudaError_t; WINAPI;
+cudaLibraryGetUnifiedFunction : function (fptr:ppointer; &library :cudaLibrary_t; const symbol:PAnsiChar):cudaError_t; WINAPI;
 
 (**
  * \brief Returns the number of kernels within a library
@@ -13085,11 +13096,22 @@ cudaKernelSetAttributeForDevice : function (kernel:cudaKernel_t; attr:cudaFuncAt
 implementation
 
   uses
-    SysUtils, dynlibs;
+    SysUtils,
+    {$if defined(MSWINDOWS)}
+    windows
+    {$else}
+    dynlibs
+    {$endif}
+
+    ;
 
   var
+    {$if defined(MSWINDOWS)}
+    hlib : THandle;
+    {$else}
     hlib : tlibhandle;
 
+    {$endif}
 
   procedure Freecuda_runtime_api;
     begin
@@ -13392,10 +13414,10 @@ implementation
     end;
 
 
-  procedure Loadcuda_runtime_api(lib : pchar);
+  procedure Loadcuda_runtime_api(lib : PAnsiChar);
     begin
       Freecuda_runtime_api;
-      hlib:=LoadLibrary(lib);
+      hlib:=LoadLibraryA(lib);
       if hlib=0 then
         raise Exception.Create(format('Could not load library: %s',[lib]));
 

@@ -1,3 +1,4 @@
+﻿{$Z4}
 {$IFDEF FPC}
   {$mode delphi}
   {$PACKRECORDS C}
@@ -1061,14 +1062,14 @@ uses cudaTypes;
   type
     cudaArraySparseProperties = record
         tileExtent : record
-            width : dword;
-            height : dword;
-            depth : dword;
+            width : longword;
+            height : longword;
+            depth : longword;
           end;
-        miptailFirstLevel : dword;
-        miptailSize : qword;
-        flags : dword;
-        reserved : array[0..3] of dword;
+        miptailFirstLevel : longword;
+        miptailSize : uint64;
+        flags : longword;
+        reserved : array[0..3] of longword;
       end;
 
   {*
@@ -1079,7 +1080,7 @@ uses cudaTypes;
     cudaArrayMemoryRequirements = record
         size : size_t;
         alignment : size_t;
-        reserved : array[0..3] of dword;
+        reserved : array[0..3] of longword;
       end;
 
   {*
@@ -1207,8 +1208,8 @@ uses cudaTypes;
     cudaMemsetParams = record
         dst : pointer;
         pitch : size_t;
-        value : dword;
-        elementSize : dword;
+        value : longword;
+        elementSize : longword;
         width : size_t;
         height : size_t;
       end;
@@ -1498,10 +1499,10 @@ uses cudaTypes;
         width : size_t;
         height : size_t;
         depth : size_t;
-        firstMipmapLevel : dword;
-        lastMipmapLevel : dword;
-        firstLayer : dword;
-        lastLayer : dword;
+        firstMipmapLevel : longword;
+        lastMipmapLevel : longword;
+        firstLayer : longword;
+        lastLayer : longword;
       end;
 
   {*
@@ -2210,7 +2211,7 @@ uses cudaTypes;
   {*< CUDA definition of UUID  }
 
     CUuuid_st = record
-        bytes : array[0..15] of char;
+        bytes : array[0..15] of ansichar;
       end;
 
    CUuuid = CUuuid_st;
@@ -2315,10 +2316,10 @@ uses cudaTypes;
   {*< Indicates device supports unified pointers  }
   {*< Reserved for future use  }
     cudaDeviceProp = record
-        name : array[0..255] of char;
+        name : array[0..255] of ansichar;
         uuid : cudaUUID_t;
-        luid : array[0..7] of char;
-        luidDeviceNodeMask : dword;
+        luid : array[0..7] of ansichar;
+        luidDeviceNodeMask : longword;
         totalGlobalMem : size_t;
         sharedMemPerBlock : size_t;
         regsPerBlock : longint;
@@ -2401,9 +2402,9 @@ uses cudaTypes;
         timelineSemaphoreInteropSupported : longint;
         memoryPoolsSupported : longint;
         gpuDirectRDMASupported : longint;
-        gpuDirectRDMAFlushWritesOptions : dword;
+        gpuDirectRDMAFlushWritesOptions : longword;
         gpuDirectRDMAWritesOrdering : longint;
-        memoryPoolSupportedHandleTypes : dword;
+        memoryPoolSupportedHandleTypes : longword;
         deferredMappingCudaArraySupported : longint;
         ipcEventSupported : longint;
         clusterLaunch : longint;
@@ -2424,7 +2425,7 @@ uses cudaTypes;
 
   type
     cudaIpcEventHandle_st = record
-        reserved : array[0..(CUDA_IPC_HANDLE_SIZE)-1] of char;
+        reserved : array[0..(CUDA_IPC_HANDLE_SIZE)-1] of ansichar;
       end;
     cudaIpcEventHandle_t = cudaIpcEventHandle_st;
   {*
@@ -2432,7 +2433,7 @@ uses cudaTypes;
     }
 
     cudaIpcMemHandle_st = record
-        reserved : array[0..(CUDA_IPC_HANDLE_SIZE)-1] of char;
+        reserved : array[0..(CUDA_IPC_HANDLE_SIZE)-1] of ansichar;
       end;
     cudaIpcMemHandle_t = cudaIpcMemHandle_st;
   {*
@@ -2564,8 +2565,8 @@ uses cudaTypes;
                 end );
               2 : ( nvSciBufObject : pointer );
             end;
-        size : qword;
-        flags : dword;
+        size : uint64;
+        flags : longword;
       end;
 
   {*
@@ -2581,9 +2582,9 @@ uses cudaTypes;
        * Flags reserved for future use. Must be zero.
         }
     cudaExternalMemoryBufferDesc = record
-        offset : qword;
-        size : qword;
-        flags : dword;
+        offset : uint64;
+        size : uint64;
+        flags : longword;
       end;
 
   {*
@@ -2607,11 +2608,11 @@ uses cudaTypes;
        * Total number of levels in the mipmap chain
         }
     cudaExternalMemoryMipmappedArrayDesc = record
-        offset : qword;
+        offset : uint64;
         formatDesc : cudaChannelFormatDesc;
         extent : cudaExtent;
-        flags : dword;
-        numLevels : dword;
+        flags : longword;
+        numLevels : longword;
       end;
 
   {*
@@ -2712,7 +2713,7 @@ uses cudaTypes;
                 end );
               2 : ( nvSciSyncObj : pointer );
             end;
-        flags : dword;
+        flags : longword;
       end;
 
   {*
@@ -2747,18 +2748,18 @@ uses cudaTypes;
     cudaExternalSemaphoreSignalParams_v1 = record
         params : record
             fence : record
-                value : qword;
+                value : uint64;
               end;
             nvSciSync : record
                 case longint of
                   0 : ( fence : pointer );
-                  1 : ( reserved : qword );
+                  1 : ( reserved : uint64 );
                 end;
             keyedMutex : record
-                key : qword;
+                key : uint64;
               end;
           end;
-        flags : dword;
+        flags : longword;
       end;
 
   {*
@@ -2796,19 +2797,19 @@ uses cudaTypes;
     cudaExternalSemaphoreWaitParams_v1 = record
         params : record
             fence : record
-                value : qword;
+                value : uint64;
               end;
             nvSciSync : record
                 case longint of
                   0 : ( fence : pointer );
-                  1 : ( reserved : qword );
+                  1 : ( reserved : uint64 );
                 end;
             keyedMutex : record
-                key : qword;
-                timeoutMs : dword;
+                key : uint64;
+                timeoutMs : longword;
               end;
           end;
-        flags : dword;
+        flags : longword;
       end;
 
   {*
@@ -2843,20 +2844,20 @@ uses cudaTypes;
     cudaExternalSemaphoreSignalParams = record
         params : record
             fence : record
-                value : qword;
+                value : uint64;
               end;
             nvSciSync : record
                 case longint of
                   0 : ( fence : pointer );
-                  1 : ( reserved : qword );
+                  1 : ( reserved : uint64 );
                 end;
             keyedMutex : record
-                key : qword;
+                key : uint64;
               end;
-            reserved : array[0..11] of dword;
+            reserved : array[0..11] of longword;
           end;
-        flags : dword;
-        reserved : array[0..15] of dword;
+        flags : longword;
+        reserved : array[0..15] of longword;
       end;
 
   {*
@@ -2894,21 +2895,21 @@ uses cudaTypes;
     cudaExternalSemaphoreWaitParams = record
         params : record
             fence : record
-                value : qword;
+                value : uint64;
               end;
             nvSciSync : record
                 case longint of
                   0 : ( fence : pointer );
-                  1 : ( reserved : qword );
+                  1 : ( reserved : uint64 );
                 end;
             keyedMutex : record
-                key : qword;
-                timeoutMs : dword;
+                key : uint64;
+                timeoutMs : longword;
               end;
-            reserved : array[0..9] of dword;
+            reserved : array[0..9] of longword;
           end;
-        flags : dword;
-        reserved : array[0..15] of dword;
+        flags : longword;
+        reserved : array[0..15] of longword;
       end;
 
   {******************************************************************************
@@ -3065,7 +3066,7 @@ uses cudaTypes;
         func : pointer;
         gridDim : dim3;
         blockDim : dim3;
-        sharedMemBytes : dword;
+        sharedMemBytes : longword;
         kernelParams : ^pointer;
         extra : ^pointer;
       end;
@@ -3080,7 +3081,7 @@ uses cudaTypes;
     cudaExternalSemaphoreSignalNodeParams = record
         extSemArray : ^cudaExternalSemaphore_t;
         paramsArray : ^cudaExternalSemaphoreSignalParams;
-        numExtSems : dword;
+        numExtSems : longword;
       end;
 
   {*
@@ -3093,7 +3094,7 @@ uses cudaTypes;
     cudaExternalSemaphoreWaitNodeParams = record
         extSemArray : ^cudaExternalSemaphore_t;
         paramsArray : ^cudaExternalSemaphoreWaitParams;
-        numExtSems : dword;
+        numExtSems : longword;
       end;
 
   {*
@@ -3171,7 +3172,7 @@ uses cudaTypes;
   {*< Whether instantiation was successful.  If it failed, the reason why  }
 
     cudaGraphInstantiateParams_st = record
-        flags : qword;
+        flags : uint64;
         uploadStream : cudaStream_t;
         errNode_out : cudaGraphNode_t;
         result_out : cudaGraphInstantiateResult;
@@ -3334,14 +3335,14 @@ uses cudaTypes;
 
     cudaLaunchAttributeValue = record
         case longint of
-          0 : ( pad : array[0..63] of char );
+          0 : ( pad : array[0..63] of ansichar );
           1 : ( accessPolicyWindow : cudaAccessPolicyWindow );
           2 : ( cooperative : longint );
           3 : ( syncPolicy : cudaSynchronizationPolicy );
           4 : ( clusterDim : record
-              x : dword;
-              y : dword;
-              z : dword;
+              x : longword;
+              y : longword;
+              z : longword;
             end );
           5 : ( clusterSchedulingPolicyPreference : cudaClusterSchedulingPolicy );
           6 : ( programmaticStreamSerializationAllowed : longint );
@@ -3360,7 +3361,7 @@ uses cudaTypes;
 
     cudaLaunchAttribute_st = record
         id : cudaLaunchAttributeID;
-        pad : array[0..(8-(sizeof(cudaLaunchAttributeID)))-1] of char;
+        pad : array[0..(8-(sizeof(cudaLaunchAttributeID)))-1] of ansichar;
         val : cudaLaunchAttributeValue;
       end;
     cudaLaunchAttribute = cudaLaunchAttribute_st;
@@ -3380,7 +3381,7 @@ uses cudaTypes;
         dynamicSmemBytes : size_t;
         stream : cudaStream_t;
         attrs : ^cudaLaunchAttribute;
-        numAttrs : dword;
+        numAttrs : longword;
       end;
     cudaLaunchConfig_t = cudaLaunchConfig_st;
 

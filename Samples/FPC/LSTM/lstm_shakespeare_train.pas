@@ -165,7 +165,7 @@ begin
     writeln('batch [', currBatch,'] saving ', SAVE_FILE);
     parser.saveWeights(SAVE_FILE);
   end else begin
-    curserDown();
+    cursorDown();
     writeln('batch [', currBatch,']');
   end;
 
@@ -396,6 +396,8 @@ begin
   exit;
 
 {$ifdef USE_OPENCL}
+
+// i was just doing some library testes using OpenCL , this will not be executed
   t1.resize([STEPS, BATCH, IM]);
   t4.resize([STEPS, BATCH, IM]);
   t5.resize([STEPS, BATCH, IM]);
@@ -418,7 +420,7 @@ begin
   writeln('meanVar, Normalize : ');
   for i:=0 to STEPS -1 do begin
     t1.MeansAndVars(t2, t3, i*B, B);
-    ocl.meanAndVars({t1.size()} B, t2.Size, t1.groups, t1.devData, i*B, t2.devData, t3.devData );
+    ocl.meansAndVars({t1.size()} B, t2.Size, t1.groups, t1.devData, i*B, t2.devData, t3.devData );
     writeln(#13#10, '[', i, ']');
     //t3.printStat();
     //t4.printStat();

@@ -1,3 +1,4 @@
+{$Z4}
 {$ifdef FPC}
 {$mode delphi}
 {$packrecords C}
@@ -77,7 +78,7 @@ type
   }
 (* Const before type ignored *)
 var
-nvrtcGetErrorString : function(result:nvrtcResult):pchar; WINAPI;
+nvrtcGetErrorString : function(result:nvrtcResult):PAnsiChar; WINAPI;
 {*********************************************************************** }{*
  *
  * \defgroup query General Information Query
@@ -185,7 +186,7 @@ type
 (* Const before type ignored *)
 (* Const before declarator ignored *)
 var
-nvrtcCreateProgram : function(prog:PnvrtcProgram; src:Pchar; name:Pchar; numHeaders:longint; headers:PPchar; 
+nvrtcCreateProgram : function(prog:PnvrtcProgram; src:PAnsiChar; name:PAnsiChar; numHeaders:longint; headers:PPchar;
     includeNames:PPchar):nvrtcResult;  WINAPI;
 {*
  * \ingroup compilation
@@ -222,7 +223,7 @@ nvrtcDestroyProgram : function(prog:PnvrtcProgram):nvrtcResult;   WINAPI;
   }
 (* Const before type ignored *)
 (* Const before declarator ignored *)
-nvrtcCompileProgram : function(prog:nvrtcProgram; numOptions:longint; options:PPchar):nvrtcResult;  WINAPI;
+nvrtcCompileProgram : function(prog:nvrtcProgram; numOptions:longint; options:PPAnsiChar):nvrtcResult;  WINAPI;
 {*
  * \ingroup compilation
  * \brief   nvrtcGetPTXSize sets the value of \p ptxSizeRet with the size of the PTX
@@ -254,7 +255,7 @@ nvrtcGetPTXSize : function(prog:nvrtcProgram; ptxSizeRet:Psize_t):nvrtcResult;  
  *
  * \see     ::nvrtcGetPTXSize
   }
-nvrtcGetPTX : function(prog:nvrtcProgram; ptx:Pchar):nvrtcResult;  WINAPI;
+nvrtcGetPTX : function(prog:nvrtcProgram; ptx:PAnsiChar):nvrtcResult;  WINAPI;
 {*
  * \ingroup compilation
  * \brief   nvrtcGetCUBINSize sets the value of \p cubinSizeRet with the size of the cubin
@@ -288,7 +289,7 @@ nvrtcGetCUBINSize : function(prog:nvrtcProgram; cubinSizeRet:Psize_t):nvrtcResul
  *
  * \see     ::nvrtcGetCUBINSize
   }
-nvrtcGetCUBIN : function(prog:nvrtcProgram; cubin:Pchar):nvrtcResult;  WINAPI;
+nvrtcGetCUBIN : function(prog:nvrtcProgram; cubin:PAnsiChar):nvrtcResult;  WINAPI;
 {*
  * \ingroup compilation
  * \brief   
@@ -304,7 +305,7 @@ nvrtcGetNVVMSize : function(prog:nvrtcProgram; nvvmSizeRet:Psize_t):nvrtcResult;
  * nvrtcGetLTOIR (and nvrtcGetLTOIRSize) instead.
   }
 {__DEPRECATED__("This function will be removed in a future release. Please use nvrtcGetLTOIR instead") }
-nvrtcGetNVVM : function(prog:nvrtcProgram; nvvm:Pchar):nvrtcResult;  WINAPI;
+nvrtcGetNVVM : function(prog:nvrtcProgram; nvvm:PAnsiChar):nvrtcResult;  WINAPI;
 {*
  * \ingroup compilation
  * \brief   nvrtcGetLTOIRSize sets the value of \p LTOIRSizeRet with the size of the LTO IR
@@ -337,7 +338,7 @@ nvrtcGetLTOIRSize : function(prog:nvrtcProgram; LTOIRSizeRet:Psize_t):nvrtcResul
  *
  * \see     ::nvrtcGetLTOIRSize
   }
-nvrtcGetLTOIR : function(prog:nvrtcProgram; LTOIR:Pchar):nvrtcResult;  WINAPI;
+nvrtcGetLTOIR : function(prog:nvrtcProgram; LTOIR:PAnsiChar):nvrtcResult;  WINAPI;
 {*
  * \ingroup compilation
  * \brief   nvrtcGetOptiXIRSize sets the value of \p optixirSizeRet with the size of the OptiX IR
@@ -370,7 +371,7 @@ nvrtcGetOptiXIRSize : function(prog:nvrtcProgram; optixirSizeRet:Psize_t):nvrtcR
  *
  * \see     ::nvrtcGetOptiXIRSize
   }
-nvrtcGetOptiXIR : function(prog:nvrtcProgram; optixir:Pchar):nvrtcResult;   WINAPI;
+nvrtcGetOptiXIR : function(prog:nvrtcProgram; optixir:PAnsiChar):nvrtcResult;   WINAPI;
 {*
  * \ingroup compilation
  * \brief   nvrtcGetProgramLogSize sets \p logSizeRet with the size of the
@@ -405,7 +406,7 @@ nvrtcGetProgramLogSize : function(prog:nvrtcProgram; logSizeRet:Psize_t):nvrtcRe
  *
  * \see     ::nvrtcGetProgramLogSize
   }
-nvrtcGetProgramLog : function(prog:nvrtcProgram; log:Pchar):nvrtcResult;  WINAPI;
+nvrtcGetProgramLog : function(prog:nvrtcProgram; log:PAnsiChar):nvrtcResult;  WINAPI;
 {*
  * \ingroup compilation
  * \brief   nvrtcAddNameExpression notes the given name expression
@@ -425,7 +426,7 @@ nvrtcGetProgramLog : function(prog:nvrtcProgram; log:Pchar):nvrtcResult;  WINAPI
   }
 (* Const before type ignored *)
 (* Const before declarator ignored *)
-nvrtcAddNameExpression : function(prog:nvrtcProgram; name_expression:Pchar):nvrtcResult;  WINAPI;
+nvrtcAddNameExpression : function(prog:nvrtcProgram; name_expression:PAnsiChar):nvrtcResult;  WINAPI;
 {*
  * \ingroup compilation
  * \brief   nvrtcGetLoweredName extracts the lowered (mangled) name
@@ -452,7 +453,7 @@ nvrtcAddNameExpression : function(prog:nvrtcProgram; name_expression:Pchar):nvrt
 (* Const before type ignored *)
 (* Const before declarator ignored *)
 (* Const before type ignored *)
-nvrtcGetLoweredName : function(prog:nvrtcProgram; name_expression:Pchar; lowered_name:PPchar):nvrtcResult;  WINAPI;
+nvrtcGetLoweredName : function(prog:nvrtcProgram; name_expression:PAnsiChar; lowered_name:PPchar):nvrtcResult;  WINAPI;
 {*
  * \defgroup options Supported Compile Options
  *
@@ -781,11 +782,20 @@ nvrtcResult nvrtcGetTypeName(std::string *result)
 implementation
 
   uses
-    SysUtils, dynlibs;
+    SysUtils
+    {$if defined(MSWINDOWS)}
+    , windows
+    {$else}
+    , dynlibs
+    {$endif}
+    ;
 
   var
+    {$if defined(MSWINDOWS)}
+    hlib : THandle;
+    {$else}
     hlib : tlibhandle;
-
+    {$endif}
 
   procedure Freenvrtc;
     begin
@@ -815,7 +825,7 @@ implementation
     end;
 
 
-  procedure Loadnvrtc(lib : pchar);
+  procedure Loadnvrtc(lib : PChar);
     begin
       Freenvrtc;
       hlib:=LoadLibrary(lib);

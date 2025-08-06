@@ -41,7 +41,7 @@ endif
 ifeq ($(DEBUG),1)
 OPT+=-g -gv -O1
 else
-OPT+=-pg -O4 -CX -Scghi -Xs -XX 
+OPT+=-O4 -CX -Scghi -Xs -XX 
 endif
 
 ifeq ($(USE_AVX2),1)

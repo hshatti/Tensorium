@@ -1,4 +1,4 @@
-#define nfloat  float
+//#define nfloat  float
 #define sEPSILON 0.000001f
 //#include <stdio.h>
 /*
@@ -509,7 +509,7 @@ extern "C" __global__ void activate_array(const long N, nfloat* x, long const of
 
 }
 
-extern "C" __global__ void array_avtivate_swish(const long N, nfloat* x, long const offset,  nfloat* output,  nfloat* output2)
+extern "C" __global__ void array_activate_swish(const long N, nfloat* x, long const offset,  nfloat* output,  nfloat* output2)
 {
     long i = blockDim.x * blockIdx.x + threadIdx.x;
     if (i>=N) return;
@@ -1368,8 +1368,6 @@ extern "C" __global__ void normblkvv( const long M, const long N, const long K,
   const long b = blockDim.z * blockIdx.z + threadIdx.z; // batch batch pos
   long j = blockDim.y * blockIdx.y + threadIdx.y;
   if (i>=M || j>=N || b>=K) return;
-  if (i==0 && j==0 && b==0)
-    printf("[GPU] Normalize...");
 
   j += b*batchsize + i*blocksize + offset; // block pos
   const nfloat v = sqrt(max(vars[i*vars_stride], sEPSILON));
@@ -1616,7 +1614,7 @@ __device__ unsigned int rand_mt(mt_state* state)
 
 
 
-#define RANDOM_MAX 0xffffffffull
+#define RANDOM_MAX 0x10000000ull
 
 // https://en.wikipedia.org/wiki/Xorshift
 __device__ unsigned long long rand_xorshift(const unsigned long long seed){
@@ -1800,6 +1798,22 @@ extern "C" __global__ void means_vars_delta_fast(
         }
         vars_delta[filter] *= -0.5f * pow(max(vars[filter] , sEPSILON), -1.5f);
     }
+}
+
+extern "C" __global__ void clamp(const long N, const nfloat alpha, const nfloat* src, nfloat* dst, const long stride, const long offset ){
+   const long i = blockIdx.x*blockDim.x + threadIdx.x;
+   if(i>=N) return;
+   src += i*stride + offset;
+   dst += i*stride + offset;
+   *dst = max(min(*src, alpha), -alpha);
+}
+
+extern "C" __global__ void inverse_sqrt(const long N, const nfloat* src, nfloat* dst, const long stride, const long offset){
+   const long i = blockIdx.x*blockDim.x + threadIdx.x;
+   if(i>=N) return;
+   src += i*stride + offset;
+   dst += i*stride + offset;
+   *dst = 1/sqrt(max(*src, sEPSILON));
 }
 
 

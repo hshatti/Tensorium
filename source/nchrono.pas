@@ -101,7 +101,7 @@ begin
 
   {$else}
   if clock_gettime(THE_CLOCK, @TimeSpec) <>0 then
-      raise Exception.Createfmt(strTimeError,[SysErrorMessage(GetLastOSError)]);
+      raise Exception.Createfmt(strTimeError,[SysErrorMessage({$ifdef FPC}GetLastOSError{$else}GetLastError{$endif})]);
   result:=TimeSpec.tv_sec*1000000000 + TimeSpec.tv_nsec;
   {$endif}
 end;

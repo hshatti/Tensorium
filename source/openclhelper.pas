@@ -10,6 +10,7 @@ unit OpenCLHelper;
 {$IFDEF MSWINDOWS}
 
 {$endif}
+{$H+}
 {.$define debug}
 interface
 
@@ -111,6 +112,9 @@ type
     FDevicesType:array of TCLDeviceType;
     FContext:cl_context;
     FKernels:TArray<cl_kernel>;
+    FKernelsInfo: TArray<TCLKernelInfo>;
+    FBinaries :TArray<RawByteString>;
+    FAutoEnumKernels : boolean; // if true, will enumerate all kernels in the program into FKernels upon Build, otherwise, kernels has to be manually obtained
     FDeviceType: TCLDeviceType;
     FProgramSource: ansistring;
     cinfo:TDeviceStr;
@@ -118,18 +122,20 @@ type
     FGlobalOffsets:TWorkSizes;
     FGlobalWorkGroupSizes:TWorkSizes;
     FLocalWorkGroupSizes:TWorkSizes;
+    FLocalWorkGroupSizesPtr  : pointer;
 
-    FGlobalMemSize:size_t;
+    FGlobalMemSize:cl_ulong;
     FLocalMemSize:cl_ulong;
-    FGlobalCacheSize:size_t;
+    FGlobalCacheSize:cl_ulong;
     FExecCaps:cl_device_exec_capabilities;
     FMaxWorkItemDimensions:cl_uint;
     FMaxWorkGroupSize:size_t;
     FMaxWorkItemSizes:TWorkSizes;
+
     FMaxComputeUnits:cl_uint;
     FMaxMemAllocSize:cl_ulong;
     FMaxFrequency:cl_uint;
-
+    FSIMDWidth : integer;
     FDeviceBuiltInKernels:TDeviceStr;
     FIsBuilt:boolean;
     FProgram:cl_program;
@@ -156,6 +162,8 @@ type
     CLDeviceDriver:TDeviceStr;
     FErr:cl_int;
     FQueue:cl_command_queue;
+    AutoCalcLocalSizes : boolean;
+    ItemSize : size_t;
     //events    : array[0..MAX_EVENTS_COUNT-1] of cl_event;
     //eventsCount : cl_uint;
     class function initPlatforms():cl_int;static;
@@ -165,8 +173,9 @@ type
     class function getDeviceName(const device:cl_device_id):ansistring; static;
     class function getDeviceExtensionStr(const device:cl_device_id):ansistring; static;
     class function getDeviceTypeName(const device:cl_device_id):ansistring;static;
+    class function CalcLocalSize(const aSize: SizeInt):SizeInt; inline;static;
     procedure CheckError(const msg:string=''); inline;
-    constructor Create(deviceType:TCLDeviceType=dtGPU);
+    constructor Create(deviceType:TCLDeviceType=dtGPU); virtual;
     destructor Destroy;override;
     procedure SetGlobalWorkGroupSizes(const x: size_t; const y: size_t=0; const z: size_t=0); overload;
     procedure SetLocalWorkGroupSizes(const x: size_t; const y: size_t=0; const z: size_t=0);
@@ -202,16 +211,19 @@ type
 
     function DeviceName(Index: integer): ansistring;
     function DeviceCount:integer;
-    function Build(const params:ansistring=''):boolean;
+    function Build(const params:ansistring=''; const withKernels:TArray<ansistring> = nil):boolean;
+    function loadBinary(const bin:RawByteString; const withKernels:TArray<ansistring> = nil):boolean;
     function readLog:ansistring;
     property BuildLog:ansistring read FBuildLog;
     property LastError:cl_int read FErr;
     property Kernels:TArray<cl_kernel> read FKernels;
+    function getKernels(const Names:TArray<ansiString>):TArray<cl_kernel>;
     function KernelCount:integer;
     function KernelInfo(index:integer):TCLKernelInfo;
     property GlobalWorkGroupSizes:TWorkSizes read FGlobalWorkGroupSizes;
     property LocalWorkGroupSizes:TWorkSizes read FLocalWorkGroupSizes;
-    property GlobalCacheSize : size_t read FGlobalCacheSize;
+    property LocalWorkGroupSizesPtr: pointer read FLocalWorkGroupSizesPtr;
+    property GlobalCacheSize : cl_ulong read FGlobalCacheSize;
     property GlobalOffsets : TWorkSizes read FGlobalOffsets;
     function CanExecuteNative:boolean;
     procedure LoadFromFile(FileName:ansistring);
@@ -229,6 +241,7 @@ type
     procedure waitForEvents(const N :longword; const events:pcl_event);
     procedure freeEvents(const N :longword; const events:pcl_event);
     procedure finish(); inline;
+    procedure DoActiveDeviceChange(const newDevice:cl_device_id; const newQueue:cl_command_queue); virtual;
 
 
   end;
@@ -394,7 +407,7 @@ begin
   {$ifdef DEBUG}
   if FErr<>CL_SUCCESS then
     //writeln(msg, clErrorText(FErr));
-    raise Exception.Create(clErrorText(FErr));
+    raise Exception.Create(clErrorText(FErr)+msg);
   {$endif}
 end;
 
@@ -473,8 +486,8 @@ class function TOpenCL.getDeviceName(const device: cl_device_id): ansistring;
 var cname : array[0..cInfoSize-1] of ansichar;
    buffCnt :size_t;
 begin
-  clGetDeviceInfo(device, CL_DEVICE_NAME, cInfoSize, @cname, buffCnt);
-  result := cname;
+  clGetDeviceInfo(device, CL_DEVICE_NAME, cInfoSize, @cname[0], buffCnt);
+  result := ansistring(cname);
 end;
 
 class function TOpenCL.getDeviceExtensionStr(const device: cl_device_id): ansistring;
@@ -482,7 +495,7 @@ var cname : array[0..cInfoSize-1] of ansichar;
    buffCnt :size_t;
 begin
   clGetDeviceInfo(device, CL_DEVICE_EXTENSIONS, cInfoSize, @cname, buffCnt);
-  result := cname;
+  result := ansistring(cname);
 end;
 
 class function TOpenCL.getDeviceTypeName(const device: cl_device_id): ansistring;
@@ -506,15 +519,35 @@ begin
     end;
 end;
 
+class function TOpenCL.CalcLocalSize(const aSize: SizeInt): SizeInt;
+begin
+  if ASize=0 then exit(0);
+  if aSize mod 13 = 0 then exit(13);
+  if aSize mod 11 = 0 then exit(11);
+  if aSize mod 8  = 0 then exit(8); // Optimal?
+  if aSize mod 7  = 0 then exit(7);
+  if aSize mod 6  = 0 then exit(6);
+  if aSize mod 5  = 0 then exit(5);
+  if aSize mod 4  = 0 then exit(4);
+  if aSize mod 3  = 0 then exit(3);
+  if aSize mod 2  = 0 then exit(2);
+  result := 1;
+end;
+
 constructor TOpenCL.Create(deviceType: TCLDeviceType);
 var i:integer;
 begin
   FDeviceType:=deviceType;
+  FProgram:=nil;
+  FAutoEnumKernels := true;
+  AutoCalcLocalSizes := true;
+  itemSize := 4;
   PlatformCount:=0;
   FillChar(FParamSizes,sizeof(FParamSizes),0);
   for i:=0 to high(FGlobalOffsets) do FGlobalOffsets[i]:=0;
   FErr:=clGetPlatformIDs(0,nil,@PlatformCount); checkError();
   assert(PlatformCount>0, 'No OpenCL supported platforms found!');
+
   if FErr=CL_SUCCESS then
     if PlatformCount>0 then begin
       SetLength(Platforms,PlatformCount);
@@ -534,22 +567,32 @@ begin
   inherited Destroy;
 end;
 
-procedure TOpenCL.SetGlobalWorkGroupSizes(const x: size_t; const y: size_t;
-  const z: size_t);
+procedure TOpenCL.SetGlobalWorkGroupSizes(const x: size_t; const y: size_t; const z: size_t);
+var i, workItemSize:integer;
 begin
   FGlobalWorkGroupSizes[0]:=x;
   FGlobalWorkGroupSizes[1]:=y;
   FGlobalWorkGroupSizes[2]:=z;
+  if AutoCalcLocalSizes then begin
+    FLocalWorkGroupSizes[0]  :=  CalcLocalSize(x);
+    FLocalWorkGroupSizes[1]  :=  CalcLocalSize(y);
+    FLocalWorkGroupSizes[2]  :=  CalcLocalSize(z);
+    // todo setGlobalWorksize : 4 is the size of single make it variable
+  end else
+    FLocalWorkGroupSizesPtr := nil;
   FillChar(FGlobalOffsets,sizeof(FGlobalOffsets),0);
   if z>0 then begin
     FWorkItemDimensions:=3;
-    exit
-  end;
+  end else
   if y>0 then begin
     FWorkItemDimensions:=2;
-    exit
-  end;
-  FWorkItemDimensions:=1;
+  end else
+    FWorkItemDimensions:=1;
+  workItemSize := FLocalWorkGroupSizes[0];
+  for i:=1 to FWorkItemDimensions-1 do
+    workItemSize:=workItemSize*FLocalWorkGroupSizes[i];
+  if workItemSize*itemsize>FMaxWorkGroupSize then
+    FLocalWorkGroupSizesPtr:=nil
 end;
 
 procedure TOpenCL.SetLocalWorkGroupSizes(const x: size_t; const y: size_t;
@@ -558,6 +601,7 @@ begin
   FLocalWorkGroupSizes[0]:=x;
   FLocalWorkGroupSizes[1]:=y;
   FLocalWorkGroupSizes[2]:=z;
+  FLocalWorkGroupSizesPtr := @FLocalWorkGroupSizes[0];
 end;
 
 procedure TOpenCL.SetParamElementSizes(paramSizes: array of size_t);
@@ -656,22 +700,30 @@ begin
   result:=FDeviceCount
 end;
 
-function TOpenCL.Build(const params: ansistring): boolean;
+function TOpenCL.Build(const params: ansistring; const withKernels: TArray<ansistring>): boolean;
+const
+  {$if sizeOf(SizeInt)=8}
+  nInt='long';
+  {$else}
+  nInt='int';
+  {$endif}
 var
   src, par : PAnsiChar;
   sz       : size_t;
   szui     : cl_uint;
+  binSizes : TArray<size_t>;
 begin
   result:=False;
   src:=PAnsiChar(FProgramSource);
-{$ifdef DEBUG}
-  par:=PAnsiCHar('-cl-kernel-arg-info -cl-std=CL3.0 -cl-opt-disable -Werror -g '+params);
+{$ifdef _DEBUG}
+  par:=PAnsiCHar('-cl-kernel-arg-info -cl-std=CL3.0 -cl-opt-disable -Werror -Dn_int='+nInt+' -g '+params);
 {$else}
-  par:=PAnsiCHar('-cl-kernel-arg-info -cl-std=CL2.0 -cl-fast-relaxed-math -Werror -cl-mad-enable '+params);
+  par:=PAnsiCHar('-cl-kernel-arg-info -cl-std=CL2.0 -cl-fast-relaxed-math -Werror -Dn_int='+nInt+' -cl-mad-enable '+params);
 {$endif}
   FProgram:=clCreateProgramWithSource(FContext, 1, @src, nil, FErr);CheckError();
   FErr:=clBuildProgram(Fprogram, FDeviceCount, @FDevices[0], par, nil, nil);
   FErr:=clGetProgramBuildInfo(FProgram, FActiveDevice,CL_PROGRAM_BUILD_STATUS,cInfoSize,@FBuildStatus, sz);CheckError();
+  //assert(FBuildStatus = CL_BUILD_SUCCESS, 'Error building program '+intToStr(FBuildStatus));
   FErr:=clGetProgramBuildInfo(FProgram, FActiveDevice,CL_PROGRAM_BUILD_LOG,cInfoSize,@cinfo[0], sz);CheckError();
   FBuildLog:=trim(system.copy(cinfo,0, sz));
   assert(FBuildStatus=CL_BUILD_SUCCESS, '[OpenCL] : cannot compile tensor kernels :' + sLineBreak+ FBuildlog);
@@ -682,16 +734,51 @@ begin
       readln
     end;
 {$endif}
-    FErr:=clCreateKernelsInProgram(FProgram,0, nil, FKernelCount);CheckError();
-    setLength(FKernels,FKernelCount);
-    FErr:=clCreateKernelsInProgram(FProgram,FKernelCount, @FKernels[0], szui);CheckError();
-    FActiveKernelId:=-1;
-    if FKernelCount>0 then
-      SetActiveKernelId(0);
+    setLength(FBinaries, FDeviceCount);
+    setLength(binSizes, FDeviceCount);
+    FErr := clGetProgramInfo(Fprogram, CL_PROGRAM_BINARY_SIZES, FDeviceCount*sizeOf(pointer), pointer(binSizes), sz); checkError();
+    for sz:=0 to FDeviceCount-1 do
+      setLength(FBinaries[sz], binSizes[sz]);
+    FErr := clGetProgramInfo(Fprogram, CL_PROGRAM_BINARIES, FDeviceCount*sizeOf(pointer), pointer(FBinaries), sz); CheckError();
+    if not assigned(withKernels) and FAutoEnumKernels then begin
+      FErr:=clCreateKernelsInProgram(FProgram,0, nil, FKernelCount);CheckError();
+      setLength(FKernels,FKernelCount);
+      FErr:=clCreateKernelsInProgram(FProgram,FKernelCount, @FKernels[0], szui);CheckError();
+      FActiveKernelId:=-1;
+      if FKernelCount>0 then
+        SetActiveKernelId(0);
+    end else if assigned(withKernels) then
+      FKernels := getKernels(withKernels);
     FIsBuilt:=True;
     Result:=True
   end;
 //  if cinfo='' then cinfo:='Success';
+end;
+
+function TOpenCL.loadBinary(const bin: RawByteString; const withKernels: TArray<
+  ansistring>): boolean;
+var
+  sz:size_t;
+  szui : cl_uint;
+  binPtr:pointer;
+  binStatus: cl_int;
+begin
+  result := false;
+  sz := length(bin);
+  binPtr := @bin[1];
+  FProgram := clCreateProgramWithBinary(FContext, 1, @FActiveDevice, @sz, @binPtr, binStatus, FErr); CheckError();
+  result := binStatus=CL_SUCCESS;
+  if not assigned(withKernels) and FAutoEnumKernels then begin
+    FErr:=clCreateKernelsInProgram(FProgram,0, nil, FKernelCount);CheckError();
+    setLength(FKernels, FKernelCount);
+    FErr:=clCreateKernelsInProgram(FProgram,FKernelCount, @FKernels[0], szui);CheckError();
+    FActiveKernelId:=-1;
+    if FKernelCount>0 then
+      SetActiveKernelId(0);
+  end else if assigned(withKernels) then
+    FKernels := getKernels(withKernels);
+  FIsBuilt := true;
+  result := true
 end;
 
 function TOpenCL.readLog: ansistring;
@@ -700,6 +787,23 @@ var
 begin
   FErr:=clGetProgramBuildInfo(FProgram,FActiveDevice,CL_PROGRAM_BUILD_LOG,cInfoSize,@cinfo[0], sz);CheckError();
   result := cinfo
+end;
+
+function TOpenCL.getKernels(const Names: TArray<ansiString>): TArray<cl_kernel>;
+var i:SizeInt;res:cl_int;
+begin
+  assert(assigned(FProgram), 'No program was found, build a program from source 1st!.');
+  setLength(result, length(Names));
+  for i:=0 to high(Names) do begin
+    result[i] := clCreateKernel(FProgram, PAnsiChar(names[i]), FErr);
+    CheckError('Kernel ['+Names[i]+'] not found!');
+  end;
+  FKernelCount:=length(result);
+  FKernels:=result;
+  setLength(FKernelsInfo, length(names));
+  for i:=0 to high(names) do
+    FKernelsInfo[i] := KernelInfo(i);
+  FSIMDWidth := FKernelsInfo[0].KernelSIMDSize;
 end;
 
 function TOpenCL.KernelCount: integer;
@@ -843,6 +947,12 @@ begin
   FErr := clFinish(ActiveQueue); CheckError();
 end;
 
+procedure TOpenCL.DoActiveDeviceChange(const newDevice: cl_device_id;
+  const newQueue: cl_command_queue);
+begin
+  //
+end;
+
 procedure TOpenCL.waitForEvents(const N: longword; const events: pcl_event);
 begin
   if N= 0 then exit;
@@ -911,11 +1021,15 @@ begin
   if wasBuilt then
     Build;
   FActiveDeviceId:=AValue;
+  DoActiveDeviceChange(FActiveDevice, FQueue);
+
 end;
 
 procedure TOpenCL.SetActiveKernelId(AValue: integer);
 begin
   if FActiveKernelId=AValue then exit;
+  if not AValue<length(FKernels) then
+    Exception.create('Kernel index out of bounds!');
   FActiveKernel:=FKernels[AValue];
   FActiveKernelId:=AValue;
   FActiveKernelInfo := KernelInfo(AValue)
@@ -939,7 +1053,8 @@ begin
   FDevsTypeStr:='';
   for i:=0 to FDeviceCount-1 do
     begin
-      FErr:=clGetDeviceInfo(FDevices[i],CL_DEVICE_TYPE_INFO,SizeOf(size_t),@dt, sz);  CheckError();
+      FErr:=clGetDeviceInfo(FDevices[i],CL_DEVICE_TYPE_INFO, SizeOf(dt), @dt, sz);
+      CheckError();
       case dt of
         CL_DEVICE_TYPE_DEFAULT:begin FDevicesType[i]:=dtDefault;FDevsTypeStr:=FDevsTypeStr+#13#10'DEFAULT' end;
         CL_DEVICE_TYPE_CPU:begin FDevicesType[i]:=dtCPU;FDevsTypeStr:=FDevsTypeStr+#13#10'CPU' end;
@@ -952,7 +1067,7 @@ begin
     clReleaseContext(FContext);CheckError();
     FContext:=nil
   end;
-  FContext:=clCreateContext(nil,FDeviceCount,@FDevices[0],nil,nil,FErr);CheckError();
+  FContext:=clCreateContext(nil, FDeviceCount, @FDevices[0], nil, nil,FErr);CheckError();
   FActiveDeviceId:=-1;
   SetActiveDeviceId(0);
   FActivePlatformId:=AValue;

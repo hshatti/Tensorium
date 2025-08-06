@@ -2,6 +2,7 @@ unit nLSTMLayer;
 {$ifdef FPC}
 {$mode Delphi}
 {$endif}
+{$pointermath on}
 
 interface
 
@@ -168,29 +169,29 @@ begin
 {$endif}
 end;
 
-procedure fill_cpu(const N:SizeInt; const val:Single; dst:PSingle; const stride:SizeInt);
-begin
-  FillDWord(dst^, N, longWord(val))
-end;
-
-procedure copy_cpu(const N:SizeInt; const a:PSingle; const inca :SizeInt; b:PSingle; const incb:SizeInt);
-begin
-  move(a^, b^, N*sizeof(single))
-end;
-
-procedure axpy_cpu(const N:sizeInt; const a: single; const x:PSingle; const incx:SizeInt; y:PSingle; const incy:SizeInt);
-var i:sizeInt;
-begin
-  for i:=0 to N-1 do
-      y[i*incy] += a*x[i*incx]
-end;
-
-procedure mul_cpu(const N:SizeInt; const x:PSingle; incx:SizeInt; y:PSingle; const incy:SizeInt);
-var i:SizeInt;
-begin
-  for i:=0 to N-1 do
-      y[i*incy] *= x[i*incx]
-end;
+//procedure fill_cpu(const N:SizeInt; const val:Single; dst:PSingle; const stride:SizeInt);
+//begin
+//  FillDWord(dst^, N, plongWord(@val)^)
+//end;
+//
+//procedure copy_cpu(const N:SizeInt; const a:PSingle; const inca :SizeInt; b:PSingle; const incb:SizeInt);
+//begin
+//  move(a^, b^, N*sizeof(single))
+//end;
+//
+//procedure axpy_cpu(const N:sizeInt; const a: single; const x:PSingle; const incx:SizeInt; y:PSingle; const incy:SizeInt);
+//var i:sizeInt;
+//begin
+//  for i:=0 to N-1 do
+//      y[i*incy] += a*x[i*incx]
+//end;
+//
+//procedure mul_cpu(const N:SizeInt; const x:PSingle; incx:SizeInt; y:PSingle; const incy:SizeInt);
+//var i:SizeInt;
+//begin
+//  for i:=0 to N-1 do
+//      y[i*incy] *= x[i*incx]
+//end;
 
 {
 procedure forward_lstm_layer(var l: TLSTMLayer; const state: PNNetState);
@@ -580,10 +581,10 @@ begin
           TSingleTensor.addvv(outputStep, wg.output.data+offset, 1, ug.output.data+offset, 1, _g.Data, 1);
           TSingleTensor.addvv(outputStep, wo.output.data+offset, 1, uo.output.data+offset, 1, _o.Data, 1);
 
-          activate_array(_f.data, outputStep, acLOGISTIC);
-          activate_array(_i.data, outputStep, acLOGISTIC);
-          activate_array(_g.data, outputStep, acTANH);
-          activate_array(_o.data, outputStep, acLOGISTIC);
+          activate_array(pointer(_f.data), outputStep, acLOGISTIC);
+          activate_array(pointer(_i.data), outputStep, acLOGISTIC);
+          activate_array(pointer(_g.data), outputStep, acTANH);
+          activate_array(pointer(_o.data), outputStep, acLOGISTIC);
 
           TSingleTensor.mulvv(outputStep, _i.data, 1, _g.data, 1, temp.Data, 1);
 
@@ -620,7 +621,7 @@ end;
 procedure TLSTMLayer.backward(var state: TNNetState);
 var s : TNNetState;
   i, outputStep, offset:SizeInt;
-  dh : ^TSingleTensor;
+  dh : PSingleTensor;
   label done;
 begin
   {$ifdef USE_TELEMETRY}
@@ -670,25 +671,25 @@ begin
       TSingleTensor.addvv(outputStep, wg.output.data+offset, 1, ug.output.data+offset, 1, _g.data, 1);
       TSingleTensor.addvv(outputStep, wo.output.data+offset, 1, uo.output.data+offset, 1, _o.data, 1);
 
-      activate_array(_f.data, outputStep, acLOGISTIC);
-      activate_array(_i.data, outputStep, acLOGISTIC);
-      activate_array(_g.data, outputStep, acTANH);
-      activate_array(_o.data, outputStep, acLOGISTIC);
+      activate_array(pointer(_f.data), outputStep, acLOGISTIC);
+      activate_array(pointer(_i.data), outputStep, acLOGISTIC);
+      activate_array(pointer(_g.data), outputStep, acTANH);
+      activate_array(pointer(_o.data), outputStep, acLOGISTIC);
 
       delta.copyTo(temp3, 0, 1, offset, 1, outputStep);
 
       _c.copyTo(temp);
-      activate_array(temp.data, outputStep, acTANH);
+      activate_array(pointer(temp.data), outputStep, acTANH);
 
       TSingleTensor.mulvv(outputStep, temp3.data, 1, _o.data, 1, temp2.data, 1);
 
-      gradient_array(temp.data, outputStep, acTANH, temp2.data);
+      gradient_array(pointer(temp.data), outputStep, acTANH, pointer(temp2.data));
       temp2.add(dc);
 
       _c.CopyTo(temp);
-      activate_array(temp.data, outputStep, acTANH);
+      activate_array(pointer(temp.data), outputStep, acTANH);
       temp.Multiply(temp3);
-      gradient_array(_o.data, outputStep, acLOGISTIC, temp.data);
+      gradient_array(pointer(_o.data), outputStep, acLOGISTIC, pointer(temp.data));
       temp.copyTo(wo.delta, offset);
 
       if (i = 0) then
@@ -716,7 +717,7 @@ begin
       //backward_connected_layer(uo, @s);
 
       TSingleTensor.mulvv(outputStep, temp2.data, 1, _i.data, 1, temp.data, 1);
-      gradient_array(_g, outputStep, acTANH, temp.Data);
+      gradient_array(_g, outputStep, acTANH, pointer(temp.Data));
       temp.copyTo(wg.delta, offset);
       //copy_cpu(l.outputs * l.batch, l.temp_cpu, 1, wg.delta, 1);
 
@@ -746,7 +747,7 @@ begin
       TSingleTensor.mulvv(outputStep, temp2.data, 1, _g.Data, 1, temp.data, 1);
       //copy_cpu(l.outputs * l.batch, l.temp2_cpu, 1, l.temp_cpu, 1);
       //mul_cpu(l.outputs * l.batch, l.g_cpu, 1, l.temp_cpu, 1);
-      gradient_array(_i.data, outputStep, acLOGISTIC, temp.Data);
+      gradient_array(pointer(_i.data), outputStep, acLOGISTIC, pointer(temp.Data));
       temp.copyTo(wi.delta, offset);
       //copy_cpu(l.outputs * l.batch, l.temp_cpu, 1, wi.delta, 1);
 
@@ -776,7 +777,7 @@ begin
       TSingleTensor.mulvv(outputstep, temp2.data, 1, prevCell.data, 1, temp.data, 1);
       //copy_cpu(l.outputs * l.batch, l.temp2_cpu, 1, l.temp_cpu, 1);
       //mul_cpu(l.outputs * l.batch, l.prev_cell_cpu, 1, l.temp_cpu, 1);
-      gradient_array(_f.data, outputStep, acLOGISTIC, temp.Data);
+      gradient_array(pointer(_f.data), outputStep, acLOGISTIC, pointer(temp.Data));
       temp.CopyTo(wf.delta, offset);
       //copy_cpu(l.outputs * l.batch, l.temp_cpu, 1, wf.delta, 1);
       //if (i = 0) then

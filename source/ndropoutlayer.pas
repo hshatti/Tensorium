@@ -39,6 +39,7 @@ constructor TDropoutLayer.Create(const aBatch: SizeInt;
   const aHeight: SizeInt; const aWidth: SizeInt; const aDropblock: boolean;
   const aDropblock_size_rel: single; const aDropblock_size_abs: sizeInt);
 begin
+  assert(aProbability<1, '[Dropout.create] propability cannot be equal to or greated than One.');
   layerType := ltDROPOUT;
   probability := aProbability;
   dropBlock := aDropblock;

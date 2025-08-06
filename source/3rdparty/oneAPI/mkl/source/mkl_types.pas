@@ -1,3 +1,4 @@
+{$Z4}
 {$IFDEF FPC}
 {$mode delphi}
 {$PACKRECORDS C}
@@ -27,10 +28,20 @@ uses types;
   !      Intel(R) oneAPI Math Kernel Library (oneMKL) types definition
   !*************************************************************************** }
   { oneMKL Complex type for single precision  }
+{$include mkl.inc}
 {$ifndef MKL_Complex8}
 
   type
+
+{$if not declared(SizeInt)}
+    SizeInt = IntPtr;
+{$endif}
+{$if not declared(PPDouble)}
+    PPDouble = ^PDouble;
+{$endif}
+{$if not declared(PPSingle)}
     PPSingle = ^PSingle;
+{$endif}
     MKL_Complex8 = record
         real : single;
         imag : single;
@@ -76,7 +87,7 @@ uses types;
     MKL_INT64 = int64;
 
     PMKL_UINT64 = ^MKL_UINT64;
-    MKL_UINT64 = qword;    
+    MKL_UINT64 = UInt64;
 
 {$ifndef MKL_LP64}
 

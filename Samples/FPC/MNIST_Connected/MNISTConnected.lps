@@ -8,9 +8,8 @@
       <Unit>
         <Filename Value="MNISTConnected.pas"/>
         <IsPartOfProject Value="True"/>
-        <IsVisibleTab Value="True"/>
         <TopLine Value="27"/>
-        <CursorPos X="62" Y="55"/>
+        <CursorPos X="73" Y="52"/>
         <UsageCount Value="201"/>
         <Loaded Value="True"/>
       </Unit>
@@ -25,9 +24,10 @@
       <Unit>
         <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
         <UnitName Value="nConnectedlayer"/>
+        <IsVisibleTab Value="True"/>
         <EditorIndex Value="11"/>
-        <TopLine Value="981"/>
-        <CursorPos X="14" Y="1005"/>
+        <TopLine Value="231"/>
+        <CursorPos X="27" Y="261"/>
         <UsageCount Value="101"/>
         <Loaded Value="True"/>
       </Unit>
@@ -40,11 +40,10 @@
         <Loaded Value="True"/>
       </Unit>
       <Unit>
-        <Filename Value="..\..\..\source\nlogisticlayer.pas"/>
-        <UnitName Value="nLogisticLayer"/>
+        <Filename Value="..\..\..\source\nLogisticLayer.pas"/>
         <EditorIndex Value="20"/>
-        <TopLine Value="59"/>
-        <CursorPos Y="84"/>
+        <TopLine Value="72"/>
+        <CursorPos X="103" Y="169"/>
         <UsageCount Value="101"/>
         <Loaded Value="True"/>
       </Unit>
@@ -70,8 +69,7 @@
         <Filename Value="..\..\..\source\nbaselayer.pas"/>
         <UnitName Value="nBaseLayer"/>
         <EditorIndex Value="15"/>
-        <TopLine Value="767"/>
-        <CursorPos X="154" Y="806"/>
+        <CursorPos X="42" Y="8"/>
         <UsageCount Value="100"/>
         <Loaded Value="True"/>
       </Unit>
@@ -140,11 +138,10 @@
         <Loaded Value="True"/>
       </Unit>
       <Unit>
-        <Filename Value="..\..\..\source\nsoftmaxlayer.pas"/>
-        <UnitName Value="nSoftmaxLayer"/>
+        <Filename Value="..\..\..\source\nSoftmaxLayer.pas"/>
         <EditorIndex Value="21"/>
-        <TopLine Value="28"/>
-        <CursorPos X="8" Y="51"/>
+        <TopLine Value="11"/>
+        <CursorPos X="15" Y="27"/>
         <UsageCount Value="82"/>
         <Loaded Value="True"/>
       </Unit>
@@ -259,6 +256,7 @@
       </Unit>
       <Unit>
         <Filename Value="..\..\..\source\nnOpenCL.pas"/>
+        <IsVisibleTab Value="True"/>
         <WindowIndex Value="1"/>
         <TopLine Value="479"/>
         <CursorPos X="21" Y="50"/>
@@ -268,11 +266,10 @@
       <Unit>
         <Filename Value="..\..\..\source\nncuda.pas"/>
         <UnitName Value="nnCuda"/>
-        <IsVisibleTab Value="True"/>
         <EditorIndex Value="1"/>
         <WindowIndex Value="1"/>
-        <TopLine Value="68"/>
-        <CursorPos X="15" Y="90"/>
+        <TopLine Value="69"/>
+        <CursorPos X="40" Y="74"/>
         <UsageCount Value="24"/>
         <Loaded Value="True"/>
       </Unit>
@@ -340,10 +337,10 @@
         <DefaultSyntaxHighlighter Value="None"/>
       </Unit>
       <Unit>
-        <Filename Value="..\..\..\source\nrnnlayer.pas"/>
-        <UnitName Value="nRNNLayer"/>
+        <Filename Value="..\..\..\source\nRNNLayer.pas"/>
         <EditorIndex Value="17"/>
-        <CursorPos X="21" Y="25"/>
+        <TopLine Value="8"/>
+        <CursorPos X="45" Y="35"/>
         <UsageCount Value="12"/>
         <Loaded Value="True"/>
       </Unit>
@@ -375,55 +372,7 @@
       <Define6 Value="USE_OPENBLAS"/>
       <Define7 Value="USE_CUDART"/>
     </OtherDefines>
-    <JumpHistory HistoryIndex="24">
-      <Position>
-        <Filename Value="..\..\..\source\nncuda.pas"/>
-        <Caret Line="93" Column="17" TopLine="54"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\nncuda.pas"/>
-        <Caret Line="1221" TopLine="1211"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\nncuda.pas"/>
-        <Caret Line="90" Column="15" TopLine="71"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\nncuda.pas"/>
-        <Caret Line="1153" TopLine="1141"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\ntensors.pas"/>
-        <Caret Line="736" Column="51" TopLine="728"/>
-      </Position>
-      <Position>
-        <Filename Value="MNISTConnected.pas"/>
-        <Caret Line="56" Column="14" TopLine="44"/>
-      </Position>
-      <Position>
-        <Filename Value="MNISTConnected.pas"/>
-        <Caret Line="102" Column="20" TopLine="62"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\ntensors.pas"/>
-        <Caret Line="682" Column="15" TopLine="659"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\ntensors.pas"/>
-        <Caret Line="8370" Column="14" TopLine="8356"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\ntensors.pas"/>
-        <Caret Line="11472" Column="67" TopLine="11431"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\ntensors.pas"/>
-        <Caret Line="254" Column="14" TopLine="231"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\ntensors.pas"/>
-        <Caret Line="6855" Column="46" TopLine="6816"/>
-      </Position>
+    <JumpHistory HistoryIndex="29">
       <Position>
         <Filename Value="..\..\..\source\ntensors.pas"/>
         <Caret Line="6860" Column="16" TopLine="6821"/>
@@ -435,10 +384,6 @@
       <Position>
         <Filename Value="MNISTConnected.pas"/>
         <Caret Line="99" Column="30" TopLine="66"/>
-      </Position>
-      <Position>
-        <Filename Value="..\..\..\source\ntensors.pas"/>
-        <Caret Line="630" Column="15" TopLine="12514"/>
       </Position>
       <Position>
         <Filename Value="..\..\..\source\ntensors.pas"/>
@@ -476,6 +421,78 @@
         <Filename Value="MNISTConnected.pas"/>
         <Caret Line="55" Column="65" TopLine="30"/>
       </Position>
+      <Position>
+        <Filename Value="MNISTConnected.pas"/>
+        <Caret Line="52" Column="73" TopLine="27"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\nsoftmaxlayer.pas"/>
+        <Caret Line="27" Column="15" TopLine="11"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\nbaselayer.pas"/>
+        <Caret Line="86" Column="19" TopLine="77"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\nbaselayer.pas"/>
+        <Caret Line="191" Column="3" TopLine="187"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\nbaselayer.pas"/>
+        <Caret Line="10" Column="11"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\nbaselayer.pas"/>
+        <Caret Line="9" Column="26"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\nbaselayer.pas"/>
+        <Caret Line="10" Column="11"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\nbaselayer.pas"/>
+        <Caret Line="107" Column="28" TopLine="90"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\nbaselayer.pas"/>
+        <Caret Line="126" Column="23" TopLine="99"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\nbaselayer.pas"/>
+        <Caret Line="749" Column="3" TopLine="747"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\nbaselayer.pas"/>
+        <Caret Line="8" Column="42"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
+        <Caret Line="11"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\nlogisticlayer.pas"/>
+        <Caret Line="9" TopLine="5"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
+        <Caret Line="50" Column="26"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
+        <Caret Line="1056" Column="3" TopLine="1049"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
+        <Caret Line="31" Column="15" TopLine="24"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
+        <Caret Line="612" Column="3" TopLine="610"/>
+      </Position>
+      <Position>
+        <Filename Value="..\..\..\source\nconnectedlayer.pas"/>
+        <Caret Line="32" Column="15" TopLine="4"/>
+      </Position>
     </JumpHistory>
     <RunParams>
       <FormatVersion Value="2"/>
@@ -489,7 +506,7 @@
         <WatchScope Value="wpsLocal"/>
         <WatchKind Value="wpkWrite"/>
         <Source Value="..\..\..\source\nlogisticlayer.pas"/>
-        <Line Value="84"/>
+        <Line Value="81"/>
       </Item>
     </BreakPoints>
     <Watches>

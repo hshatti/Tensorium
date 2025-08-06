@@ -2,6 +2,7 @@ unit nContrastiveLayer;
 {$ifdef FPC}
 {$mode Delphi}
 {$endif}
+{$pointermath on}
 
 interface
 

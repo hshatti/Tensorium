@@ -9,19 +9,22 @@ unit NTypes;
 interface
 
 uses
-  SysUtils, nTensors
+  SysUtils
   {$if defined(FPC)}
   , FPImage, FPImgCanv
   , FPReadBMP, FPReadJPEG, FPReadPNG, FPReadTGA
   , FPWriteBMP, FPWriteJPEG, FPWritePNG, FPWriteTGA
-  {$elseif defined(FRAMEWORK_FMX)}
-  TypesUI, FMX.Graphics
-  {$elseif defined(FRAMEWORK_VCL)}
-  Graphics
+//  {$elseif defined(FRAMEWORK_FMX)}
+//  , UITypes, FMX.Graphics
+//  {$elseif defined(FRAMEWORK_VCL)}
+//  , Graphics
+  {$else}
+  , UITypes, FMX.Graphics
   {$endif}
   {$ifdef USE_OPENCL}
   , OpenCL
   {$endif}
+  ,  nTensors
   ;
 
 const
@@ -34,6 +37,8 @@ type
      A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q:Pointer;
   end;
 {$endif}
+
+  SizeInt = IntPtr;
 
 type
 
@@ -50,6 +55,7 @@ type
       adversarial : boolean;
       step, inputStep, deltaStep : SizeInt;
       prevLayer : TObject;
+      seen : PSizeInt;
       {$ifdef USE_OPENCL}
       events: TArray<cl_event>;
       ev    : TArray<cl_int>;
@@ -146,6 +152,18 @@ type
   PPImageData = ^PImageData;
   PImageData = ^TImageData;
 
+  PBoxAbs = ^TBoxabs;
+
+  { TBoxAbs }
+
+  TBoxAbs = record
+    left : single;
+    right : single;
+    top : single;
+    bot : single;
+    constructor  create(const aLeft, aTop, aRight, aBottom: single);
+  end;
+
   { TImageData }
 
   TImageData = record
@@ -169,15 +187,12 @@ type
     function resize(const aWidth, aHeight: SizeInt):TImageData;
     procedure Embed(var dst:TImageData ; const dx, dy : SizeInt);
     function letterBox(const aWidth, aHeight:SizeInt):TImageData;
+    function letterBoxEx(const aWidth, aHeight:SizeInt; var ratio:single; var dx, dy : SizeInt):TImageData;
+    procedure line(const x1, y1, x2, y2: SizeInt; const r, g, b: single; const alpha: single= 1; const aBatch:SizeInt = 0);
+    procedure rect(const x1, y1, x2, y2: SizeInt; const r, g, b: single; const alpha: single= 1; const aBatch:SizeInt = 0);  overload;
+    procedure rect(const x1, y1, x2, y2, w: SizeInt; const r, g, b: single; const alpha: single=1; const aBatch:SizeInt = 0);  overload;
+    procedure rect(const x1, y1, x2, y2, w: SizeInt; const brightness:single; const aBatch:SizeInt = 0);                     overload;
     property pixels[x, y, c:SizeInt]: Single read Getpixels write Setpixels;
-  end;
-
-  PBoxAbs = ^TBoxabs;
-  TBoxAbs = record
-    left : single;
-    right : single;
-    top : single;
-    bot : single;
   end;
 
   PDxrep = ^TDxrep;
@@ -254,6 +269,7 @@ type
     function iouKind(const b:TBox; const iou_kind:TIOULoss):single;
     function dx_iou(const truth: TBox; const iou_loss: TIOULoss):TDxrep;
     function toTblr():TBoxAbs;
+    function toStr():string;
     class function fromFloat(const f:PSingle; const stride:SizeInt=1):TBox;overload;static;
   end;
 
@@ -281,7 +297,7 @@ type
   TDetectionsHelper = record helper for TDetections
     //detections : TDetections;
   private
-    class function Comparer(const a, b: TDetection):SizeInt; static;
+    class function Comparer(const a, b: TDetection):SizeInt; static; WINAPI;
   public
     procedure doNMSObj(const classes: SizeInt; const thresh: single = 0.45);
     procedure doNMSSort(const classes: SizeInt; const thresh: single = 0.45);
@@ -447,7 +463,155 @@ const
 implementation
 uses math, typinfo, nChrono;
 
+{ TBoxAbs }
+
+constructor TBoxAbs.create(const aLeft, aTop, aRight, aBottom: single);
+begin
+  left := aLeft;
+  top := aTop;
+  left := aLeft;
+  bot := aBottom;
+end;
+
 { TImageData }
+
+procedure swap(var a,b:SizeInt); overload;
+var s:SizeInt;
+begin
+  s:=a;
+  a:=b;
+  b:=s
+end;
+
+procedure draw_line(const a: TImageData; x1, y1, x2, y2: SizeInt; const r, g, b: single; const alpha: single; const aBatch:SizeInt = 0);
+var x, y, w, h, idx:  SizeInt;
+    aspect, v: single;
+    ver, hor:boolean;
+    c: Integer;
+    rgb:array[0..2] of single;
+    batchSize:SizeInt;
+begin
+  if not assigned(a.data) then exit;
+  
+  rgb[0]:=r;rgb[1]:=g;rgb[2]:=b;
+  if x1>x2 then swap(x1,x2);
+  if y1>y2 then swap(x1,x2);
+  x1:=EnsureRange(x1,0, a.w-1);
+  y1:=EnsureRange(y1,0, a.h-1);
+  x2:=EnsureRange(x2,0, a.w-1);
+  y2:=EnsureRange(y2,0, a.h-1);
+
+  w := x2 - x1;
+  h := y2 - y1;
+  ver := w=0;
+  hor := h=0;
+
+  //if a.c=3 then begin
+    batchSize := a.c * a.h * a.w ;
+  //end;
+  if  hor then begin
+      for c :=0 to 2 do
+        for x:=x1 to x2 do begin
+            idx :=aBatch*batchSize + c*a.h*a.w + y1*a.w + x;
+            v:= a.data[idx];
+            a.data[idx] := (rgb[c]-v)*alpha +v;
+        end;
+    exit
+  end;
+
+  if ver then begin
+      for c :=0 to 2 do
+        for y:=y1 to y2 do begin
+            idx :=aBatch*batchSize + c*a.h*a.w + y*a.w + x1;
+            v:= a.data[idx];
+            a.data[idx] := (rgb[c]-v)*alpha +v;
+        end;
+    exit
+  end;
+
+  aspect := h/w;
+  for c :=0 to 2 do
+    for x:=x1 to x2 do begin
+        y:= y1 + round((x-x1)*aspect);
+        idx :=aBatch*batchSize + c*a.h*a.h + y*a.w + x;
+        v:= a.data[idx];
+        a.data[idx] := (rgb[c]-v)*alpha +v;
+    end;
+
+end;
+
+procedure draw_box(const a: TImageData; x1, y1, x2, y2: SizeInt; const r, g, b: single; const alpha: single; const aBatch:SizeInt = 0);
+var
+    i, c: SizeInt;
+    r1, g1, b1, r2, g2, b2:single;
+begin
+    if alpha =0 then exit;
+
+    draw_line(a, x1,y1,x2,y1, r, g, b, alpha, aBatch);
+    draw_line(a, x1,y2,x2,y2, r, g, b, alpha, aBatch);
+
+    draw_line(a, x1,y1,x1,y2, r, g, b, alpha, aBatch);
+    draw_line(a, x2,y1,x2,y2, r, g, b, alpha, aBatch);
+
+end;
+
+procedure draw_box_width(const a: TImageData; const x1, y1, x2, y2, w: SizeInt; const r, g, b: single; const alpha: single; const aBatch:SizeInt = 0);
+var
+    i: SizeInt;
+begin
+    if alpha =0 then exit;
+    for i := 0 to w -1 do
+        draw_box(a, x1+i, y1+i, x2-i, y2-i, r, g, b, alpha, aBatch)
+end;
+
+procedure draw_box_bw(const a: TImageData; x1, y1, x2, y2: SizeInt; const brightness: single; const aBatch:SizeInt = 0);
+var
+    i: SizeInt;
+    batchSize:SizeInt;
+begin
+    batchSize := a.w*a.h;
+    if (x1 < 0) then
+        x1 := 0;
+    if (x1 >= a.w) then
+        x1 := a.w-1;
+    if x2 < 0 then
+        x2 := 0;
+    if x2 >= a.w then
+        x2 := a.w-1;
+    if y1 < 0 then
+        y1 := 0;
+    if y1 >= a.h then
+        y1 := a.h-1;
+    if y2 < 0 then
+        y2 := 0;
+    if y2 >= a.h then
+        y2 := a.h-1;
+    for i := x1 to x2 do
+        begin
+            a.data[aBatch*batchSize + i+y1 * a.w+0 * a.w * a.h] := brightness;
+            a.data[aBatch*batchSize + i+y2 * a.w+0 * a.w * a.h] := brightness
+        end;
+    for i := y1 to y2 do
+        begin
+            a.data[aBatch*batchSize + x1+i * a.w+0 * a.w * a.h] := brightness;
+            a.data[aBatch*batchSize + x2+i * a.w+0 * a.w * a.h] := brightness
+        end
+end;
+
+procedure draw_box_width_bw(const a: TImageData; const x1, y1, x2, y2, w: SizeInt; const brightness: single; const aBatch:SizeInt = 0);
+var
+    i: SizeInt;
+    alternate_color: single;
+begin
+    for i := 0 to w -1 do
+        begin
+            if (w mod 2)<>0 then
+                alternate_color := (brightness)
+            else
+                alternate_color := (1.0-brightness);
+            draw_box_bw(a, x1+i, y1+i, x2-i, y2-i, alternate_color, aBatch)
+        end
+end;
 
 function TImageData.Getpixels(x, y, _c: SizeInt): Single;
 begin
@@ -475,7 +639,12 @@ begin
   w := src.w();
   h := src.h();
   c := src.Size() div src.Area();
-  setLength(Data, w*h*c );
+  if c mod 3 = 0 then begin
+    n := c div 3;
+    c:= 3;
+  end else
+    n:=1;
+  setLength(Data, w*h*c*n );
   move(src.Data[0], Data[0], src.size()*SizeOf(single));
 end;
 
@@ -525,8 +694,33 @@ begin
 end;
 
 {$else}
+var
+  img : TBitmap;
+  imData : TBitmapData;
+  p : TAlphaColorRec;
+  x, y, imSize : SizeInt;
 begin
-
+  n := 1;
+  c := 3;
+  img := TBitmap.Create;
+  try
+      img.LoadFromFile(fileName);
+      img.Map(TMapAccess.ReadWrite, imData);
+      w := img.Width;
+      h := img.Height;
+      imSize := h*w;
+      setLength(data, 3*imSize);
+      for y := 0 to h-1 do
+        for x := 0 to w-1 do begin
+           p.Color := imData.GetPixel(x,  y);  // nearst neighor
+           data[           y*w + x]:=p.r/$ff;
+           data[1*imSize + y*w + x]:=p.g/$ff;
+           data[2*imSize + y*w + x]:=p.b/$ff;
+        end;
+  finally
+    img.Unmap(imData);
+    freeAndNil(img)
+  end;
 end;
 {$endif}
 
@@ -541,14 +735,15 @@ begin
   c := 3;
   n := length(filenames);
   setLength(data, n*resizeHeight*resizeWidth*c);
+  w := resizeWidth;
+  h := resizeHeight;
+  imSize := resizeHeight*resizeWidth;
   try
     for i:=0 to n-1 do begin
       img.LoadFromFile(fileNames[i]);
       _w := img.Width;
       _h := img.Height;
-      w := resizeWidth;
-      h := resizeHeight;
-      imSize := resizeHeight*resizeWidth;
+
       for y := 0 to resizeHeight-1 do
         for x := 0 to resizeWidth-1 do begin
            p := img.Colors[ round(_w * x / resizeWidth),  round(_h * y / resizeHeight)];  // nearst neighor
@@ -562,8 +757,36 @@ begin
   end;
 end;
 {$else}
+var
+  img : TBitmap;
+  imData : TBitmapData;
+  p : TAlphaColorRec;
+  x, y, imSize, _h, _w, i : SizeInt;
 begin
-
+  n:= length(fileNames);
+  c := 3;
+  img := TBitmap.Create;
+  setLength(Data, n*resizeHeight*resizeWidth*c);
+  w := resizeWidth;
+  h := resizeHeight;
+  imSize := resizeHeight*resizeWidth;
+  for i := 0 to High(fileNames) do
+    try
+        img.LoadFromFile(fileNames[i]);
+        img.Map(TMapAccess.ReadWrite, imData);
+        _w := img.Width;
+        _h := img.Height;
+        for y := 0 to resizeHeight-1 do
+          for x := 0 to resizeWidth-1 do begin
+             p.Color := imData.GetPixel( round(_w * x / resizeWidth),  round(_h * y / resizeHeight));  // nearst neighor
+             data[i*3*imSize +            y*resizeWidth + x] :=p.R/$ff;
+             data[i*3*imSize + 1*imSize + y*resizeWidth + x] :=p.G/$ff;
+             data[i*3*imSize + 2*imSize + y*resizeWidth + x] :=p.B/$ff;
+          end;
+    finally
+      img.Unmap(imData);
+      freeAndNil(img)
+    end;
 end;
 {$endif}
 
@@ -687,13 +910,64 @@ begin
         end
     else
         begin
-            new_h := h;
+            new_h := aHeight;
             new_w := (self.w * aHeight) div self.h
         end;
     resized := resize(new_w, new_h);
     result := TImageData.Create(aWidth, aHeight, self.c);
     result.fill(0.5);
     resized.embed(result, (aWidth-new_w) div 2, (aHeight-new_h) div 2);
+end;
+
+function TImageData.letterBoxEx(const aWidth, aHeight: SizeInt; var ratio: single; var dx, dy: SizeInt): TImageData;
+var
+    new_w, new_h: SizeInt;
+    resized: TImageData;
+begin
+    new_w := self.w;
+    new_h := self.h;
+    if (aWidth / self.w) < (aHeight / self.h) then
+        begin
+            new_w := aWidth;
+            new_h := (self.h * aWidth) div self.w;
+            ratio := aWidth / self.w
+        end
+    else
+        begin
+            new_h := aHeight;
+            new_w := (self.w * aHeight) div self.h;
+            ratio := aHeight / self.h
+        end;
+    resized := resize(new_w, new_h);
+    result := TImageData.Create(aWidth, aHeight, self.c);
+    result.fill(0.5);
+    dx := (aWidth  - new_w) div 2;
+    dy := (aHeight - new_h) div 2;
+    resized.embed(result, dx, dy);
+end;
+
+procedure TImageData.line(const x1, y1, x2, y2: SizeInt; const r, g, b: single;
+  const alpha: single; const aBatch: SizeInt);
+begin
+  draw_line(self, x1, y1, x2, y2, r, g, b, alpha, aBatch)
+end;
+
+procedure TImageData.rect(const x1, y1, x2, y2: SizeInt; const r, g, b: single;
+  const alpha: single; const aBatch: SizeInt);
+begin
+  draw_box(self, x1, y1, x2, y2, r, g, b, alpha, aBatch)
+end;
+
+procedure TImageData.rect(const x1, y1, x2, y2, w: SizeInt; const r, g,
+  b: single; const alpha: single; const aBatch: SizeInt);
+begin
+  draw_box_width(self, x1, y1, x2, y2, w, r, g, b, alpha, aBatch)
+end;
+
+procedure TImageData.rect(const x1, y1, x2, y2, w: SizeInt;
+  const brightness: single; const aBatch: SizeInt);
+begin
+  draw_box_width_bw(self, x1, y1, x2, y2, w, brightness, aBatch)
 end;
 
 { TCoord }
@@ -953,7 +1227,7 @@ begin
     ba := centroidBox(b);
     _w := ba.right - ba.left;
     _h := ba.bot - ba.top;
-    c := _w*w + _h*_h;
+    c := _w*_w + _h*_h;
     _iou := iou(b);
     if c = 0 then
         exit(_iou);
@@ -1260,6 +1534,11 @@ begin
     result.bot := y+(h / 2);
     result.left := x-(w / 2);
     result.right := x+(w / 2);
+end;
+
+function TBox.toStr: string;
+begin
+  result := format('[TBox] x=%.4f, y=%.4f, w=%.4f, h=%.4f', [x, y, w, h])
 end;
 
 class function TBox.fromFloat(const f: PSingle; const stride: SizeInt): TBox;

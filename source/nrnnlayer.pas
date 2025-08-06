@@ -2,6 +2,7 @@ unit nRNNLayer;
 {$ifdef FPC}
 {$mode Delphi}
 {$endif}
+{$pointermath on}
 
 interface
 
@@ -128,10 +129,11 @@ begin
 end;
 
 procedure fill_cpu(const N:SizeInt; const val:single; P:PSingle; const stride:SizeInt);
-var i:SizeInt;
+var i:SizeInt; v:longword;
 begin
+  v := plongword(@val)^;
   if stride=1 then begin
-      FillDWord(p^, N, DWord(val));
+      FillDWord(p^, N, v);
       exit
   end;
   for i:=0 to N-1 do
@@ -170,7 +172,7 @@ begin
     s.inputStep:=j;
     outputLayer.forward(s);
     if state.isTraining then
-        write(#13, 'FW RNN [',state.index,'] ', 100*i/steps:3:0,'%');
+        //write(#13, 'FW RNN [',state.index,'] ', 100*i/steps:3:0,'%');
 
 end;
 
@@ -210,7 +212,7 @@ begin
   s.inputStep := i;
   s.deltaStep := i;
   inputLayer.backward(s);
-  write(#13, 'BW RNN [',state.index,'] ', 100*i/steps:3:0,'%');
+  //write(#13, 'BW RNN [',state.index,'] ', 100*i/steps:3:0,'%');
 end;
 
 procedure TRNNLayer.forward(var state: TNNetState);
@@ -487,7 +489,7 @@ begin
           s.inputStep:=j;
           outputLayer.forwardGPU(s);
 
-          if state.isTraining then write(#13, 'FW RNN [',state.index,'] ', 100*i/steps:3:0,'%')
+          //if state.isTraining then write(#13, 'FW RNN [',state.index,'] ', 100*i/steps:3:0,'%')
           //if l.steps = 1 then break;
 
           //state.input.data := state.input.data + inputStep;
@@ -596,7 +598,7 @@ begin
       //increment_layer(l.inputLayer, -1);
       //increment_layer(l.selfLayer, -1);
       //increment_layer(l.outputLayer, -1);
-      write(#13, 'BW RNN [',state.index,'] ', 100*i/steps:3:0,'%')
+      //write(#13, 'BW RNN [',state.index,'] ', 100*i/steps:3:0,'%')
 
   end;
   //finally
@@ -706,7 +708,7 @@ begin
           s.inputStep:=j;
           outputLayer.forwardGPU(s);
 
-          if state.isTraining then write(#13, 'FW RNN [',state.index,'] ', 100*i/steps:3:0,'%')
+          //if state.isTraining then write(#13, 'FW RNN [',state.index,'] ', 100*i/steps:3:0,'%')
           //if l.steps = 1 then break;
 
           //state.input.data := state.input.data + inputStep;
@@ -815,7 +817,7 @@ begin
       //increment_layer(l.inputLayer, -1);
       //increment_layer(l.selfLayer, -1);
       //increment_layer(l.outputLayer, -1);
-      write(#13, 'BW RNN [',state.index,'] ', 100*i/steps:3:0,'%')
+      //write(#13, 'BW RNN [',state.index,'] ', 100*i/steps:3:0,'%')
 
   end;
   //finally

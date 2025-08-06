@@ -1,3 +1,4 @@
+{$Z4}
 unit clblast;
 
 {$ifdef FPC}

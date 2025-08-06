@@ -53,7 +53,9 @@ uses SysUtils
 , Posix.Dlfcn
 {$endif}
 {$elseif defined(MACOS) or defined(DARWIN)}
+  {$ifdef FPC}
   {$LinkFramework OpenCL}
+  {$endif}
 {$endif}
 ;
 const
@@ -63,7 +65,7 @@ const
 
 type
   PSizeInt = ^SizeInt;
-  SizeInt  = nativeint;
+  SizeInt  = IntPtr;
   intptr_t    = IntPtr;
   psize_t     = ^size_t;
   size_t      = IntPtr;
@@ -1290,28 +1292,28 @@ begin
   end;
 end;
 
-var hLib : {$if defined(MSWINDOWS)}THandle {$else}Pointer{$endif};
-    {$if defined(MSWINDOWS)}
-      getProc : function(h :THandle; name:LPCSTR):pointer;winapi;
+var hLib : {$if defined(MSWINDOWS) or defined(POSIX)}THandle {$else}Pointer{$endif};
+    {$if defined(MSWINDOWS) or defined(POSIX)}
+      getProc : function(h :THandle; name:PChar):pointer;  {$if not defined(POSIX)}WINAPI;{$endif}
 
     {$else}
-      getProc : function(h :pointer; name:PAnsiChar):pointer; WINAPI;
+      getProc : function(h :pointer; name:PAnsiChar):pointer;
     {$endif}
 initialization
-  {$if defined(MSWINDOWS)}
+  {$if defined(MSWINDOWS) or defined(POSIX)}
       hLib := LoadLibrary('OpenCL.dll');
   {$elseif defined(ANDROID) or defined(LINUX)}
     hLib := dlopen('libOpenCL.so',RTLD_NOW);
   {$endif}
 
-  {$if defined(MSWINDOWS)}
+  {$if defined(MSWINDOWS) or defined(POSIX)}
      getProc := getProcAddress;
   {$else}
      getProc := dlsym;
   {$endif}
 
   {$if (not defined(MACOS)) and (not defined(DARWIN))}
-  if hLib<>{$ifdef MSWINDOWS}0{$else}nil{$endif} then
+  if hLib<>{$if defined(MSWINDOWS) or defined(POSIX)}0{$else}nil{$endif} then
     begin
       clGetPlatformIDs             := getProc(hLib, 'clGetPlatformIDs');
       clGetPlatformInfo            := getProc(hLib, 'clGetPlatformInfo');
@@ -1384,7 +1386,7 @@ initialization
    {$endif}
 
 finalization
-    {$if defined(MSWINDOWS)}
+    {$if defined(MSWINDOWS) or defined(POSIX)}
     if hLib<>0 then FreeLibrary(hLib);
     {$elseif not (defined(DARWIN) or defined(MACOS))}
     if Assigned(hLib) then dlclose(hLib);

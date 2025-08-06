@@ -93,10 +93,10 @@ function setCursorPos(const x, y:integer):ansistring;
 procedure resetModes();
 function setFont(font : byte):ansistring;
 
-procedure curserUp(const count: integer=1);
-procedure curserDown(const count: integer=1);
-procedure curserLeft(const count: integer=1);
-procedure curserRight(const count: integer=1);
+procedure cursorUp(const count: integer=1);
+procedure cursorDown(const count: integer=1);
+procedure cursorLeft(const count: integer=1);
+procedure cursorRight(const count: integer=1);
 procedure cursorAbsPos(const x:integer=1; const y:integer=1);
 procedure cursorScrollUp(const count:integer=1);
 procedure cursorScrollDown(const count:integer=1);
@@ -200,22 +200,22 @@ begin
   result := #$1B'[1'+intToStr(font)+'m';
 end;
 
-procedure curserUp(const count: integer);
+procedure cursorUp(const count: integer);
 begin
   write(#$1B'[',count, 'A')
 end;
 
-procedure curserDown(const count: integer);
+procedure cursorDown(const count: integer);
 begin
   write(#$1B'[',count, 'B')
 end;
 
-procedure curserLeft(const count: integer);
+procedure cursorLeft(const count: integer);
 begin
   write(#$1B'[',count, 'C')
 end;
 
-procedure curserRight(const count: integer);
+procedure cursorRight(const count: integer);
 begin
   write(#$1B'[',count, 'D')
 end;

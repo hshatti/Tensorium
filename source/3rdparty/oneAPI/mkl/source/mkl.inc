@@ -1,5 +1,6 @@
-{$MACRO ON}
+{$Z4}
 {$IFDEF FPC}
+{$MACRO ON}
 {$PACKRECORDS C}
 {$ENDIF}
 
@@ -11,6 +12,11 @@
   {$define LOWERCASE_DECL}
 {$endif}
 
+{$ifdef CPUX64}
+  {$define MKL_ILP64}
+{$else}
+  {$define MKL_LP64}
+{$endif}
 
 {$if defined(MKL_TBB) or defined(MKL_OMP) or defined(MKL_SEQUENTIAL)}
   {$ifdef MSWINDOWS}

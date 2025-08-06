@@ -7,36 +7,44 @@ unit nnCuda;
 {$ModeSwitch typehelpers}
 {$endif}
 {$PointerMath ON}
+{$T-}
 interface
 
 uses
-  SysUtils,
-
+  SysUtils, TypInfo,
   cudart, cudarttypes,
-  {$if defined(USE_CUDA)}
   cudaTypes, cuda,
-  {$endif}
   cublas_api, nvrtc, nOpMetrics;
 
 
 type
-  TCUMem = pointer;
-
+  //PCUMem = ^TCUMem;
+  //PCUMem = pointer;
+  //TCUMem = pointer;
+  TDataType = (dtUnknowen, dtHalf, dtBF16, dtSingle, dtDouble, dtComplexHalf, dtComplexSingle, dtComplexBf16, dtComplexDouble, dtINT16, dtINT8, dtINT4);
   TCudaParams = array[0..15] of pointer;
 
   { TCudaParamsHelper }
 
-  TCudaParamsHelper = record helper for TCudaParams
-    constructor Create(const p0 : pointer ; p1 : pointer = nil; p2 : pointer = nil; p3 : pointer = nil; p4 : pointer = nil; p5 : pointer = nil; p6 : pointer = nil; p7 : pointer = nil; p8 : pointer = nil; p9 : pointer = nil; p10 : pointer = nil; p11 : pointer = nil; p12 : pointer = nil; p13 : pointer = nil; p14 : pointer = nil; p15 : pointer = nil);
-  end;
+//  TCudaParamsHelper = record helper for TCudaParams
+//    constructor Create(const p0 : pointer ; p1 : pointer = nil; p2 : pointer = nil; p3 : pointer = nil; p4 : pointer = nil; p5 : pointer = nil; p6 : pointer = nil; p7 : pointer = nil; p8 : pointer = nil; p9 : pointer = nil; p10 : pointer = nil; p11 : pointer = nil; p12 : pointer = nil; p13 : pointer = nil; p14 : pointer = nil; p15 : pointer = nil);
+//  end;
 
   { TNNCuda }
 
-  TNNCuda = class
+  TNNCuda<T> = class
+  const
+    NUM_THREADS = $200;
+    COPY_DIMX = 8;
+    COPY_DIMY = 8;
+
+  type
+    PCUMem = ^TCUMem;
+    TCUMem = ^T;
   private
     FJitOptionsValues : TArray<pointer>;
     FLibOptionsValues : TArray<pointer>;
-    {$if defined(USE_CUDA)}
+    //{$if defined(USE_CUDA)}
     FKernels : TArray<CUKernel>;
     FJitOptions : TArray<CUjit_option>;
     FLibOptions : TArray<CULibraryOption>;
@@ -44,55 +52,57 @@ type
     function GetlibraryOptions(lo: CUlibraryOption): pointer;
     procedure SetjitOptions(jo: CUjit_option; AValue: pointer);
     procedure SetlibraryOptions(lo: CUlibraryOption; AValue: pointer);
-    {$else}
-    FKernels : TArray<cudaKernel_t>;
-    FJitOptions : TArray<cudaJitOption>;
-    FLibOptions : TArray<cudaLibraryOption>;
-    function GetjitOptions(jo: cudaJitOption): pointer;
-    function GetlibraryOptions(lo: cudaLibraryOption): pointer;
-    procedure SetjitOptions(jo: cudaJitOption; AValue: pointer);
-    procedure SetlibraryOptions(lo: cudaLibraryOption; AValue: pointer);
-    {$endif}
-    {$if defined(USE_CUDA)}
+    //{$else}
+    //FKernels : TArray<cudaKernel_t>;
+    //FJitOptions : TArray<cudaJitOption>;
+    //FLibOptions : TArray<cudaLibraryOption>;
+    //function GetjitOptions(jo: cudaJitOption): pointer;
+    //function GetlibraryOptions(lo: cudaLibraryOption): pointer;
+    //procedure SetjitOptions(jo: cudaJitOption; AValue: pointer);
+    //procedure SetlibraryOptions(lo: cudaLibraryOption; AValue: pointer);
+    //{$endif}
+    //{$if defined(USE_CUDA)}
     class function cudaLibraryLoadData(&library : PCUlibrary ; const code : pointer ; jitOptions : PCUjit_option ; jitOptionsValues : PPointer ; numJitOptions : longword ; libraryOptions : PCUlibraryOption ; libraryOptionValues : PPointer; numLibraryOptions : longword):CUresult; static;
-    class function cudaLibraryLoadFromFile(&library : PCUlibrary; const fileName:pchar; jitOptions : PCUjit_option; jitOptionsValues : PPointer; numJitOptions: longword ; libraryOptions : PCUlibraryOption ; libraryOptionValues : PPointer; numLibraryOptions : longword):CUresult; static;
-    class function cudaLibraryGetKernel(pKernel : PCUkernel; const &library : CUlibrary; const name : pchar):CUresult; static;
+    class function cudaLibraryLoadFromFile(&library : PCUlibrary; const fileName:pansichar; jitOptions : PCUjit_option; jitOptionsValues : PPointer; numJitOptions: longword ; libraryOptions : PCUlibraryOption ; libraryOptionValues : PPointer; numLibraryOptions : longword):CUresult; static;
+    class function cudaLibraryGetKernel(pKernel : PCUkernel; const &library : CUlibrary; const name : pansichar):CUresult; static;
 
     class function cudaLaunchKernel(const func:pointer; const gridDim:dim3; const blockDim:dim3; const args:Ppointer; const sharedMem:size_t; const stream:CUStream):CUresult;   static;
     class function cudaStreamCreate(stream: PCUStream):CUresult;   static;
     class function cudaLibraryUnload(const &library : CUlibrary):CUResult; static;
     class function cudaStreamDestroy(const stream: CUStream):CUresult; static;
-    {$endif}
+    //{$endif}
+    class function getTypeStr():shortstring; static;
+    class function getType():TDataType;static;
   public
-    {$if defined(USE_CUDA)}
+    //{$if defined(USE_CUDA)}
     stream : CUStream;
     ctx : CUContext;
-    {$else}
-    stream : cudaStream_t;
-    {$endif}
+    //{$else}
+    //stream : cudaStream_t;
+    //{$endif}
     properties : cudaDeviceProp;
     rtVersionMajor, rtVersionMinor : longint;
     prog : nvrtcProgram;
-    {$if defined(USE_CUDA)}
+    //{$if defined(USE_CUDA)}
     nnLib : CUlibrary;
-    {$else}
-    nnLib : cudaLibrary_t;
-    {$endif}
+    //{$else}
+    //nnLib : cudaLibrary_t;
+    //{$endif}
     useBLAS : integer;
     cublas: cublasHandle_t;
-    {$if defined(USE_CUDA)}
+    //{$if defined(USE_CUDA)}
     property jitOptions[jo:CUjit_option] : pointer read GetjitOptions write SetjitOptions;
     property libraryOptions[jo:CUlibraryOption] : pointer read GetlibraryOptions write SetlibraryOptions;
-    {$else}
-    property jitOptions[jo:cudaJitOption] : pointer read GetjitOptions write SetjitOptions;
-    property libraryOptions[jo:cudaLibraryOption] : pointer read GetlibraryOptions write SetlibraryOptions;
-    {$endif}
+    //{$else}
+    //property jitOptions[jo:cudaJitOption] : pointer read GetjitOptions write SetjitOptions;
+    //property libraryOptions[jo:cudaLibraryOption] : pointer read GetlibraryOptions write SetlibraryOptions;
+    //{$endif}
     class function deviceCount() : longint;
     constructor Create(deviceIndex: longint = 0);
     destructor Destroy();  override;
     function CompileLog:ansistring;
     function createDeviceBuffer(const N:SizeInt):TCUMem;
-    procedure freeDeviceBuffer(var cudaMem:TCUMem);
+    procedure freeDeviceBuffer(cudaMem:TCUMem);
     procedure readBuffer(const cudaMem: TCUMem; const bufferSize: size_t; const buffer:pointer);
     procedure writeBuffer(const cudaMem: TCUMem; const bufferSize: size_t; const buffer: pointer);
     procedure ActivateArray(const N: SizeInt; const x: TCUMem; const offset: SizeInt; const activation: longint);
@@ -100,31 +110,31 @@ type
     procedure DeriveArray(const N: SizeInt; const x: TCUMem; const offset:SizeInt; const activation: longint; delta: TCUMem);
     procedure forwardBias(const dstSize: SizeInt; const dst: TCUMem; const offset:SizeInt; const srcSize: SizeInt; const src: TCUMem; const incb: SizeInt; const batch: SizeInt);
     procedure backwardBias(const dstSize: SizeInt; const dst: TCUMem; const srcSize: SizeInt; const src: TCUMem; const srcOffset:SizeInt; const incb: SizeInt ; const batch: SizeInt);
-    procedure gemm(const transA, transB :boolean; const M, N, K:SizeInt; const ALPHA:single; const A:PSingle; const aOffset:SizeInt; const lda:SizeInt; const B:PSingle; const bOffset:SizeInt; const ldb:SizeInt; const BETA: single; const C:PSingle; const cOffset:SizeInt; const ldc:SizeInt);
+    procedure gemm(const transA, transB :boolean; const M, N, K:SizeInt; const ALPHA:T; const A:TCUMem; const aOffset:SizeInt; const lda:SizeInt; const B:TCUMem; const bOffset:SizeInt; const ldb:SizeInt; const BETA: T; const C:TCUMem; const cOffset:SizeInt; const ldc:SizeInt);
     procedure gemmBatched(const transA, transB: boolean; const M, N, K: SizeInt;
-      const ALPHA: Single; const A: PPSingle; const aOffset: SizeInt;
-      const lda: SizeInt; const B: PPSingle; const bOffset: SizeInt;
-      const ldb: SizeInt; const BETA: Single; const C: PPSingle;
+      const ALPHA: T; const A: PCUmem; const aOffset: SizeInt;
+      const lda: SizeInt; const B: PCUMem; const bOffset: SizeInt;
+      const ldb: SizeInt; const BETA: T; const C: PCUMem;
       const cOffset: SizeInt; const ldc: SizeInt; const batchCount: SizeInt);
-    procedure gemmStridedBatched(const transA, transB :boolean; const M, N, K:SizeInt; const ALPHA:Single; A:PSingle; const aOffset:SizeInt; const lda:SizeInt; const strideA:SizeInt; B:PSingle; const bOffset:SizeInt; const ldb:SizeInt; const strideB:SizeInt; const BETA: Single; C:PSingle; const cOffset:SizeInt; const ldc:SizeInt; const strideC:SizeInt; const batchCount : SizeInt);
+    procedure gemmStridedBatched(const transA, transB :boolean; const M, N, K:SizeInt; const ALPHA:T; A:TCUMem; const aOffset:SizeInt; const lda:SizeInt; const strideA:SizeInt; B:TCUMem; const bOffset:SizeInt; const ldb:SizeInt; const strideB:SizeInt; const BETA: T; C:TCUMem; const cOffset:SizeInt; const ldc:SizeInt; const strideC:SizeInt; const batchCount : SizeInt);
     procedure addvv(const N:SizeInt; const src1:TCUMem; const src1Offset, inca:SizeInt; const src2:TCUMem; const src2Offset, incb:SizeInt; dst:TCUMem; const dstOffset, incc:SizeInt);
     procedure subvv(const N:SizeInt; const src1:TCUMem; const src1Offset, inca:SizeInt; const src2:TCUMem; const src2Offset, incb:SizeInt; dst:TCUMem; const dstOffset, incc:SizeInt);
     procedure mulvv(const N:SizeInt; const src1:TCUMem; const src1Offset, inca:SizeInt; const src2:TCUMem; const src2Offset, incb:SizeInt; dst:TCUMem; const dstOffset, incc:SizeInt);
     procedure fmavv(const N: SizeInt; const src1: TCUMem; const src1Offset, inca: SizeInt; const src2: TCUMem; const src2Offset, incb: SizeInt; const src3: TCUMem; const src3Offset, incc: SizeInt; dst: TCUMem; const dstOffset, incd: SizeInt);
-    procedure axpy(const N:SizeInt; const a:single; const x:TCUMem; const xOffset:SizeInt; const incx:SizeInt; const y:TCUMem; const yOffset:SizeInt; const incy:sizeInt);
-    procedure power(const N:SizeInt; const x:TCUMem; const xOffset:SizeInt; const incx:SizeInt; const a:single; const y:TCUMem; const yOffset:SizeInt; const incy:sizeInt);
-    procedure scale(const N:SizeInt; const a:Single; const x:TCUMem; const stride:SizeInt);
+    procedure axpy(const N:SizeInt; const a:T; const x:TCUMem; const xOffset:SizeInt; const incx:SizeInt; const y:TCUMem; const yOffset:SizeInt; const incy:sizeInt);
+    procedure power(const N:SizeInt; const x:TCUMem; const xOffset:SizeInt; const incx:SizeInt; const a:T; const y:TCUMem; const yOffset:SizeInt; const incy:sizeInt);
+    procedure scale(const N:SizeInt; const a:T; const x:TCUMem; const stride:SizeInt);
     procedure crossEntropyLogistic(const N:SizeInt; const pred, truth: TCUMem; delta, error: TCUMem);
-    procedure fill(const N:SizeInt; const x: TCUMem; const offset:SizeInt; const val:single; const stride :SizeInt);
+    procedure fill(const N:SizeInt; const x: TCUMem; const offset:SizeInt; const val:T; const stride :SizeInt);
     procedure copy(const N:SizeInt; const src:TCUMem; const srcOffset, inca:SizeInt; const dst:TCUMem; const dstOffset, incb:SizeInt);
-    procedure softmaxBatch(const N: SizeInt; const input: TCUMem; const iOffset: SizeInt; const batch, batch_size, groups, group_size, stride: SizeInt; const temp: single; const output: TCUMem; const oOffset: SizeInt);
+    procedure softmaxBatch(const N: SizeInt; const input: TCUMem; const iOffset: SizeInt; const batch, batch_size, groups, group_size, stride: SizeInt; const temp: T; const output: TCUMem; const oOffset: SizeInt);
     procedure crossEntropySoftmax(const N:SizeInt; const pred, truth: TCUMem; delta, error: TCUMem);
     procedure forwardMaxPool(const aBatch, outC, outH, outW: SizeInt; const input: TCUMem; const c, h, w: SizeInt; const stride_x, stride_y, padding, kernelSize: SizeInt; indexes, output: TCUMem);
     procedure backwardMaxPool(const aBatch, outC, outH, outW : SizeInt; output:TCUMem; const indexes, delta : TCUMem);
     procedure im2col(const aChannels, aHeight, aWidth , kernelHeight, kernelWidth, padHeight, padWidth , strideY, strideX, dilationY, dilationX : SizeInt ; const im :TCUMem; const imOffset : SizeInt ; const col:TCUMem; const colOffset:SizeInt);
     procedure col2im(const aChannels, aHeight, aWidth, kernelHeight, kernelWidth, padHeight, padWidth, strideY, strideX, dilationY, dilationX: SizeInt; const col: TCUMem; const colOffset: SizeInt; const im: TCUMem; const imOffset: SizeInt);
-    procedure upSample(const aBatch, aChannels, outHeight, outWidth: SizeInt; const &in: TCUMem;const stride: SizeInt; const isForward: longint; const scale: single; const &out: TCUMem; const zeroIn :integer = 0);
-    procedure fmavss(const N: SizeInt; const src: TCUMem; const offset: SizeInt; const scalar, bias: single; dst : TCUMem);
+    procedure upSample(const aBatch, aChannels, outHeight, outWidth: SizeInt; const &in: TCUMem;const stride: SizeInt; const isForward: longint; const scale: T; const &out: TCUMem; const zeroIn :integer = 0);
+    procedure fmavss(const N: SizeInt; const src: TCUMem; const offset: SizeInt; const scalar, bias: T; dst : TCUMem);
     procedure meansAndVars(const srcSize, dstSize, groups:sizeInt; const src:TCUMem; const offset:sizeInt; means, vars:TCUMem);
     procedure means(const srcSize, dstSize, groups:sizeInt; const src:TCUMem; const offset:sizeInt; means:TCUMem);
     procedure variances(const srcSize, dstSize, groups:sizeInt; const src:TCUMem; const offset:sizeInt; means, vars:TCUMem);
@@ -134,72 +144,88 @@ type
     procedure addDots(const N, dstSize, groups:SizeInt; const src1, src2:TCUMem; const srcOffset:SizeInt; dst:TCUMem);
     procedure forwardScale(const dstSize: SizeInt; const dst: TCUMem; const offset :SizeInt; const scaleSize: SizeInt; const scale: TCUMem; const incb: SizeInt ; const batch: SizeInt);
     procedure forwardScaleAdd(const dstSize: SizeInt; const dst: TCUMem; const offset :SizeInt; const scaleSize: SizeInt; const scales, biases: TCUMem; const incb: SizeInt ; const batch: SizeInt);
-    procedure forwardDropout(const N: SizeInt; const src: TCUMem; const probability, scale: single; rnd: TCUMem; dst: TCUMem);
-    procedure backwardDropout(const N: SizeInt; const src: TCUMem; const probability, scale: single; const rnd: TCUMem; dst: TCUMem);
+    procedure forwardDropout(const N: SizeInt; const src: TCUMem; const probability, scale: T; rnd: TCUMem; dst: TCUMem);
+    procedure backwardDropout(const N: SizeInt; const src: TCUMem; const probability, scale: T; const rnd: TCUMem; dst: TCUMem);
     procedure costL2(const N:SizeInt; const pred ,truth, delta, error: TCUMem);
+    procedure clamp(const N:SizeInt; const alpha :T; const src, dst: TCUMem; const stride: SizeInt =1; offset : SizeInt =0);
+    procedure inverseSqrt(const N:SizeInt; const alpha :T; const src, dst: TCUMem; const stride: SizeInt =1; offset : SizeInt =0);
 
     procedure finish();
     function compileToCUBIN(const code, name: ansistring; const headers: TArray<PAnsiChar> = nil; const includeNames: TArray<PAnsiChar> = nil): RawByteString;
     procedure loadCUBIN(const cubin : RawByteString);
-    function compileFile(const filename : string):RawByteString;
-    procedure loadCUBinFile(const filename: string);
+    function compileFile(const filename : ansistring):RawByteString;
+    procedure loadCUBinFile(const filename: ansistring);
     // procedure halfTest (//  const N : SizeInt; a:TCUMem; b:TCUMem ; c:TCUMem);
 
+  const
+    kernelNames : array[0..46] of PAnsiChar =(
+      'clamp',
+      'inverse_sqrt',
+      'means_vars_delta_fast',
+      'vars',
+      'means',
+      'power',
+      'fmav',
+      'mulv',
+      'cost_l2',
+      'backward_dropout',
+      'forward_dropout',
+      'forward_scale_add',
+      'forward_scale',
+      'add_dots',
+      'norm_delta',
+      'means_vars_delta',
+      'normblkvv',
+      'normvs',
+      'normvv',
+      'means_vars',
+      'fmavss',
+      'upsample',
+      'Xcol2imKernelNormal',
+      'Xcol2imKernelFlip',
+      'Xim2colKernelNormal',
+      'Xim2colKernelFlip',
+      'im2col',
+      'crossEntropySoftmax',
+      'softmaxBatch',
+      'backward_maxpool',
+      'forward_maxpool',
+      'copy',
+      'fill',
+      'crossEntropyLogistics',
+      'scale',
+      'axpy',
+      'subv',
+      'addv',
+      'backward_bias',
+      'gradient_array',
+      'array_activate_swish',
+      'activate_array',
+      'forward_bias',
+      'sgemm1_tn',
+      'sgemm1_nt',
+      'sgemm2_nn',
+      'sgemm1_nn'
+    );
+
   end;
+const
+  TDataTypeNames : array[0.. ord(high(TDataType))] of shortstring =
+    ('Unknowen', 'Half', 'BF16', 'Single', 'Double', 'ComplexHalf', 'ComplexSingle', 'ComplexBf16', 'ComplexDouble', 'INT16', 'INT8', 'INT4');
 
 procedure SAFE_CALL(const res : cudaError_t);inline;   overload;
+procedure SAFE_CALL(const res : cublasStatus_t);  inline;overload;
+//{$if defined(USE_CUDA)}
+procedure SAFE_CALL(const res : CUresult);inline ; overload;
+//{$endif}
+procedure SAFE_CALL_RTC(const res : nvrtcResult); inline;  overload;
+
+function ceil(const a, b: SizeInt):SizeInt;  overload;
+procedure EuclidGCD( a, b: SizeInt; var p, q, r:SizeInt);inline;
 
 //var
 //  cuda : TNNCuda;
 implementation
-
-const kernelNames : array[0..44] of PAnsiChar =(
-  'means_vars_delta_fast',
-  'vars',
-  'means',
-  'power',
-  'fmav',
-  'mulv',
-  'cost_l2',
-  'backward_dropout',
-  'forward_dropout',
-  'forward_scale_add',
-  'forward_scale',
-  'add_dots',
-  'norm_delta',
-  'means_vars_delta',
-  'normblkvv',
-  'normvs',
-  'normvv',
-  'means_vars',
-  'fmavss',
-  'upsample',
-  'Xcol2imKernelNormal',
-  'Xcol2imKernelFlip',
-  'Xim2colKernelNormal',
-  'Xim2colKernelFlip',
-  'im2col',
-  'crossEntropySoftmax',
-  'softmaxBatch',
-  'backward_maxpool',
-  'forward_maxpool',
-  'copy',
-  'fill',
-  'crossEntropyLogistics',
-  'scale',
-  'axpy',
-  'subv',
-  'addv',
-  'backward_bias',
-  'gradient_array',
-  'array_avtivate_swish',
-  'activate_array',
-  'forward_bias',
-  'sgemm1_tn',
-  'sgemm1_nt',
-  'sgemm2_nn',
-  'sgemm1_nn'
-);
 
 //procedure SAFE_CALL(const res : CUresult);inline;     overload;
 //var str:PAnsiChar;
@@ -208,28 +234,28 @@ const kernelNames : array[0..44] of PAnsiChar =(
 //  assert(res=CUDA_SUCCESS, str)
 //end;
 
-procedure SAFE_CALL(const res : cudaError_t);inline;   overload;
+procedure SAFE_CALL(const res : cudaError_t);
 var str:PAnsiChar;
 begin
   str := cudaGetErrorString(res);
-  assert(res=cudaSuccess, str)
+  assert(res=cudaSuccess, string(str))
 end;
 
-procedure SAFE_CALL(const res : cublasStatus_t); inline;  overload;
+procedure SAFE_CALL(const res : cublasStatus_t);
 var str:PAnsiChar;
 begin
   str := cublasGetStatusString(res);
-  assert(res=CUBLAS_STATUS_SUCCESS, str)
+  assert(res=CUBLAS_STATUS_SUCCESS, string(str))
 end;
 
-{$if defined(USE_CUDA)}
-procedure SAFE_CALL(const res : CUresult); inline;  overload;
+//{$if defined(USE_CUDA)}
+procedure SAFE_CALL(const res : CUresult);
 var str:PAnsiChar;
 begin
   cuGetErrorString(res, @str);
-  assert(res=CUDA_SUCCESS, str)
+  assert(res=CUDA_SUCCESS, string(str))
 end;
-{$endif}
+//{$endif}
 
 //procedure SAFE_CALL(const res : cublasStatus); inline;  overload;
 //var str:PAnsiChar;
@@ -239,48 +265,48 @@ end;
 //end;
 
 
-procedure SAFE_CALL_RTC(const res : nvrtcResult); inline;  overload;
+procedure SAFE_CALL_RTC(const res : nvrtcResult);
 var
   str:PAnsiChar;
 begin
   str := nvrtcGetErrorString(res);
-  assert(res=NVRTC_SUCCESS, str)
+  assert(res=NVRTC_SUCCESS, string(str))
 end;
 
 { TCudaParamsHelper }
 
-constructor TCudaParamsHelper.Create(const p0: pointer; p1: pointer;
-  p2: pointer; p3: pointer; p4: pointer; p5: pointer; p6: pointer; p7: pointer;
-  p8: pointer; p9: pointer; p10: pointer; p11: pointer; p12: pointer;
-  p13: pointer; p14: pointer; p15: pointer);
-begin
-  self := default(TCudaParams);
-  self[0] := p0;
-  self[1] := p1;
-  self[2] := p2;
-  self[3] := p3;
-  self[4] := p4;
-  self[5] := p5;
-  self[6] := p6;
-  self[7] := p7;
-  self[8] := p8;
-  self[9] := p9;
-  self[10] := p10;
-  self[11] := p11;
-  self[12] := p12;
-  self[13] := p13;
-  self[14] := p14;
-  self[15] := p15;
-
-end;
+//constructor TCudaParamsHelper.Create(const p0: pointer; p1: pointer;
+//  p2: pointer; p3: pointer; p4: pointer; p5: pointer; p6: pointer; p7: pointer;
+//  p8: pointer; p9: pointer; p10: pointer; p11: pointer; p12: pointer;
+//  p13: pointer; p14: pointer; p15: pointer);
+//begin
+//  self := default(TCudaParams);
+//  self[0] := p0;
+//  self[1] := p1;
+//  self[2] := p2;
+//  self[3] := p3;
+//  self[4] := p4;
+//  self[5] := p5;
+//  self[6] := p6;
+//  self[7] := p7;
+//  self[8] := p8;
+//  self[9] := p9;
+//  self[10] := p10;
+//  self[11] := p11;
+//  self[12] := p12;
+//  self[13] := p13;
+//  self[14] := p14;
+//  self[15] := p15;
+//
+//end;
 
 { TNNCuda }
 
-{$if defined(USE_CUDA)}
-function TNNCuda.GetjitOptions(jo: CUjit_option): pointer;
-{$else}
-function TNNCuda.GetjitOptions(jo: cudaJitOption): pointer;
-{$endif}
+//{$if defined(USE_CUDA)}
+function TNNCuda<T>.GetjitOptions(jo: CUjit_option): pointer;
+//{$else}
+//function TNNCuda<T>.GetjitOptions(jo: cudaJitOption): pointer;
+//{$endif}
 var i:sizeInt;
 begin
   for i:=0 to High(FJitOptions) do
@@ -288,11 +314,11 @@ begin
       exit(FJitOptionsValues[i])
 end;
 
-{$if defined(USE_CUDA)}
-function TNNCuda.GetlibraryOptions(lo: CUlibraryOption): pointer;
-{$else}
-function TNNCuda.GetlibraryOptions(lo: cudaLibraryOption): pointer;
-{$endif}
+//{$if defined(USE_CUDA)}
+function TNNCuda<T>.GetlibraryOptions(lo: CUlibraryOption): pointer;
+//{$else}
+//function TNNCuda<T>.GetlibraryOptions(lo: cudaLibraryOption): pointer;
+//{$endif}
 var i:sizeInt;
 begin
   for i:=0 to High(FJitOptions) do
@@ -300,11 +326,11 @@ begin
       exit(FLibOptionsValues[i])
 end;
 
-{$if defined(USE_CUDA)}
-procedure TNNCuda.SetjitOptions(jo: CUjit_option; AValue: pointer);
-{$else}
-procedure TNNCuda.SetjitOptions(jo: cudaJitOption; AValue: pointer);
-{$endif}
+//{$if defined(USE_CUDA)}
+procedure TNNCuda<T>.SetjitOptions(jo: CUjit_option; AValue: pointer);
+//{$else}
+//procedure TNNCuda<T>.SetjitOptions(jo: cudaJitOption; AValue: pointer);
+//{$endif}
 var i:sizeInt;
 begin
   for i:=0 to High(FJitOptions) do
@@ -321,11 +347,11 @@ begin
   insert(AValue, FJitOptionsValues, 0);
 end;
 
-{$if defined(USE_CUDA)}
-procedure TNNCuda.SetlibraryOptions(lo: CUlibraryOption; AValue: pointer);
-{$else}
-procedure TNNCuda.SetlibraryOptions(lo: cudaLibraryOption; AValue: pointer);
-{$endif}
+//{$if defined(USE_CUDA)}
+procedure TNNCuda<T>.SetlibraryOptions(lo: CUlibraryOption; AValue: pointer);
+//{$else}
+//procedure TNNCuda<T>.SetlibraryOptions(lo: cudaLibraryOption; AValue: pointer);
+//{$endif}
 var i:sizeInt;
 begin
   for i:=0 to High(FLibOptions) do
@@ -342,8 +368,8 @@ begin
   insert(AValue, FLibOptionsValues, 0);
 end;
 
-{$if defined(USE_CUDA)}
-class function TNNCuda.cudaLibraryLoadData(&library: PCUlibrary;
+//{$if defined(USE_CUDA)}
+class function TNNCuda<T>.cudaLibraryLoadData(&library: PCUlibrary;
   const code: pointer; jitOptions: PCUjit_option; jitOptionsValues: PPointer;
   numJitOptions: longword; libraryOptions: PCUlibraryOption;
   libraryOptionValues: PPointer; numLibraryOptions: longword): CUresult;
@@ -351,52 +377,75 @@ begin
   result := cuLibraryLoadData(&library, code, jitOptions, jitOptionsValues, numJitOptions, libraryOptions, libraryOptionValues, numLibraryOptions);
 end;
 
-class function TNNCuda.cudaLibraryLoadFromFile(&library: PCUlibrary;
-  const fileName: pchar; jitOptions: PCUjit_option; jitOptionsValues: PPointer;
+class function TNNCuda<T>.cudaLibraryLoadFromFile(&library: PCUlibrary;
+  const fileName: pansichar; jitOptions: PCUjit_option; jitOptionsValues: PPointer;
   numJitOptions: longword; libraryOptions: PCUlibraryOption;
   libraryOptionValues: PPointer; numLibraryOptions: longword): CUresult;
 begin
   result := cuLibraryLoadFromFile(&library, filename, jitOptions, jitOptionsValues, numJitOptions, libraryOptions, libraryOptionValues, numLibraryOptions);
 end;
 
-class function TNNCuda.cudaLibraryGetKernel(pKernel: PCUkernel;
-  const &library: CUlibrary; const name: pchar): CUresult;
+class function TNNCuda<T>.cudaLibraryGetKernel(pKernel: PCUkernel;
+  const &library: CUlibrary; const name: pansichar): CUresult;
 begin
   result := cuLibraryGetKernel(pKernel, &library, name);
 end;
 
-class function TNNCuda.cudaLaunchKernel(const func: pointer;
+class function TNNCuda<T>.cudaLaunchKernel(const func: pointer;
   const gridDim: dim3; const blockDim: dim3; const args: Ppointer;
   const sharedMem: size_t; const stream: CUStream): CUresult;
 var cuFunc : CUFunction;
 begin
   SAFE_CALL(cuKernelGetFunction(@cuFunc, func));
-  result := cuLaunchKernel(cuFunc, gridDim.x, gridDim.y, gridDim.x, blockDim.x, blockDim.y, blockDim.z, sharedMem, stream, args, nil)
+  result := cuLaunchKernel(cuFunc, gridDim.x, gridDim.y, gridDim.z, blockDim.x, blockDim.y, blockDim.z, sharedMem, stream, args, nil)
 end;
 
-class function TNNCuda.cudaStreamCreate(stream: PCUStream): CUresult;
+class function TNNCuda<T>.cudaStreamCreate(stream: PCUStream): CUresult;
 begin
   result := cuStreamCreate(stream, CU_STREAM_DEFAULT);
 end;
 
-class function TNNCuda.cudaLibraryUnload(const &library: CUlibrary): CUResult;
+class function TNNCuda<T>.cudaLibraryUnload(const &library: CUlibrary): CUResult;
 begin
   result := cuLibraryUnload(&library);
 end;
 
-class function TNNCuda.cudaStreamDestroy(const stream: CUStream): CUresult;
+class function TNNCuda<T>.cudaStreamDestroy(const stream: CUStream): CUresult;
 begin
   result := cuStreamDestroy(stream);
 end;
+//{$endif}
 
-{$endif}
+class function TNNCuda<T>.getTypeStr(): shortstring;
+begin
+  result := lowerCase(PTypeInfo(TypeInfo(T)).Name);
+  if result = 'single' then
+    result:='float'
+end;
 
-class function TNNCuda.deviceCount(): longint;
+class function TNNCuda<T>.getType(): TDataType;
+var aname : shortstring;
+begin
+  aname := LowerCase(PTypeInfo(TypeInfo(T)).name);
+  if aname='bf16' then exit(dtBF16);
+  if aname='half' then exit(dtHalf);
+  if aname='single' then exit(dtSingle);
+  if aname='double' then exit(dtDouble);
+  if aname='complexhalf' then exit(dtComplexHalf);
+  if aname='complexbf16' then exit(dtComplexBf16);
+  if aname='complexsingle' then exit(dtComplexSingle);
+  if aname='complexdouble' then exit(dtComplexDouble);
+  if aname='int16' then exit(dtINT16);
+  if aname='int8' then exit(dtINT8);
+  if aname='int4' then exit(dtINT4)
+end;
+
+class function TNNCuda<T>.deviceCount(): longint;
 begin
   SAFE_CALL(cudaGetDeviceCount(@result))
 end;
 
-constructor TNNCuda.Create(deviceIndex: longint);
+constructor TNNCuda<T>.Create(deviceIndex: longint);
 begin
   SAFE_CALL(cudaRuntimeGetVersion(@rtVersionMajor));
   rtVersionMinor:=rtVersionMajor mod 1000;
@@ -417,7 +466,7 @@ begin
   nnLib := nil;
 end;
 
-destructor TNNCuda.Destroy();
+destructor TNNCuda<T>.Destroy();
 begin
   if assigned(nnLib) then
     SAFE_CALL(cudaLibraryUnload(nnlib));
@@ -427,7 +476,7 @@ begin
 
 end;
 
-function TNNCuda.CompileLog: ansistring;
+function TNNCuda<T>.CompileLog: ansistring;
 var
   progSize: size_t;
 begin
@@ -436,18 +485,18 @@ begin
   SAFE_CALL_RTC(nvrtcGetProgramLog(prog, pointer(result)));
 end;
 
-function TNNCuda.createDeviceBuffer(const N: SizeInt): TCUMem;
+function TNNCuda<T>.createDeviceBuffer(const N: SizeInt): TCUMem;
 begin
   SAFE_CALL(cudaMalloc(@result, N));
 end;
 
-procedure TNNCuda.freeDeviceBuffer(var cudaMem: TCUMem);
+procedure TNNCuda<T>.freeDeviceBuffer(cudaMem: TCUMem);
 begin
   SAFE_CALL(cudaFree(cudaMem));
   cudaMem := nil
 end;
 
-procedure TNNCuda.readBuffer(const cudaMem: TCUMem; const bufferSize: size_t; const buffer: pointer);
+procedure TNNCuda<T>.readBuffer(const cudaMem: TCUMem; const bufferSize: size_t; const buffer: pointer);
 begin
 {$ifdef USE_TELEMETRY}
   tensorMetrics.start(opDeviceToHost);
@@ -460,7 +509,7 @@ begin
 {$endif}
 end;
 
-procedure TNNCuda.writeBuffer(const cudaMem: TCUMem; const bufferSize: size_t; const buffer: pointer);
+procedure TNNCuda<T>.writeBuffer(const cudaMem: TCUMem; const bufferSize: size_t; const buffer: pointer);
 begin
 {$ifdef USE_TELEMETRY}
   tensorMetrics.start(opHostToDevice);
@@ -472,8 +521,7 @@ begin
 {$endif}
 end;
 
-const NUM_THREADS = $200;
-procedure TNNCuda.ActivateArray(const N: SizeInt; const x: TCUMem; const offset: SizeInt; const activation: longint);
+procedure TNNCuda<T>.ActivateArray(const N: SizeInt; const x: TCUMem; const offset: SizeInt; const activation: longint);
 const kernelId = 5;
 var
   num_grids: SizeInt;
@@ -493,7 +541,7 @@ begin
   {$endif}
 end;
 
-procedure TNNCuda.activateArraySWISH(const N: SizeInt; const x: TCUMem; const offset: SizeInt; const output_sigmoid, output: TCUMem);
+procedure TNNCuda<T>.activateArraySWISH(const N: SizeInt; const x: TCUMem; const offset: SizeInt; const output_sigmoid, output: TCUMem);
 const kernelId = 6;
 var
   num_grids: SizeInt;
@@ -511,7 +559,7 @@ begin
   {$endif}
 end;
 
-procedure TNNCuda.DeriveArray(const N: SizeInt; const x: TCUMem; const offset: SizeInt; const activation: longint; delta: TCUMem);
+procedure TNNCuda<T>.DeriveArray(const N: SizeInt; const x: TCUMem; const offset: SizeInt; const activation: longint; delta: TCUMem);
 const kernelId = 7;
 var
   num_grids: SizeInt;
@@ -531,7 +579,7 @@ begin
   {$endif}
 end;
 
-procedure TNNCuda.forwardBias(const dstSize: SizeInt; const dst: TCUMem; const offset: SizeInt; const srcSize: SizeInt; const src: TCUMem; const incb: SizeInt; const batch: SizeInt);
+procedure TNNCuda<T>.forwardBias(const dstSize: SizeInt; const dst: TCUMem; const offset: SizeInt; const srcSize: SizeInt; const src: TCUMem; const incb: SizeInt; const batch: SizeInt);
 const kernelId=4;
 var
   blockSize, bOffset, num_grids: SizeInt;
@@ -551,7 +599,7 @@ begin
 {$endif}
 end;
 
-procedure TNNCuda.backwardBias(const dstSize: SizeInt; const dst: TCUMem;
+procedure TNNCuda<T>.backwardBias(const dstSize: SizeInt; const dst: TCUMem;
   const srcSize: SizeInt; const src: TCUMem; const srcOffset: SizeInt;
   const incb: SizeInt; const batch: SizeInt);
 const kernelId = 8;
@@ -573,12 +621,11 @@ begin
 {$endif}
 end;
 
-procedure TNNCuda.gemm(const transA, transB: boolean; const M, N, K: SizeInt;
-  const ALPHA: single;
-  const A: PSingle; const aOffset: SizeInt; const lda: SizeInt;
-  const B: PSingle; const bOffset: SizeInt; const ldb: SizeInt;
-  const BETA: single;
-  const C: PSingle; const cOffset: SizeInt; const ldc: SizeInt);
+procedure TNNCuda<T>.gemm(const transA, transB: boolean; const M, N,
+  K: SizeInt; const ALPHA: T; const A: TCUMem; const aOffset: SizeInt;
+  const lda: SizeInt; const B: TCUMem; const bOffset: SizeInt;
+  const ldb: SizeInt; const BETA: T; const C: TCUMem; const cOffset: SizeInt;
+  const ldc: SizeInt);
 const dimThr:dim3 =(x: 8; y:16; z:1);
 var
   kernelId: Integer;
@@ -625,7 +672,18 @@ begin
   //SAFE_CALL(cublasSetWorkspace(cublas, workspace, workspaceSize));
 
   if useBLAS = 1 then begin
-    SAFE_CALL(cublasSgemm(cublas, cublasOperation_t(transB), cublasOperation_t(transA), N, M, K, @ALPHA, B+bOffset, ldb, A+aOffset, lda, @BETA, C+cOffset, ldc{, cublasComputeType_t.CUBLAS_COMPUTE_32F, cublasGemmAlgo_t.CUBLAS_GEMM_ALGO0}));
+    case getType() of
+      dtHalf   :
+        SAFE_CALL(cublasHgemm(cublas, cublasOperation_t(transB), cublasOperation_t(transA), N, M, K, @ALPHA, PHalf(B)+bOffset, ldb, PHalf(A)+aOffset, lda, @BETA, PHalf(C)+cOffset, ldc{, cublasComputeType_t.CUBLAS_COMPUTE_32F, cublasGemmAlgo_t.CUBLAS_GEMM_ALGO0}));
+      dtSingle :
+        SAFE_CALL(cublasSgemm(cublas, cublasOperation_t(transB), cublasOperation_t(transA), N, M, K, @ALPHA, PSingle(B)+bOffset, ldb, PSingle(A)+aOffset, lda, @BETA, PSingle(C)+cOffset, ldc{, cublasComputeType_t.CUBLAS_COMPUTE_32F, cublasGemmAlgo_t.CUBLAS_GEMM_ALGO0}));
+        //SAFE_CALL(cublasGemmEx(cublas, cublasOperation_t(transB), cublasOperation_t(transA)
+        //, N, M, K, @ALPHA, PSingle(B)+bOffset, CUDA_R_32F, ldb, PSingle(A)+aOffset, CUDA_R_32F, lda
+        //, @BETA, PSingle(C)+cOffset, CUDA_R_32F, ldc
+        //, CUBLAS_COMPUTE_32F_FAST_TF32, CUBLAS_GEMM_DEFAULT));
+      dtDouble :
+        SAFE_CALL(cublasDgemm(cublas, cublasOperation_t(transB), cublasOperation_t(transA), N, M, K, @ALPHA, PDouble(B)+bOffset, ldb, PDouble(A)+aOffset, lda, @BETA, PDouble(C)+cOffset, ldc{, cublasComputeType_t.CUBLAS_COMPUTE_32F, cublasGemmAlgo_t.CUBLAS_GEMM_ALGO0}));
+    end;
     goto done;// yes goto! and there is nothing you can do about it!
   end;
 
@@ -666,11 +724,11 @@ done:
 {$endif}
 end;
 
-procedure TNNCuda.gemmBatched(const transA, transB: boolean; const M, N,
-  K: SizeInt; const ALPHA: Single; const A: PPSingle; const aOffset: SizeInt;
-  const lda: SizeInt; const B: PPSingle; const bOffset: SizeInt;
-  const ldb: SizeInt; const BETA: Single; const C: PPSingle;
-  const cOffset: SizeInt; const ldc: SizeInt; const batchCount: SizeInt);
+procedure TNNCuda<T>.gemmBatched(const transA, transB: boolean; const M, N,
+  K: SizeInt; const ALPHA: T; const A: PCUmem; const aOffset: SizeInt;
+  const lda: SizeInt; const B: PCUMem; const bOffset: SizeInt;
+  const ldb: SizeInt; const BETA: T; const C: PCUMem; const cOffset: SizeInt;
+  const ldc: SizeInt; const batchCount: SizeInt);
 
 const dimThr:dim3 =(x: 8; y:32; z:1);
 var
@@ -687,8 +745,16 @@ begin
     //SAFE_CALL(cublasSetWorkspace(cublas, workspace, workspaceSize));
 
     if useBLAS = 1 then begin
-    SAFE_CALL(cublasSgemmBatched_64(cublas, cublasOperation_t(transB), cublasOperation_t(transA), N, M, K,
-      @ALPHA, B, ldb, A, lda, @BETA, C, ldc, batchCount));
+      case getType() of
+        dtHalf :
+          SAFE_CALL(cublasHgemmBatched(cublas, cublasOperation_t(transB), cublasOperation_t(transA), N, M, K, @ALPHA, PPHalf(B), ldb, PPHalf(A), lda, @BETA, PPHalf(C), ldc, batchCount));
+        dtSingle :
+          SAFE_CALL(cublasSgemmBatched_64(cublas, cublasOperation_t(transB), cublasOperation_t(transA), N, M, K, @ALPHA, PPSingle(B), ldb, PPSingle(A), lda, @BETA, PPSingle(C), ldc, batchCount));
+          //SAFE_CALL(cublasGemmBatchedEx(cublas, cublasOperation_t(transB), cublasOperation_t(transA), N, M, K, @ALPHA, PPointer(B), CUDA_R_32F, ldb, PPointer(A), CUDA_R_32F, lda
+          //, @BETA, PPointer(C), CUDA_R_32F, ldc, batchCount, CUBLAS_COMPUTE_32F_FAST_TF32, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
+        dtDouble :
+          SAFE_CALL(cublasDgemmBatched(cublas, cublasOperation_t(transB), cublasOperation_t(transA), N, M, K, @ALPHA, PPDouble(B), ldb, PPDouble(A), lda, @BETA, PPDouble(C), ldc, batchCount));
+      end;
       goto done;// yes goto! and there is nothing you can do about it!
     end;
 
@@ -715,9 +781,9 @@ begin
     setLength(aa, batchCount);
     setLength(bb, batchCount);
     setLength(cc, batchCount);
-    readBuffer(a, batchCount*sizeOf(pointer), pointer(aa));
-    readBuffer(b, batchCount*sizeOf(pointer), pointer(bb));
-    readBuffer(c, batchCount*sizeOf(pointer), pointer(cc));
+    readBuffer(pointer(a), batchCount*sizeOf(pointer), pointer(aa));
+    readBuffer(pointer(b), batchCount*sizeOf(pointer), pointer(bb));
+    readBuffer(pointer(c), batchCount*sizeOf(pointer), pointer(cc));
     params := [
            @M, @N, @K, @ALPHA,
            @AA[0], @aOffset, @lda,
@@ -740,11 +806,11 @@ begin
   {$endif}
 end;
 
-procedure TNNCuda.gemmStridedBatched(const transA, transB: boolean; const M, N,
-  K: SizeInt; const ALPHA: Single; A: PSingle; const aOffset: SizeInt;
-  const lda: SizeInt; const strideA: SizeInt; B: PSingle;
+procedure TNNCuda<T>.gemmStridedBatched(const transA, transB: boolean; const M,
+  N, K: SizeInt; const ALPHA: T; A: TCUMem; const aOffset: SizeInt;
+  const lda: SizeInt; const strideA: SizeInt; B: TCUMem;
   const bOffset: SizeInt; const ldb: SizeInt; const strideB: SizeInt;
-  const BETA: Single; C: PSingle; const cOffset: SizeInt; const ldc: SizeInt;
+  const BETA: T; C: TCUMem; const cOffset: SizeInt; const ldc: SizeInt;
   const strideC: SizeInt; const batchCount: SizeInt);
 
 const dimThr:dim3 =(x: 8; y:32; z:1);
@@ -761,8 +827,28 @@ begin
     //SAFE_CALL(cublasSetWorkspace(cublas, workspace, workspaceSize));
 
     if useBLAS = 1 then begin
-    SAFE_CALL(cublasSgemmStridedBatched(cublas, cublasOperation_t(transB), cublasOperation_t(transA), N, M, K,
-      @ALPHA, B+bOffset, ldb, strideB, A+aOffset, lda, strideA, @BETA, C+cOffset, ldc, strideC, batchCount));
+      //case getType() of
+      //  dtHalf:
+      //    for i:=0 to batchCount-1 do
+      //      cublasHgemm(cublas, cublasOperation_t(transB), cublasOperation_t(transA), N, M, K, @ALPHA, PHalf(B)+bOffset+i*strideB, ldb, PHalf(A)+aOffset+i*strideA, lda, @BETA, PHalf(C)+cOffset + i*strideC, ldc);
+      //  dtSingle:
+      //    for i:=0 to batchCount-1 do
+      //      cublasSgemm(cublas, cublasOperation_t(transB), cublasOperation_t(transA), N, M, K, @ALPHA, PSingle(B)+bOffset+i*strideB, ldb, PSingle(A)+aOffset+i*strideA, lda, @BETA, PSingle(C)+cOffset + i*strideC, ldc);
+      //  dtDouble:
+      //     for i:=0 to batchCount-1 do
+      //      cublasDgemm(cublas, cublasOperation_t(transB), cublasOperation_t(transA), N, M, K, @ALPHA, PDouble(B)+bOffset+i*strideB, ldb, PDouble(A)+aOffset+i*strideA, lda, @BETA, PDouble(C)+cOffset + i*strideC, ldc);
+      //end;
+
+      case getType() of
+        dtHalf:
+          SAFE_CALL(cublasHgemmStridedBatched(cublas, cublasOperation_t(transB), cublasOperation_t(transA), N, M, K, @ALPHA, PHalf(B)+bOffset, ldb, strideB, PHalf(A)+aOffset, lda, strideA, @BETA, PHalf(C)+cOffset, ldc, strideC, batchCount));
+        dtSingle:
+          SAFE_CALL(cublasSgemmStridedBatched(cublas, cublasOperation_t(transB), cublasOperation_t(transA), N, M, K, @ALPHA, PSingle(B)+bOffset, ldb, strideB, PSingle(A)+aOffset, lda, strideA, @BETA, PSingle(C)+cOffset, ldc, strideC, batchCount));
+          //SAFE_CALL(cublasGemmStridedBatchedEx(cublas, cublasOperation_t(transB), cublasOperation_t(transA), N, M, K, @ALPHA, PSingle(B)+bOffset, CUDA_R_32F, ldb, strideB, PSingle(A)+aOffset, CUDA_R_32F, lda, strideA
+          //, @BETA, PSingle(C)+cOffset, CUDA_R_32F, ldc, strideC, batchCount, CUBLAS_COMPUTE_32F_FAST_TF32, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
+        dtDouble:
+          SAFE_CALL(cublasDgemmStridedBatched(cublas, cublasOperation_t(transB), cublasOperation_t(transA), N, M, K, @ALPHA, PDouble(B)+bOffset, ldb, strideB, PDouble(A)+aOffset, lda, strideA, @BETA, PDouble(C)+cOffset, ldc, strideC, batchCount));
+      end;
       goto done;// yes goto! and there is nothing you can do about it!
     end;
 
@@ -808,7 +894,7 @@ begin
   {$endif}
 end;
 
-procedure TNNCuda.addvv(const N: SizeInt; const src1: TCUMem; const src1Offset,
+procedure TNNCuda<T>.addvv(const N: SizeInt; const src1: TCUMem; const src1Offset,
   inca: SizeInt; const src2: TCUMem; const src2Offset, incb: SizeInt;
   dst: TCUMem; const dstOffset, incc: SizeInt);
 const kernelId = 9;
@@ -822,7 +908,7 @@ begin
    SAFE_CALL(cudaLaunchKernel(FKernels[kernelId], dim3.Create(num_grids), dim3.create(NUM_THREADS), ppointer(params), 0, stream));
 end;
 
-procedure TNNCuda.subvv(const N: SizeInt; const src1: TCUMem; const src1Offset,
+procedure TNNCuda<T>.subvv(const N: SizeInt; const src1: TCUMem; const src1Offset,
   inca: SizeInt; const src2: TCUMem; const src2Offset, incb: SizeInt;
   dst: TCUMem; const dstOffset, incc: SizeInt);
 const kernelId = 10;
@@ -835,7 +921,7 @@ begin
    SAFE_CALL(cudaLaunchKernel(FKernels[kernelId], dim3.Create(num_grids), dim3.create(NUM_THREADS), ppointer(params), 0, stream));
 end;
 
-procedure TNNCuda.mulvv(const N: SizeInt; const src1: TCUMem; const src1Offset,
+procedure TNNCuda<T>.mulvv(const N: SizeInt; const src1: TCUMem; const src1Offset,
   inca: SizeInt; const src2: TCUMem; const src2Offset, incb: SizeInt;
   dst: TCUMem; const dstOffset, incc: SizeInt);
 const kernelId = 39;
@@ -848,7 +934,7 @@ begin
    SAFE_CALL(cudaLaunchKernel(FKernels[kernelId], dim3.Create(num_grids), dim3.create(NUM_THREADS), ppointer(params), 0, stream));
 end;
 
-procedure TNNCuda.fmavv(const N: SizeInt; const src1: TCUMem; const src1Offset,
+procedure TNNCuda<T>.fmavv(const N: SizeInt; const src1: TCUMem; const src1Offset,
   inca: SizeInt; const src2: TCUMem; const src2Offset, incb: SizeInt;
   const src3: TCUMem; const src3Offset, incc: SizeInt; dst: TCUMem;
   const dstOffset, incd: SizeInt);
@@ -856,7 +942,7 @@ begin
 
 end;
 
-procedure TNNCuda.axpy(const N: SizeInt; const a: single; const x: TCUMem;
+procedure TNNCuda<T>.axpy(const N: SizeInt; const a: T; const x: TCUMem;
   const xOffset: SizeInt; const incx: SizeInt; const y: TCUMem;
   const yOffset: SizeInt; const incy: sizeInt);
 const kernelId = 11;
@@ -877,9 +963,9 @@ begin
 {$endif}
 end;
 
-procedure TNNCuda.power(const N: SizeInt; const x: TCUMem;
-  const xOffset: SizeInt; const incx: SizeInt; const a: single;
-  const y: TCUMem; const yOffset: SizeInt; const incy: sizeInt);
+procedure TNNCuda<T>.power(const N: SizeInt; const x: TCUMem;
+  const xOffset: SizeInt; const incx: SizeInt; const a: T; const y: TCUMem;
+  const yOffset: SizeInt; const incy: sizeInt);
   const kernelId = 41;
 var
   num_grids: SizeInt;
@@ -897,7 +983,7 @@ begin
   tensorMetrics.finish(opPow);
 {$endif}
 end;
-procedure TNNCuda.scale(const N: SizeInt; const a: Single; const x: TCUMem;
+procedure TNNCuda<T>.scale(const N: SizeInt; const a: T; const x: TCUMem;
   const stride: SizeInt);
 const kernelId = 12;
 var
@@ -916,7 +1002,7 @@ begin
 {$endif}
 end;
 
-procedure TNNCuda.crossEntropyLogistic(const N: SizeInt; const pred,
+procedure TNNCuda<T>.crossEntropyLogistic(const N: SizeInt; const pred,
   truth: TCUMem; delta, error: TCUMem);
 const kernelId = 13;
 var
@@ -928,8 +1014,8 @@ begin
   SAFE_CALL(cudaLaunchKernel(FKernels[kernelId], dim3.Create(num_grids), dim3.create(NUM_THREADS), ppointer(params), 0, stream));
 end;
 
-procedure TNNCuda.fill(const N: SizeInt; const x: TCUMem;
-  const offset: SizeInt; const val: single; const stride: SizeInt);
+procedure TNNCuda<T>.fill(const N: SizeInt; const x: TCUMem;
+  const offset: SizeInt; const val: T; const stride: SizeInt);
 const kernelId = 14;
 var
   num_grids: SizeInt;
@@ -948,7 +1034,7 @@ begin
 {$endif}
 end;
 
-procedure TNNCuda.copy(const N: SizeInt; const src: TCUMem; const srcOffset,
+procedure TNNCuda<T>.copy(const N: SizeInt; const src: TCUMem; const srcOffset,
   inca: SizeInt; const dst: TCUMem; const dstOffset, incb: SizeInt);
 const kernelId = 15;
 var
@@ -967,10 +1053,9 @@ begin
 {$endif}
 end;
 
-procedure TNNCuda.softmaxBatch(const N: SizeInt; const input: TCUMem;
+procedure TNNCuda<T>.softmaxBatch(const N: SizeInt; const input: TCUMem;
   const iOffset: SizeInt; const batch, batch_size, groups, group_size,
-  stride: SizeInt; const temp: single; const output: TCUMem;
-  const oOffset: SizeInt);
+  stride: SizeInt; const temp: T; const output: TCUMem; const oOffset: SizeInt);
 const kernelId = 18;
       blockDim:dim3 = (x:8; y:64; z:1);
 var
@@ -978,6 +1063,7 @@ var
   params : array of pointer;
   dim : dim3;
 begin
+
   //MM := (batch + NUM_THREADS-1) div NUM_THREADS;
   //NN := (groups + NUM_THREADS-1) div NUM_THREADS;
   dim := dim3.create(batch, groups);
@@ -986,7 +1072,7 @@ begin
   SAFE_CALL(cudaLaunchKernel(FKernels[kernelId], dim, blockDim, ppointer(params), 0, stream));
 end;
 
-procedure TNNCuda.crossEntropySoftmax(const N: SizeInt; const pred,
+procedure TNNCuda<T>.crossEntropySoftmax(const N: SizeInt; const pred,
   truth: TCUMem; delta, error: TCUMem);
 const kernelId = 19;
 var
@@ -999,7 +1085,7 @@ begin
   SAFE_CALL(cudaLaunchKernel(FKernels[kernelId], dim3.Create(num_grids), dim3.create(NUM_THREADS), ppointer(params), 0, stream));
 end;
 
-procedure TNNCuda.forwardMaxPool(const aBatch, outC, outH, outW: SizeInt;
+procedure TNNCuda<T>.forwardMaxPool(const aBatch, outC, outH, outW: SizeInt;
   const input: TCUMem; const c, h, w: SizeInt; const stride_x, stride_y,
   padding, kernelSize: SizeInt; indexes, output: TCUMem);
 const kernelId = 16;
@@ -1032,7 +1118,7 @@ begin
   SAFE_CALL(cudaLaunchKernel(FKernels[kernelId], dim, blockDim, ppointer(params), 0, stream));
 end;
 
-procedure TNNCuda.backwardMaxPool(const aBatch, outC, outH, outW: SizeInt;
+procedure TNNCuda<T>.backwardMaxPool(const aBatch, outC, outH, outW: SizeInt;
   output: TCUMem; const indexes, delta: TCUMem);
 const kernelId = 17;
       blockDim:dim3 = (x:8; y:64; z:1);
@@ -1050,15 +1136,12 @@ begin
 
 end;
 
-function ceil(const a, b: SizeInt):SizeInt;  overload;
+function ceil(const a, b: SizeInt):SizeInt;
 begin
   result := (1 + (a-1) div b)*b
 end;
 
-const COPY_DIMX = 8;
-      COPY_DIMY = 8;
-
-procedure TNNCuda.im2col(const aChannels, aHeight, aWidth, kernelHeight,
+procedure TNNCuda<T>.im2col(const aChannels, aHeight, aWidth, kernelHeight,
   kernelWidth, padHeight, padWidth, strideY, strideX, dilationY,
   dilationX: SizeInt; const im: TCUMem; const imOffset: SizeInt;
   const col: TCUMem; const colOffset: SizeInt);
@@ -1103,7 +1186,7 @@ end;
 
 //// Solve Bezout's identity
 //// a * p + b * q = r = GCD(a, b)
-procedure EuclidGCD( a, b: SizeInt; var p, q, r:SizeInt);inline;
+procedure EuclidGCD( a, b: SizeInt; var p, q, r:SizeInt);
 var p_1, p_2, q_1, q_2, c:SizeInt;
 begin
   p := 0;
@@ -1126,7 +1209,7 @@ begin
   r := b;
 end;
 
-procedure TNNCuda.col2im(const aChannels, aHeight, aWidth, kernelHeight,
+procedure TNNCuda<T>.col2im(const aChannels, aHeight, aWidth, kernelHeight,
   kernelWidth, padHeight, padWidth, strideY, strideX, dilationY,
   dilationX: SizeInt; const col: TCUMem; const colOffset: SizeInt;
   const im: TCUMem; const imOffset: SizeInt);
@@ -1181,9 +1264,9 @@ begin
 {$endif}
 end;
 
-procedure TNNCuda.upSample(const aBatch, aChannels, outHeight,
+procedure TNNCuda<T>.upSample(const aBatch, aChannels, outHeight,
   outWidth: SizeInt; const &in: TCUMem; const stride: SizeInt;
-  const isForward: longint; const scale: single; const &out: TCUMem;
+  const isForward: longint; const scale: T; const &out: TCUMem;
   const zeroIn: integer);
 
 const kernelId = 25;
@@ -1202,8 +1285,8 @@ begin
   SAFE_CALL(cudaLaunchKernel(FKernels[kernelId], dim, blockDim, ppointer(params), 0, stream));
 end;
 
-procedure TNNCuda.fmavss(const N: SizeInt; const src: TCUMem;
-  const offset: SizeInt; const scalar, bias: single; dst: TCUMem);
+procedure TNNCuda<T>.fmavss(const N: SizeInt; const src: TCUMem;
+  const offset: SizeInt; const scalar, bias: T; dst: TCUMem);
 
 const kernelId = 26;
 var
@@ -1222,7 +1305,7 @@ begin
 {$endif}
 end;
 
-procedure TNNCuda.meansAndVars(const srcSize, dstSize, groups: sizeInt;
+procedure TNNCuda<T>.meansAndVars(const srcSize, dstSize, groups: sizeInt;
   const src: TCUMem; const offset: sizeInt; means, vars: TCUMem);
 const kernelId = 27;
 var
@@ -1244,7 +1327,7 @@ begin
 {$endif}
 end;
 
-procedure TNNCuda.means(const srcSize, dstSize, groups: sizeInt;
+procedure TNNCuda<T>.means(const srcSize, dstSize, groups: sizeInt;
   const src: TCUMem; const offset: sizeInt; means: TCUMem);
 const kernelId = 42;
 var
@@ -1264,7 +1347,7 @@ begin
 {$endif}
 end;
 
-procedure TNNCuda.variances(const srcSize, dstSize, groups: sizeInt;
+procedure TNNCuda<T>.variances(const srcSize, dstSize, groups: sizeInt;
   const src: TCUMem; const offset: sizeInt; means, vars: TCUMem);
 const kernelId = 43;
 var
@@ -1285,7 +1368,7 @@ begin
 {$endif}
 end;
 
-procedure TNNCuda.normalize(const srcSize, dstSize, groups: SizeInt;
+procedure TNNCuda<T>.normalize(const srcSize, dstSize, groups: SizeInt;
   means: TCUMem; const meansStride: sizeInt; vars: TCUMem;
   const varsStride: SizeInt; dst: TCUMem; const dstOffset: sizeInt);
 const kernelId = 30;
@@ -1312,7 +1395,7 @@ begin
 {$endif}
 end;
 
-procedure TNNCuda.meansAndVarsDelta(const srcSize, dstSize, groups: SizeInt;
+procedure TNNCuda<T>.meansAndVarsDelta(const srcSize, dstSize, groups: SizeInt;
   delta, x: TCUMem; const offset: SizeInt; mean, variance, mean_delta,
   variance_delta: TCUMem);
 const
@@ -1335,7 +1418,7 @@ begin
 {$endif}
 end;
 
-procedure TNNCuda.normalizeDelta(const deltaSize, meanSize, groups: SizeInt;
+procedure TNNCuda<T>.normalizeDelta(const deltaSize, meanSize, groups: SizeInt;
   const delta, x: TCUMem; const offset: SizeInt; mean, variance, mean_delta,
   variance_delta: TCUMem);
 const kernelId = 32;
@@ -1362,7 +1445,7 @@ begin
 {$endif}
 end;
 
-procedure TNNCuda.addDots(const N, dstSize, groups: SizeInt; const src1,
+procedure TNNCuda<T>.addDots(const N, dstSize, groups: SizeInt; const src1,
   src2: TCUMem; const srcOffset: SizeInt; dst: TCUMem);
 const kernelId = 33;
 var
@@ -1382,7 +1465,7 @@ begin
 {$endif}
 end;
 
-procedure TNNCuda.forwardScale(const dstSize: SizeInt; const dst: TCUMem;
+procedure TNNCuda<T>.forwardScale(const dstSize: SizeInt; const dst: TCUMem;
   const offset: SizeInt; const scaleSize: SizeInt; const scale: TCUMem;
   const incb: SizeInt; const batch: SizeInt);
 const kernelId = 34;
@@ -1404,7 +1487,7 @@ begin
 {$endif}
 end;
 
-procedure TNNCuda.forwardScaleAdd(const dstSize: SizeInt; const dst: TCUMem;
+procedure TNNCuda<T>.forwardScaleAdd(const dstSize: SizeInt; const dst: TCUMem;
   const offset: SizeInt; const scaleSize: SizeInt; const scales,
   biases: TCUMem; const incb: SizeInt; const batch: SizeInt);
 const kernelId = 35;
@@ -1426,8 +1509,8 @@ begin
 {$endif}
 end;
 
-procedure TNNCuda.forwardDropout(const N: SizeInt; const src: TCUMem;
-  const probability, scale: single; rnd: TCUMem; dst: TCUMem);
+procedure TNNCuda<T>.forwardDropout(const N: SizeInt; const src: TCUMem;
+  const probability, scale: T; rnd: TCUMem; dst: TCUMem);
 const kernelId=36;
 var
   num_grids : SizeInt;
@@ -1435,14 +1518,14 @@ var
   seed : uint64;
 begin
   //randomize;
-  seed := random($100000000); // next randSeed
+  seed := random($10000000); // next randSeed
   num_grids := (N + NUM_THREADS-1) div NUM_THREADS;
   params := [@N, @seed{@RandSeed}, @probability, @scale, @src, @rnd, @dst];
   SAFE_CALL(cudaLaunchKernel(FKernels[kernelId], dim3.create(num_grids), dim3.create(NUM_THREADS), ppointer(params), 0, stream));
 end;
 
-procedure TNNCuda.backwardDropout(const N: SizeInt; const src: TCUMem;
-  const probability, scale: single; const rnd: TCUMem; dst: TCUMem);
+procedure TNNCuda<T>.backwardDropout(const N: SizeInt; const src: TCUMem;
+  const probability, scale: T; const rnd: TCUMem; dst: TCUMem);
 const kernelId=37;
 var
   num_grids : SizeInt;
@@ -1454,7 +1537,7 @@ begin
   SAFE_CALL(cudaLaunchKernel(FKernels[kernelId], dim3.create(num_grids), dim3.create(NUM_THREADS), ppointer(params), 0, stream));
 end;
 
-procedure TNNCuda.costL2(const N: SizeInt; const pred, truth, delta, error: TCUMem);
+procedure TNNCuda<T>.costL2(const N: SizeInt; const pred, truth, delta, error: TCUMem);
 const kernelId = 38;
 var
   num_grids:SizeInt;
@@ -1465,18 +1548,42 @@ begin
   SAFE_CALL(cudaLaunchKernel(FKernels[kernelId], dim3.create(num_grids), dim3.create(NUM_THREADS), ppointer(params), 0, stream));
 end;
 
-procedure TNNCuda.finish();
+procedure TNNCuda<T>.clamp(const N: SizeInt; const alpha: T; const src,
+  dst: TCUMem; const stride: SizeInt; offset: SizeInt);
+const kernelId = 46;
+var
+  num_grids:SizeInt;
+  params : array of pointer;
 begin
-  //SAFE_CALL(cudaDeviceSynchronize());
-  {$if defined(USE_CUDA)}
-  //SAFE_CALL(cuStreamSynchronize(stream));
-  SAFE_CALL(cuCtxSynchronize());
-  {$else}
-  SAFE_CALL(cudaStreamSynchronize(stream));
-  {$endif}
+  num_grids := (N + NUM_THREADS-1) div NUM_THREADS;
+  params := [@N, @alpha, @src, @dst, @stride, @offset];
+  SAFE_CALL(cudaLaunchKernel(FKernels[kernelId], dim3.create(num_grids), dim3.create(NUM_THREADS), ppointer(params), 0, stream));
 end;
 
-function TNNCuda.compileToCUBIN(const code, name: ansistring; const headers: TArray<PAnsiChar>; const includeNames: TArray<PAnsiChar>): RawByteString;
+procedure TNNCuda<T>.inverseSqrt(const N: SizeInt; const alpha: T; const src,
+  dst: TCUMem; const stride: SizeInt; offset: SizeInt);
+const kernelId = 45;
+var
+  num_grids:SizeInt;
+  params : array of pointer;
+begin
+  num_grids := (N + NUM_THREADS-1) div NUM_THREADS;
+  params := [@N, @src, @dst, @stride, @offset];
+  SAFE_CALL(cudaLaunchKernel(FKernels[kernelId], dim3.create(num_grids), dim3.create(NUM_THREADS), ppointer(params), 0, stream));
+end;
+
+procedure TNNCuda<T>.finish();
+begin
+  //SAFE_CALL(cudaDeviceSynchronize());
+  //{$if defined(USE_CUDA)}
+  SAFE_CALL(cuStreamSynchronize(stream));
+  //SAFE_CALL(cuCtxSynchronize());
+  //{$else}
+  //SAFE_CALL(cudaStreamSynchronize(stream));
+  //{$endif}
+end;
+
+function TNNCuda<T>.compileToCUBIN(const code, name: ansistring; const headers: TArray<PAnsiChar>; const includeNames: TArray<PAnsiChar>): RawByteString;
 var
   progSize : size_t;
   err: nvrtcResult;
@@ -1484,11 +1591,18 @@ var
   paramsPtr : PPAnsiChar;
   log : ansistring;
 begin
+  result :='';
   //writeln('NVRTC compile start');
   SAFE_CALL_RTC(nvrtcCreateProgram(@prog, PAnsiChar(code), pAnsiChar(name), length(headers), Pointer(headers), Pointer(includeNames)));
 
   //params := [PAnsiChar('--gpu-architecture=sm_'+intToStr(devCapMajor)+intTostr(devCapMinor))];
-  params := [PAnsiChar('-arch=sm_' + intToStr(properties.major)+intTostr(properties.minor)), '--use_fast_math', PAnsiChar('-DBLOCK='+intToStr(NUM_THREADS))]; // causes weird exception on linux
+  // Note : Delphi requires a string well formed before casting to a pansichar, this is why we cat to ansistring 1st
+  params := [
+              PAnsiChar(Ansistring('-arch=sm_' + intToStr(properties.major)+intTostr(properties.minor))),
+              '--use_fast_math',
+              PAnsiChar(ansistring('-DBLOCK='+intToStr(NUM_THREADS))),
+              PAnsichar('-Dnfloat='+getTypeStr())
+              ]; // causes weird exception on linux
   paramsPtr := pointer(params);
   err :=nvrtcCompileProgram(prog, length(params), paramsPtr);
   log := CompileLog;
@@ -1507,14 +1621,14 @@ begin
   //writeln('NVRTC compile end');
 end;
 
-procedure TNNCuda.loadCUBIN(const cubin: RawByteString);
+procedure TNNCuda<T>.loadCUBIN(const cubin: RawByteString);
 var kernelCount : longint;
   i : SizeInt;
-  {$if defined(USE_CUDA)}
+  //{$if defined(USE_CUDA)}
   ker : CUkernel;
-  {$else}
-  ker : cudaKernel_t;
-  {$endif}
+  //{$else}
+  //ker : cudaKernel_t;
+  //{$endif}
 begin
   SAFE_CALL(cudaLibraryLoadData(@nnLib, pointer(cubin), nil{pointer(FJitOptions)}, nil{pointer(FJitOptionsValues)}, 0{length(FJitOptions)},  nil{pointer(FLibOptions)}, nil{pointer(FLibOptionsValues)}, 0{length(FLibOptions)}));
   //SAFE_CALL(cudaLibraryGetKernelCount(@kernelCount, pointer(nnLib)));
@@ -1527,7 +1641,7 @@ begin
   end;
 end;
 
-function TNNCuda.compileFile(const filename: string): RawByteString;
+function TNNCuda<T>.compileFile(const filename: ansistring): RawByteString;
 var
   tf : TextFile;
   f  : file;
@@ -1535,7 +1649,7 @@ var
   cuda_bin:ansistring;
 begin
   //cuda_path := GetEnvironmentVariable('CUDA_PATH')+'\include';
-  //assert(FileExists(filename), 'Cannot find file '+filename);
+  assert(FileExists(filename), 'Cannot find file '+filename);
   AssignFile(tf, filename);
   reset(tf);
   code :='';
@@ -1555,17 +1669,17 @@ begin
 
 end;
 
-procedure TNNCuda.loadCUBinFile(const filename: string);
+procedure TNNCuda<T>.loadCUBinFile(const filename: ansistring);
 var f: file;
   fs : SizeInt;
   bin : RawByteString;
   kernelCount : longint;
   i : SizeInt;
-  {$if defined(USE_CUDA)}
+  //{$if defined(USE_CUDA)}
   ker : CUkernel;
-  {$else}
-  ker : cudaKernel_t;
-  {$endif}
+  //{$else}
+  //ker : cudaKernel_t;
+  //{$endif}
 begin
   assert(fileExists(Filename),'File does not exists!');
   SAFE_CALL(cudaLibraryLoadFromFile(@nnLib, PAnsiChar(filename), nil, nil, 0, nil, nil, 0));
@@ -1591,7 +1705,7 @@ begin
 end;
 
 initialization
-  //cuda := TNNCuda.create();
+
 finalization
   //freeAndNil(cuda)
 end.

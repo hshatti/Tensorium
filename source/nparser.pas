@@ -29,6 +29,7 @@ uses
   , nBatchNormLayer
   , nUpSampleLayer
   , nYoloLayer
+  , nRegionLayer
   ;
 
 type
@@ -45,6 +46,7 @@ type
     CFG : TCFGList;
     params : TSizeParams;
     Neural : TNNet;
+    cfgPath : string;
   protected
     function parseConnected(const opt:TCFGSection):TConnectedLayer;
     function parseConvolutional(const opt:TCFGSection):TConvolutionalLayer;
@@ -59,6 +61,7 @@ type
     function parseUpSample(const opt:TCFGSection):TUpSampleLayer;
     function parseBatchNorm(const opt:TCFGSection):TBatchNormLayer;
     function parseYolo(const opt:TCFGSection):TYoloLayer;
+    function parseRegion(const opt:TCFGSection):TRegionLayer;
     function parseLogistic(const opt:TCFGSection):TLogisticLayer;
     function parseSoftmax(const opt:TCFGSection):TSoftmaxLayer;
     function parseCost(const opt:TCFGSection):TCostLayer;
@@ -408,7 +411,7 @@ var
   layers, sizes : TArray<SizeInt>;
   sIndex: TStringArray;
   activation: TActivationType;
-  layers_output, layers_delta :TArray<TSingleTensor>;
+  //layers_output, layers_delta :TArray<TSingleTensor>;
   baseImageLayer : TBaseImageLayer;
   i : SizeInt;
 begin
@@ -450,8 +453,8 @@ begin
   setLength(sizes, n);
   //layers_output := AllocMem(n * sizeOf(PSingle));
   //layers_delta := AllocMem(n * sizeOf(PSingle));
-  setLength(layers_output ,n);
-  setLength(layers_delta ,n);
+  //setLength(layers_output ,n);
+  //setLength(layers_delta ,n);
   //setLength(layers_output_gpu , n);
   //setLength(layers_delta_gpu , n);
 
@@ -462,17 +465,11 @@ begin
               index := params.index+index;
           layers[i] := index;
           sizes[i] := params.net.layers[index].outputs;
-          layers_output[i] := params.net.layers[index].output;
-          layers_delta[i] := params.net.layers[index].delta
+          //layers_output[i] := params.net.layers[index].output;
+          //layers_delta[i] := params.net.layers[index].delta
       end;
-{$ifdef GPU}
-  for i := 0 to n -1 do
-      begin
-          layers_output_gpu[i] := params.net.layers[layers[i]].output_gpu;
-          layers_delta_gpu[i] := params.net.layers[layers[i]].delta_gpu
-      end;
-{$endif}
-  result := TAddLayer.Create(params.batch, layers, sizes, params.w, params.h, params.c, layers_output, layers_delta, weights_type, weights_normalization, activation, params.train);
+
+  result := TAddLayer.Create(params.batch, layers, sizes, params.w, params.h, params.c, weights_type, weights_normalization, activation, params.train);
   //free(layers_output_gpu);
   //free(layers_delta_gpu);
   for i := 0 to high(layers) do
@@ -646,6 +643,74 @@ begin
       end;
 end;
 
+function TDarknetParser.parseRegion(const opt: TCFGSection): TRegionLayer;
+var
+    coords, classes, num, n, i: longint;
+    //l: layer;
+    tree_file: string;
+    map_file: string;
+    a: string;
+    bias: TStringArray;
+    max_boxes: longint;
+begin
+    coords := opt.getInt( 'coords', 4);
+    classes := opt.getInt( 'classes', 20);
+    num := opt.getInt( 'num', 1);
+    max_boxes := opt.getInt('max', 200, true);
+
+    result := TRegionLayer.Create(params.batch, params.w, params.h, num, classes, coords, max_boxes);
+    if result.outputs <> params.inputs then
+        raise Exception.create('Error: l.outputs == params.inputs, filters= in the [convolutional]-layer doesn''t correspond to classes= or num= in [region]-layer');
+    assert(result.outputs = params.inputs);
+
+    //result.log := opt.getInt('log', 0, true);
+    //result.sqrt := opt.getBool( 'sqrt', false, true);
+
+    result.isSoftmax := opt.getBool( 'softmax', false);
+    result.focalLoss := opt.getBool( 'focal_loss', false, true);
+    //result.background := opt.getInt('background', false, true);
+    //result.max_boxes := opt.getInt('max', 30, true);
+    //result.jitter := opt.getFloat( 'jitter', 0.2);
+    result.rescore := opt.getBool( 'rescore', false, true);
+
+    result.thresh := opt.getFloat( 'thresh', 0.5);
+    result.classfix := opt.getInt('classfix', 0, true);
+    //result.absolute := opt.getInt('absolute', 0, true);
+    //result.random := opt.getBool( 'random', false, true);
+
+    result.coordScale := opt.getFloat( 'coord_scale', 1);
+    result.objectScale := opt.getFloat( 'object_scale', 1);
+    result.noobjectScale := opt.getFloat( 'noobject_scale', 1);
+    //result.mask_scale := opt.getFloat( 'mask_scale', 1);
+    result.classScale := opt.getFloat( 'class_scale', 1);
+    result.biasMatch := opt.getBool( 'bias_match', false, true);
+
+    tree_file := cfgPath+'../'+opt.getStr( 'tree', '');
+    if tree_file<>'' then
+        result.softmaxTree := [TTree.loadFromFile(tree_file)];
+    map_file := cfgPath+'../'+opt.getStr( 'map', '');
+    if map_file<>'' then
+        result.map := stringsToInts(fromFile(map_file));
+    a := opt.getStr( 'anchors', '');
+    if a<>'' then
+        begin
+          bias := a.Split([',']);
+          for i:=0 to length(bias)-1 do
+            trystrToFloat(trim(bias[i]),result.biases.data[i]);
+            //len := strlen(a);
+            //n := 1;
+            //for i := 0 to len -1 do
+            //    if a[i] = ',' then
+            //        &cni(n);
+            //for i := 0 to n -1 do
+            //    begin
+            //        bias := atof(a);
+            //        result.biases[i] := bias;
+            //        a := strchr(a, ',')+1
+            //    end
+        end;
+end;
+
 function TDarknetParser.parseLogistic(const opt: TCFGSection): TLogisticLayer;
 begin
   result := TLogisticLayer.Create(params.batch, params.inputs);
@@ -724,19 +789,22 @@ var
   i, count : SizeInt;
 
 begin
+  cfgPath:=extractFilePath(fileName);
   CFG.loadFromFile(filename);
-  Neural := TNNet.Create([]);
   if CFG.Count()>0 then
-    if (CFG.Sections[0].typeName='net') or (CFG.Sections[0].typeName='network') then
+    if (CFG.Sections[0].typeName='net') or (CFG.Sections[0].typeName='network') then begin
+      assert((CFG.Sections[0].getInt('batch', 1) mod CFG.Sections[0].getInt('subdivisions', 1)=0), '[TDarkparser.Create] Batch Must be a multipls of subdivisions');
+      Neural := TNNet.Create([]);
       parseNet(CFG.Sections[0]) // parses net, also sets params.net to Neural;
+    end
     else
       raise Exception.Create('1st section in config file must be a [net] parameters.');
-  if ABatch>0 then
+  if (ABatch>0) and (Neural.batch*Neural.subDivisions<>ABatch) then
     neural.batch:= ABatch;
-  if ATimeSteps>0 then
-    neural.batch:= ATimeSteps;
-  if neural.batch < neural.timeSteps then
-    neural.batch := neural.timeSteps;
+  //if ATimeSteps>0 then
+  //  neural.batch:= ATimeSteps;
+  //if neural.batch < neural.timeSteps then
+  //  neural.batch := neural.timeSteps;
 
 
   params.batch := neural.batch;
@@ -808,6 +876,10 @@ begin
         begin
           layers[count] := parseYolo(CFG.Sections[i]);
         end;
+      ltREGION  :
+        begin
+          layers[count] := parseRegion(CFG.Sections[i]);
+        end;
       ltUPSAMPLE  :
         begin
           layers[count] := parseUpSample(CFG.Sections[i]);
@@ -878,14 +950,15 @@ var
 begin
 
   Neural.maxBatches := options.getInt( 'max_batches', 0);
-  Neural.batch := options.getInt( 'batch', 1);
+  mini_batch := options.getInt( 'batch', 1);
+  subdivs := options.getInt( 'subdivisions', 1);
+  assert((mini_batch>=subdivs) and (mini_batch mod subdivs=0), '[ParseNet] Batch Must be a multipls of subdivisions');
   Neural.learningRate := options.getFloat( 'learning_rate', 0.001);
   Neural.learningRateMin := options.getFloat( 'learning_rate_min', 0.00001, true);
   Neural.batchesPerCycle := options.getInt('sgdr_cycle', Neural.maxBatches, true);
   Neural.batchesCycleMult := options.getInt('sgdr_mult', 2, true);
   Neural.momentum := options.getFloat( 'momentum', 0.9);
   Neural.decay := options.getFloat( 'decay', 0.0001);
-  subdivs := options.getInt( 'subdivisions', 1);
   Neural.timeSteps := options.getInt('time_steps', 1, true);
   //Neural.track := options.getInt('track', 0, true);
   //Neural.augment_speed := options.getInt('augment_speed', 2, true);
@@ -895,9 +968,8 @@ begin
       //Neural.init_sequential_subdivisions := subdivs; Neural.sequential_subdivisions := subdivs;
   //end;
   //Neural.try_fix_nan := options.getInt('try_fix_nan', 0, true);
-  Neural.batch := Neural.batch div subdivs;
-  mini_batch := Neural.batch;
-  Neural.batch := Neural.batch * Neural.timeSteps;
+  mini_batch := mini_batch div subdivs;
+  Neural.batch := mini_batch * Neural.timeSteps;
   Neural.subdivisions := subdivs;
   //Neural.weights_reject_freq := options.getInt('weights_reject_freq', 0, true);
   Neural.equiDistantPoint := options.getInt('equidistant_point', 0, true);
