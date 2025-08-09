@@ -1,6 +1,9 @@
 unit nRegionLayer;
 {$ifdef FPC}
 {$mode Delphi}
+{$else}
+  {$POINTERMATH ON}
+  {$T+}
 {$endif}
 
 interface
