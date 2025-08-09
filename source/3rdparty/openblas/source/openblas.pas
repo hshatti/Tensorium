@@ -14,7 +14,7 @@ uses types;
     {$LinkFramework Accelerate}
     //const libopenblas='libopenblas.dylib';
   {$else}
-    const libopenblas='openblas.so.0' ;
+    const libopenblas='openblas.so' ;
   {$endif}
 {$endif}
 

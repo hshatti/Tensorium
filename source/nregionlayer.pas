@@ -2,6 +2,7 @@ unit nRegionLayer;
 {$ifdef FPC}
 {$mode Delphi}
 {$endif}
+{$j+}
 
 interface
 uses nTypes, nBaseLayer, nTensors, nActivation;
