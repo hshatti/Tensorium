@@ -59,24 +59,24 @@ begin
   wg        := TConnectedLayer.Create(Batch , Steps, outputs, outputs, acLINEAR, isBatchNormalized);
   wo        := TConnectedLayer.Create(Batch , Steps, outputs, outputs, acLINEAR, isBatchNormalized);
 
-  output    := TSingleTensor.Create([batch*steps, outputs], batch*steps);
-  Cell      := TSingleTensor.Create([batch*steps, outputs], batch*steps);
+  output    := TSingleTensor.Create([batch*steps, outputs], batch*steps,'lstm_output');
+  Cell      := TSingleTensor.Create([batch*steps, outputs], batch*steps,'lstm_cell');
 
   //state     := TSingleTensor.Create([batch, outputs], batch);
-  prevState := TSingleTensor.Create([batch, outputs], batch);
-  prevCell  := TSingleTensor.Create([batch, outputs], batch);
+  prevState := TSingleTensor.Create([batch, outputs], batch,'lstm_prev_state');
+  prevCell  := TSingleTensor.Create([batch, outputs], batch,'lstm_prev_cell');
 
-  _f        := TSingleTensor.Create([batch, outputs], batch);
-  _i        := TSingleTensor.Create([batch, outputs], batch);
-  _g        := TSingleTensor.Create([batch, outputs], batch);
-  _o        := TSingleTensor.Create([batch, outputs], batch);
-  _c        := TSingleTensor.Create([batch, outputs], batch);
-  _h        := TSingleTensor.Create([batch, outputs], batch);
+  _f        := TSingleTensor.Create([batch, outputs], batch,'lstm_f');
+  _i        := TSingleTensor.Create([batch, outputs], batch,'lstm_i');
+  _g        := TSingleTensor.Create([batch, outputs], batch,'lstm_g');
+  _o        := TSingleTensor.Create([batch, outputs], batch,'lstm_o');
+  _c        := TSingleTensor.Create([batch, outputs], batch,'lstm_c');
+  _h        := TSingleTensor.Create([batch, outputs], batch,'lstm_h');
 
-  temp      := TSingleTensor.Create([batch, outputs], batch);
-  temp2     := TSingleTensor.Create([batch, outputs], batch);
-  temp3     := TSingleTensor.Create([batch, outputs], batch);
-  dc        := TSingleTensor.Create([batch, outputs], batch);
+  temp      := TSingleTensor.Create([batch, outputs], batch,'lstm_temp');
+  temp2     := TSingleTensor.Create([batch, outputs], batch,'lstm_temp2');
+  temp3     := TSingleTensor.Create([batch, outputs], batch,'lstm_temp3');
+  dc        := TSingleTensor.Create([batch, outputs], batch,'lstm_dc');
   //dh                       .reshape([batch, outputs], batch);
 
 end;
@@ -131,7 +131,7 @@ begin
   ug.setTrain(ATrain);
   uo.setTrain(ATrain);
   if FTrain  then
-    delta := TSingleTensor.Create([batch*steps, outputs], batch*steps)
+    delta := TSingleTensor.Create([batch*steps, outputs], batch*steps,'lstm_delta')
   else
     delta.free
 end;
@@ -581,10 +581,10 @@ begin
           TSingleTensor.addvv(outputStep, wg.output.data+offset, 1, ug.output.data+offset, 1, _g.Data, 1);
           TSingleTensor.addvv(outputStep, wo.output.data+offset, 1, uo.output.data+offset, 1, _o.Data, 1);
 
-          activate_array(pointer(_f.data), outputStep, acLOGISTIC);
-          activate_array(pointer(_i.data), outputStep, acLOGISTIC);
-          activate_array(pointer(_g.data), outputStep, acTANH);
-          activate_array(pointer(_o.data), outputStep, acLOGISTIC);
+          activate_array(outputStep, pointer(_f.data), acLOGISTIC);
+          activate_array(outputStep, pointer(_i.data), acLOGISTIC);
+          activate_array(outputStep, pointer(_g.data), acTANH);
+          activate_array(outputStep, pointer(_o.data), acLOGISTIC);
 
           TSingleTensor.mulvv(outputStep, _i.data, 1, _g.data, 1, temp.Data, 1);
 
@@ -595,7 +595,7 @@ begin
           _c.add(temp);
 
           _c.copyTo(_h);
-          activate_array(_h, outputStep, acTANH);
+          activate_array(outputStep, _h, acTANH);
           _h.Multiply(_o);
 
           _c.CopyTo(Cell, offset);
@@ -671,25 +671,25 @@ begin
       TSingleTensor.addvv(outputStep, wg.output.data+offset, 1, ug.output.data+offset, 1, _g.data, 1);
       TSingleTensor.addvv(outputStep, wo.output.data+offset, 1, uo.output.data+offset, 1, _o.data, 1);
 
-      activate_array(pointer(_f.data), outputStep, acLOGISTIC);
-      activate_array(pointer(_i.data), outputStep, acLOGISTIC);
-      activate_array(pointer(_g.data), outputStep, acTANH);
-      activate_array(pointer(_o.data), outputStep, acLOGISTIC);
+      activate_array(outputStep, pointer(_f.data), acLOGISTIC);
+      activate_array(outputStep, pointer(_i.data), acLOGISTIC);
+      activate_array(outputStep, pointer(_g.data), acTANH);
+      activate_array(outputStep, pointer(_o.data), acLOGISTIC);
 
       delta.copyTo(temp3, 0, 1, offset, 1, outputStep);
 
       _c.copyTo(temp);
-      activate_array(pointer(temp.data), outputStep, acTANH);
+      activate_array(outputStep, pointer(temp.data), acTANH);
 
       TSingleTensor.mulvv(outputStep, temp3.data, 1, _o.data, 1, temp2.data, 1);
 
-      gradient_array(pointer(temp.data), outputStep, acTANH, pointer(temp2.data));
+      gradient_array(outputStep, pointer(temp.data), pointer(temp2.data), acTANH);
       temp2.add(dc);
 
       _c.CopyTo(temp);
-      activate_array(pointer(temp.data), outputStep, acTANH);
+      activate_array(outputStep, pointer(temp.data), acTANH);
       temp.Multiply(temp3);
-      gradient_array(pointer(_o.data), outputStep, acLOGISTIC, pointer(temp.data));
+      gradient_array(outputStep, pointer(_o.data), pointer(temp.data), acLOGISTIC);
       temp.copyTo(wo.delta, offset);
 
       if (i = 0) then
@@ -717,7 +717,7 @@ begin
       //backward_connected_layer(uo, @s);
 
       TSingleTensor.mulvv(outputStep, temp2.data, 1, _i.data, 1, temp.data, 1);
-      gradient_array(_g, outputStep, acTANH, pointer(temp.Data));
+      gradient_array(outputStep, _g, pointer(temp.Data), acTANH);
       temp.copyTo(wg.delta, offset);
       //copy_cpu(l.outputs * l.batch, l.temp_cpu, 1, wg.delta, 1);
 
@@ -747,7 +747,7 @@ begin
       TSingleTensor.mulvv(outputStep, temp2.data, 1, _g.Data, 1, temp.data, 1);
       //copy_cpu(l.outputs * l.batch, l.temp2_cpu, 1, l.temp_cpu, 1);
       //mul_cpu(l.outputs * l.batch, l.g_cpu, 1, l.temp_cpu, 1);
-      gradient_array(pointer(_i.data), outputStep, acLOGISTIC, pointer(temp.Data));
+      gradient_array(outputStep, pointer(_i.data), pointer(temp.Data), acLOGISTIC);
       temp.copyTo(wi.delta, offset);
       //copy_cpu(l.outputs * l.batch, l.temp_cpu, 1, wi.delta, 1);
 
@@ -777,7 +777,7 @@ begin
       TSingleTensor.mulvv(outputstep, temp2.data, 1, prevCell.data, 1, temp.data, 1);
       //copy_cpu(l.outputs * l.batch, l.temp2_cpu, 1, l.temp_cpu, 1);
       //mul_cpu(l.outputs * l.batch, l.prev_cell_cpu, 1, l.temp_cpu, 1);
-      gradient_array(pointer(_f.data), outputStep, acLOGISTIC, pointer(temp.Data));
+      gradient_array(outputStep, pointer(_f.data), pointer(temp.Data), acLOGISTIC);
       temp.CopyTo(wf.delta, offset);
       //copy_cpu(l.outputs * l.batch, l.temp_cpu, 1, wf.delta, 1);
       //if (i = 0) then

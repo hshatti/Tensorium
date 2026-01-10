@@ -93,12 +93,14 @@ begin
       TConvolutionalLayer.Create(1, 8, 8, 64, 128, 1, 3, 1, 1, 1, 1, acRELU, true),
       TConvolutionalLayer.Create(1, 8, 8, 128, 128, 1, 3, 1, 1, 1, 1, acRELU, true),
       TMaxPoolLayer.Create(1, 8, 8, 128, 2),
-
+      {$ifndef DEBUG_GPU}
       TDropoutLayer.create(1, 0.2, 4* 4*128),
-
+      {$endif}
       //hidden layer
       TConnectedLayer.create(1, 1, 4*4*128, 1024, acRELU),
+      {$ifndef DEBUG_GPU}
       TDropoutLayer.create(1, 0.2, 1024),
+      {$endif}
 
        //last hidden layer i.e.. output layer
       TConnectedLayer.create(1, 1, 1024, 10, acLINEAR),

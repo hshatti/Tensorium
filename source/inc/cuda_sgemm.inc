@@ -82,7 +82,7 @@
 + '  // M [.A.]  X K [.B.] => M [.C.]'#10
 + '  //   [...]      [...]      [...]'#10
 + 'typedef enum {'#10
-+ '    acLOGISTIC, acRELU, acRELU6, acRELIE, acLINEAR, acRAMP, acTANH, acPLSE,'#10
++ '    acLINEAR, acLOGISTIC, acRELU, acRELU6, acRELIE, acRAMP, acTANH, acPLSE,'#10
 + '    acREVLEAKY, acLEAKY, acELU, acLOGGY, acSTAIR, acHARDTAN, acLHTAN, acSELU, acSOFTMAX,'#10
 + '    acGELU, acSWISH, acMISH, acHARD_MISH, acNORM_CHAN, acNORM_CHAN_SOFTMAX,'#10
 + '    acNORM_CHAN_SOFTMAX_MAXVAL'#10
@@ -1151,10 +1151,10 @@
 + '    // take a shortcut'#10
 + '    if(blocksize==1){'#10
 + '      m = sumv(groups, src+i, N);'#10
-+ '      m /= S;'#10
++ '      m /= (nfloat) S;'#10
 + '      v = rssv(groups, m, src+i, N);'#10
 + '      means[i] = m;'#10
-+ '      vars[i]  = v / (S-1);'#10
++ '      vars[i]  = v / (nfloat)(S-1);'#10
 + '      return;'#10
 + '    }'#10
 + '    #pragma unroll'#10
@@ -1491,7 +1491,7 @@
 + '        for(i = 0; i < BLOCK; ++i){'#10
 + '            variance_tmp += local[i];'#10
 + '        }'#10
-+ '        variance_tmp /= (blocksize * groups);'#10
++ '        variance_tmp /= (blocksize * groups - 1);'#10
 + '        vars[filter] = variance_tmp;'#10
 + '    }'#10
 + '}'#10

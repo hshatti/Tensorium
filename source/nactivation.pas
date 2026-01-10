@@ -4,37 +4,129 @@ unit nActivation;
     {$asmmode intel}
   {$endif}
   {$mode Delphi}{$H+}
+  {$modeSwitch nestedprocvars}
+  {$modeSwitch typehelpers}
+
 {$endif}
 {$pointermath on}
 interface
 
 uses
-  SysUtils, math, NTypes, nTensors, typinfo
+  SysUtils, math, typinfo
   {$ifdef USE_MULTITHREADING}
   , steroids
   {$endif}
+  {$if defined(USE_ONEDNN)}
+  , dnnl_api
+  {$endif}
+
   ;
 
-procedure activate_array(const x: PSingle; const N: SizeInt; const a: TActivationType; output:PSingle = nil; output2:PSingle =nil);
-procedure gradient_array(const x: PSingle; const N: SizeInt; const a:TActivationType; const delta:PSingle);
+type
+  PActivationType = ^TActivationType;
+  TActivationType = (
+    acLINEAR, acLOGISTIC, acRELU, acRELU6, acRELIE, acRAMP, acTANH, acPLSE,
+    acREVLEAKY, acLEAKY, acELU, acLOGGY, acSTAIR, acHARDTAN, acLHTAN, acSELU, acSOFTMAX,
+    acGELU, acSWISH, acMISH, acHARD_MISH, acNORM_CHAN, acNORM_CHAN_SOFTMAX,
+    acNORM_CHAN_SOFTMAX_MAXVAL
+  );
 
-procedure activate_array_swish(const x: Psingle; const N: SizeInt; output_sigmoid, output: Psingle);
-procedure activate_array_mish(const x: Psingle; const N: SizeInt; const activation_input, output: Psingle);
-procedure activate_array_hard_mish(const x: Psingle; const N: SizeInt; const activation_input, output: PSingle);
-procedure activate_array_normalize_channels(const x: Psingle; const N, batch, channels, wh_step: SizeInt; const output: Psingle);
-procedure activate_array_normalize_channels_softmax(const x: Psingle; const N, batch, channels, wh_step: SizeInt; const output: PSingle; const use_max_val: boolean);
+  { TActivationTypeHelper }
 
-procedure gradient_array_swish(const x: Psingle; const N: SizeInt; const sigmoid: Psingle; delta: Psingle);
-procedure gradient_array_mish(const N: SizeInt; const activation_input: Psingle; delta: Psingle);
-procedure gradient_array_hard_mish(const N: SizeInt; const activation_input, delta: Psingle);
-procedure gradient_array_normalize_channels(const x: Psingle; const N, batch, channels, wh_step: SizeInt; const delta: Psingle);
-procedure gradient_array_normalize_channels_softmax(const x: PSingle; const N, batch, channels, wh_step: SizeInt; const delta: Psingle);
+  TActivationTypeHelper=record helper for TActivationType
+    class function fromString(s:string):TActivationType; static;
+    function toString():string;
+    {$if defined(USE_ONEDNN)}
+    function toDNNLAlgKind():dnnl_alg_kind_t;
+    {$endif}
+  end;
+
+const
+  acSIGMOID = acLOGISTIC;
+  acSiLU    = acSWISH;
+
+procedure activate_array(const N: NativeInt; const x: PSingle; const srcStride:NativeInt; output:PSingle; const dstStride:NativeInt=1; const a: TActivationType=acLiNEAR; output2:PSingle =nil);overload;
+procedure activate_array(const N: NativeInt; x: PSingle; const a:TActivationType; output:PSingle=nil); overload;
+procedure gradient_array(const N: NativeInt; const x: PSingle; const srcStride:NativeInt; delta:PSingle ; const dstStride:NativeInt; const a: TActivationType; output:PSingle = nil);overload;
+procedure gradient_array(const N: NativeInt; const x: PSingle; delta:PSingle ; const a: TActivationType; output:PSingle = nil);overload;
+
+//procedure activate_array_swish(const x: Psingle; const N: NativeInt; output_sigmoid, output: Psingle);
+procedure activate_array_mish(const x: Psingle; const N: NativeInt; const activation_input, output: Psingle);
+procedure activate_array_hard_mish(const x: Psingle; const N: NativeInt; const activation_input, output: PSingle);
+procedure activate_array_normalize_channels(const x: Psingle; const N, batch, channels, wh_step: NativeInt; const output: Psingle);
+procedure activate_array_normalize_channels_softmax(const x: Psingle; const N, batch, channels, wh_step: NativeInt; const output: PSingle; const use_max_val: boolean);
+
+//procedure gradient_array_swish(const x: Psingle; const N: NativeInt; const sigmoid: Psingle; delta: Psingle);
+procedure gradient_array_mish(const N: NativeInt; const activation_input: Psingle; delta: Psingle);
+procedure gradient_array_hard_mish(const N: NativeInt; const activation_input, delta: Psingle);
+procedure gradient_array_normalize_channels(const x: Psingle; const N, batch, channels, wh_step: NativeInt; const delta: Psingle);
+procedure gradient_array_normalize_channels_softmax(const x: PSingle; const N, batch, channels, wh_step: NativeInt; const delta: Psingle);
 
 implementation
-uses nBaseLayer;
+uses nTensors, nBaseLayer;
+
+
+{ TActivationTypeHelper }
+
+class function TActivationTypeHelper.fromString(s: string): TActivationType;
+begin
+    s := LowerCase(s);
+    if s = 'logistic' then  exit(acLOGISTIC);
+    if s = 'swish' then exit(acSWISH);
+    if s = 'mish' then exit(acMISH);
+    if s = 'hard_mish' then exit(acHARD_MISH);
+    if s = 'normalize_channels' then exit(acNORM_CHAN);
+    if s = 'normalize_channels_softmax' then exit(acNORM_CHAN_SOFTMAX);
+    if s = 'normalize_channels_softmax_maxval' then exit(acNORM_CHAN_SOFTMAX_MAXVAL);
+    if s = 'loggy' then  exit(acLOGGY);
+    if s = 'relu' then  exit(acRELU);
+    if s = 'relu6' then  exit(acRELU6);
+    if s = 'elu' then  exit(acELU);
+    if s = 'selu' then  exit(acSELU);
+    if s = 'gelu' then  exit(acGELU);
+    if s = 'relie' then  exit(acRELIE);
+    if s = 'plse' then  exit(acPLSE);
+    if s = 'hardtan' then  exit(acHARDTAN);
+    if s = 'lhtan' then  exit(acLHTAN);
+    if s = 'linear' then  exit(acLINEAR);
+    if s = 'ramp' then  exit(acRAMP);
+    if s = 'revleaky' then  exit(acREVLEAKY);
+    if s = 'leaky' then  exit(acLEAKY);
+    if s = 'tanh' then  exit(acTANH);
+    if s = 'stair' then  exit(acSTAIR);
+    //writeln('Couldn''t find activation function ',s,' going with ReLU');
+    exit(acRELU)
+end;
+
+function TActivationTypeHelper.toString(): string;
+begin
+  result := copy(GetEnumName(TypeInfo(TActivationType), ord(Self)), 3, 20)
+end;
+
+{$if defined(USE_ONEDNN)}
+function TActivationTypeHelper.toDNNLAlgKind: dnnl_alg_kind_t;
+begin
+  case self of
+    acLINEAR: result := dnnl_eltwise_linear;
+    acRELU, acLEAKY, acRELIE:
+      result := dnnl_eltwise_relu;
+    acLOGISTIC:
+      result := dnnl_eltwise_logistic;
+    acTANH: result := dnnl_eltwise_tanh;
+    acELU: result := dnnl_eltwise_elu;
+    acGELU: result := dnnl_eltwise_gelu_tanh;
+    acSWISH:
+      result := dnnl_eltwise_swish;
+    acMISH: result := dnnl_eltwise_mish;
+    acSTAIR: result:=dnnl_eltwise_round
+  else
+    result := dnnl_alg_kind_undef;
+  end
+end;
+{$endif}
 
 {$if defined(CPUX64) and defined(USE_AVX2)}
-procedure logistic_array(const dst, src:PSingle; const N:SizeInt);
+procedure logistic_array_avx2(const N:NativeInt; const src:PSingle; dst:PSingle);
 const
   l2e :single = 1.442695041;// log2(e);
   c0  :single = 1.00172476;
@@ -130,7 +222,7 @@ asm
 end;
 
 // AKA SWISH
-procedure SiLU_array(const dst, sigmoid, src:PSingle; const N:SizeInt);
+procedure SiLU_array(const N:NativeInt; const src, sigmoid, dst:PSingle);assembler;
 const
   L2E :single = 1.442695041;// log2(e);
   C0  :single = 1.00172476;
@@ -182,11 +274,14 @@ asm
   //vpandn        ymm7  , ymm7        , ymm0              // ymm6 := not ymm6
   //vblendvps     ymm1  , ymm1  , [rip+one] , ymm6
   //vblendvps     ymm1  , ymm1  , [rip+zero] , ymm7
-  vmovups       [sigmoid] , ymm1
-  vmulps        ymm1      , ymm1    , [src]
-  vmovups       [dst]     , ymm1
-  add           src       , 32
+  cmp           sigmoid   , 0
+  je            @skip1
+  vmovups       yword [sigmoid] , ymm1
   add           sigmoid   , 32
+@skip1:
+  vmulps        ymm1      , ymm1    , yword [src]
+  vmovups      yword [dst], ymm1
+  add           src       , 32
   add           dst       , 32
   dec           r11
   jnz           @while
@@ -217,21 +312,24 @@ asm
   //vpandn        xmm7  , xmm7        , xmm0              // ymm6 := not ymm6
   //vblendvps     xmm1  , xmm1  , [rip+one] , xmm6
   //vblendvps     xmm1  , xmm1  , [rip+zero]  , xmm7
-  vmovss               dword [sigmoid] , xmm1
-  vmulss               xmm1            , xmm1 ,   dword [src]
-  vmovss               [dst]           , xmm1
-  add                  src             , 4
-  add                  sigmoid         , 4
-  add                  dst             , 4
-  dec                  N
-  jnz                  @rem
+  cmp           sigmoid   , 0   // sigmoid is NULL
+  je            @skip2
+  vmovss        dword [sigmoid] , xmm1
+  add           sigmoid         , 4
+@skip2:
+  vmulss        xmm1            , xmm1 ,   dword [src]
+  vmovss        [dst]           , xmm1
+  add           src             , 4
+  add           dst             , 4
+  dec           N
+  jnz           @rem
 @done:
-  vmovdqu              xmm6            , [rsp+$00]
-  vmovdqu              xmm7            , [rsp+$10]
-  add                  rsp             , 16*2                     // restoring stack
+  vmovdqu       xmm6            , [rsp+$00]
+  vmovdqu       xmm7            , [rsp+$10]
+  add           rsp             , 16*2                     // restoring stack
 end;
 
-procedure leaky_array(const x:PSingle; const N:SizeInt; const f:single=0.1);assembler;{$ifdef FPC}nostackframe;{$endif}
+procedure leaky_array(const N:NativeInt; const src:PSingle; dst:PSingle; const f:single=0.1);assembler;{$ifdef FPC}nostackframe;{$endif}
 asm
   vxorps            ymm0  , ymm0  ,  ymm0
   movss             xmm1  , f//[rip+f]
@@ -242,24 +340,30 @@ asm
   jz                @rem                         // goto rem if zero
 
 @while:
-  vcmpgtps          ymm2  , ymm0  ,  [x]         //  is 0 < x
-  vmulps            ymm3  , ymm1  ,  [x]
-  vmaskmovps        yword [x]  , ymm2  ,  ymm3
-  add               x     , 8*4                  // next 8 packed singles
+  vmovups           ymm4  , yword [src]
+  vmovups           yword [dst]   ,  ymm4
+  vcmpgtps          ymm2  , ymm0  ,  ymm4         //  is 0 < src
+  vmulps            ymm3  , ymm1  ,  ymm4
+  vmaskmovps        yword [dst]  , ymm2  ,  ymm3
+  add               src     , 8*4                  // next 8 packed singles
+  add               dst     , 8*4                  // next 8 packed singles
   dec               r11
   jnz               @while                       // while r11<>0
-
+  vzeroupper
 @rem:
   and               N     , 7                    // N mod 8
   jz                @done                        // exit if zero
 
 @while2:
-  vcomiss           xmm0  , dword [x]
+  vmovss            xmm4      , dword [src]
+  vmovss            dword[dst], xmm4
+  vcomiss           xmm0  , xmm4
   jbe               @skip
-  vmulss            xmm3  , xmm1  ,  dword [x]
-  vmovss            dword [x]   , xmm3
+  vmulss            xmm3  , xmm1  ,  dword [src]
+  vmovss            dword [dst]   , xmm3
 @skip:
-  add               x     , 4
+  add               src     , 4
+  add               dst     , 4
   dec               N
   jnz               @while2
 
@@ -270,7 +374,7 @@ end;
 
 
 function stair_activate(const x:single) :single;inline;
-var n :SizeInt;
+var n :NativeInt;
 begin
   n := floor(x);
   if n mod 2 = 0 then
@@ -304,7 +408,7 @@ end;
 
 function relu_activate(const x:single):single;inline;
 begin
-  result := x*SizeInt(x>0);
+  result := x*NativeInt(x>0);
   //if x<0 then exit(0);
   //result:=x
 end;
@@ -312,18 +416,19 @@ end;
 function relu6_activate(const x:single):single;inline;
 begin
   //min_val_cmp(max_val_cmp(x, 0), 6)
-  //result := EnsureRange(x,0,6);
-  result:= x*SizeInt(x>0) * SizeInt(x<=6)
+  result := EnsureRange(x,0,6);
+  //result:= x*NativeInt(x>0) * NativeInt(x<=6)
 end;
 
 function elu_activate(const x:single):single;inline;
 begin
-  result:=SizeInt(x >= 0)*x + SizeInt(x < 0)*(exp(x)-1);
+  result:=NativeInt(x >= 0)*x + NativeInt(x < 0)*(exp(x)-1);
 end;
 
 function selu_activate(const x:single):single;inline;
 begin
-  result:= SizeInt(x >= 0)*1.0507*x + SizeInt(x < 0)*1.0507*1.6732*(exp(x)-1);
+  result := ord(x >= 0)*1.0507*x + ord(x < 0)*1.0507*1.6732*(exp(x) - 1);
+  //result:= NativeInt(x >= 0)*1.0507*x + NativeInt(x < 0)*1.0507*1.6732*(exp(x)-1);
 end;
 
 function gelu_activate(const x:single):single;inline;
@@ -339,13 +444,14 @@ end;
 
 function ramp_activate(const x:single):single;inline;
 begin
-  result:= x*SizeInt(x>0)+0.1*x;
+  result:= x*NativeInt(x>0)+0.1*x;
 end;
 
 function leaky_activate(const x:single):single;inline;
 begin
-  if x>0 then result:= x
-  else result := 0.1*x
+  result := ord(x<0)*x*0.1 + ord(x>0)*x;
+  //if x>0 then result:= x
+  //else result := 0.1*x
 end;
 
 function tanh_activate(const x:single):single;inline;
@@ -383,21 +489,21 @@ begin
     result := x
 end;
 
-procedure softmax_activate(const N:SizeInt; const x: PSingle);inline;
+procedure softmax_activate(const N:NativeInt; const x: PSingle; const dst:PSingle);inline;
 var
-  i:SizeInt;
+  i:NativeInt;
   mx:single;
 begin
   mx := TSingleTensor.maxv(N, Pointer(x), 1);//MaxValue(x, N);
   for i:=0 to N-1 do
     //x[i] := Exp(EnsureRange(x[i]-mx, minSingleExp, maxSingleExp));
-    x[i] := Exp(x[i]-mx);
+    dst[i] := Exp(x[i]-mx);
 
-  mx := TSingleTensor.Sumv(N, pointer(x), 1);
+  mx := TSingleTensor.Sumv(N, pointer(dst), 1);
   //r:=copy(x);
   //r.Exp();
   for i :=0 to N-1 do
-    x[i] := x[i] / mx
+    dst[i] := dst[i] / mx
 end;
 
 function lhtan_gradient(const x:single):single;inline;
@@ -406,7 +512,6 @@ begin
       exit(1);
     exit(0.001)
 end;
-
 
 function hardtan_gradient(const x:single):single;inline;
 begin
@@ -440,39 +545,41 @@ end;
 
 function relu_gradient(const x:single):single;inline;
 begin
-  result := SizeInt(x>0);
+  result := ord(x>0);
 end;
 
 function relu6_gradient(const x:single):single;inline;
 begin
-  result := SizeInt((x>0) and (x<6));
+  result := NativeInt((x>0) and (x<6));
 end;
 
 function elu_gradient(const x:single):single;inline;
 begin
-  result := SizeInt(x >= 0) + SizeInt(x < 0)*(x + 1);
+  result := NativeInt(x >= 0) + NativeInt(x < 0)*(x + 1);
 end;
 
 function selu_gradient(const x:single):single;inline;
 begin
-  result := SizeInt(x >= 0)*1.0507 + SizeInt(x < 0)*(x + 1.0507*1.6732);
+  result := NativeInt(x >= 0)*1.0507 + NativeInt(x < 0)*(x + 1.0507*1.6732);
 end;
 
 function relie_gradient(const x:single):single;inline;
 begin
-  if x>0 then result := 1
-  else result := 0.01
+  result := ord(x>0) + 0.01*ord(x<0);
+  //if x>0 then result := 1
+  //else result := 0.01
 end;
 
 function ramp_gradient(const x:single):single;inline;
 begin
-  result := SizeInt(x>0) + 0.1;
+  result := NativeInt(x>0) + 0.1;
 end;
 
 function leaky_gradient(const x:single):single;inline;
 begin
-  if x>0 then result := 1
-  else result := 0.1;
+  result := ord(x>0) + 0.1*ord(x<0);
+  //if x>0 then result := 1
+  //else result := 0.1;
 end;
 
 function tanh_gradient(const x:single):single;inline;
@@ -500,203 +607,296 @@ begin
     result := 0.125;
 end;
 
-procedure softmax_gradient(const N:SizeInt; const x: PSingle);inline;
+procedure softmax_gradient(const N:NativeInt; const x: PSingle);inline;
 begin
 
 end;
+const MISH_THRESHOLD : single=20;
 
-procedure activate_array(const x: PSingle; const N: SizeInt; const a: TActivationType; output: PSingle; output2: PSingle);
-var i:SizeInt;
+procedure activate_array(const N: NativeInt; const x: PSingle;
+  const srcStride: NativeInt; output: PSingle; const dstStride: NativeInt;
+  const a: TActivationType; output2: PSingle);
+
+  {$ifdef FPC}
+  procedure actMP(const start, finish:IntPtr; const args:pointer);
+  {$else}
+  var
+    actMP : TGroupProcNested;
 begin
-  // todo [Activate Array] SIMDFY & GPU
-    {$ifdef USE_TELEMETRY} if benchmark then metrics.act.start(a);{$endif}
-
-      case a of
-          acLOGISTIC:
-      {$if defined(CPUX64) and defined(USE_AVX2)}
-            if AVX2Support then
-              logistic_array(x, x, N)
-            else
-            for i := 0 to N-1 do
-                x[i] := logistic_activate(x[i]);
-      {$else}
-            for i := 0 to N-1 do
-                x[i] := logistic_activate(x[i]);
-      {$endif}
-
-          acRELU:
-            for i := 0 to N-1 do
-                x[i] := relu_activate(x[i]);
-
-          acRELU6:
-            for i := 0 to N-1 do
-                x[i] := relu6_activate(x[i]);
-
-          acRELIE:
-            for i := 0 to N-1 do
-                x[i] := relie_activate(x[i]);
-
-          acLINEAR:
-            //for i := 0 to N-1 do
-            //    x[i] := linear_activate(x[i])
-            ;
-          acRAMP:
-            for i := 0 to N-1 do
-                x[i] := ramp_activate(x[i]);
-
-          acTANH:
-            for i := 0 to N-1 do
-                x[i] := tanh_activate(x[i]);
-
-          acPLSE:
-            for i := 0 to N-1 do
-                x[i] := plse_activate(x[i]);
-
-          acREVLEAKY, acLEAKY:
-          {$if defined(CPUX64) and defined(USE_AVX2)}
-          if AVX2Support then
-            leaky_array(x, N)
-          else
-            for i := 0 to N-1 do
-              if x[i]<0 then x[i] := 0.1*x[i];
-          {$else}
-              for i := 0 to N-1 do
-                if x[i]<0 then x[i] := 0.1*x[i];
-                //x[i] := leaky_activate(x[i]);
-          {$endif}
-          acELU:
-            for i := 0 to N-1 do
-                x[i] := elu_activate(x[i]);
-
-          acLOGGY:
-            for i := 0 to N-1 do
-                x[i] := loggy_activate(x[i]);
-
-          acSTAIR:
-            for i := 0 to N-1 do
-                x[i] := stair_activate(x[i]);
-
-          acHARDTAN:
-            for i := 0 to N-1 do
-                x[i] := hardtan_activate(x[i]);
-
-          acLHTAN:
-            for i := 0 to N-1 do
-                x[i] := lhtan_activate(x[i]);
-
-          acSELU:
-            for i := 0 to N-1 do
-                x[i] := selu_activate(x[i]);
-
-          acGELU:
-            for i := 0 to N-1 do
-                x[i] := gelu_activate(x[i]);
-
-          acSOFTMAX:
-            softmax_activate(N, x);
-          acSWISH:
-            for i := 0 to N-1 do
-              output[i] := x[i]*logistic_activate(x[i]);
-
-          //
-          //acMISH:
-          //           ;
-          //
-          //acHARD_MISH:
-          //           ;
-          //
-          //acNORM_CHAN:
-          //           ;
-          //
-          //acNORM_CHAN_SOFTMAX:
-          //           ;
-          //
-          //acNORM_CHAN_SOFTMAX_MAXVAL:
-          //           ;
-          else
-            assert(false, '[Activation] :'+GetEnumName(TypeInfo(TActivationType), ord(a))+' not Implemented')
-      end;
-    {$ifdef USE_TELEMETRY} if benchmark then metrics.act.finish(a);{$endif}
-
-end;
-
-
-procedure gradient_array(const x: PSingle; const N: SizeInt; const a: TActivationType; const delta: PSingle);
-var i:SizeInt;
-begin
-    {$ifdef USE_TELEMETRY} if benchmark then metrics.grad.start(a);{$endif}
-    // todo [Gradient array] SIMDfy & GPU
-
+  actMP := procedure (const start, finish:IntPtr; const args:pointer)
+  {$endif}
+  var i:NativeInt;
+    tmp : single;
+  begin
     case a of
         acLOGISTIC:
-          for i := 0 to N-1 do
+    {$if defined(CPUX64) and defined(USE_AVX2)}
+          if AVX2Support then
+            logistic_array_avx2(finish - start+1, x+start, output+start)
+          else
+    {$endif}
+          for i := start to finish do
+              output[i*dstStride] := logistic_activate(x[i*srcStride]);
+        acRELU:
+          for i := start to finish do
+              output[i*dstStride] := relu_activate(x[i*srcStride]);
+
+        acRELU6:
+          for i := start to finish do
+              output[i*dstStride] := relu6_activate(x[i*srcStride]);
+
+        acRELIE:
+          for i := start to finish do
+              output[i*dstStride] := relie_activate(x[i*srcStride]);
+
+        acLINEAR:
+          if output<>x then
+            if (srcStride =1) and (dstStride=1)then
+              move(x[start], output[start], (finish-start+1)*sizeOf(single))
+            else
+              for i := start to finish do
+                output[i*dstStride] := linear_activate(x[i*srcStride]);
+        acRAMP:
+          for i := start to finish do
+              output[i*dstStride] := ramp_activate(x[i*srcStride]);
+
+        acTANH:
+          for i := start to finish do
+              output[i*dstStride] := tanh_activate(x[i*srcStride]);
+
+        acPLSE:
+          for i := start to finish do
+              output[i*dstStride] := plse_activate(x[i*srcStride]);
+
+        acREVLEAKY, acLEAKY:
+        {$if defined(CPUX64) and defined(USE_AVX2) and not defined(DEBUG_GPU)}
+        if AVX2Support and (srcStride=1) and (dstStride=1) then
+          leaky_array(finish - start+1, x+start, output+start)
+        else
+        {$endif}
+          for i := start to finish do
+              output[i*dstStride] := leaky_activate(x[i*srcStride]);
+
+        acELU:
+          for i := start to finish do
+              output[i*dstStride] := elu_activate(x[i*srcStride]);
+
+        acLOGGY:
+          for i := start to finish do
+              output[i*dstStride] := loggy_activate(x[i*srcStride]);
+
+        acSTAIR:
+          for i := start to finish do
+              output[i*dstStride] := stair_activate(x[i*srcStride]);
+
+        acHARDTAN:
+          for i := start to finish do
+              output[i*dstStride] := hardtan_activate(x[i*srcStride]);
+
+        acLHTAN:
+          for i := start to finish do
+              output[i*dstStride] := lhtan_activate(x[i*srcStride]);
+
+        acSELU:
+          for i := start to finish do
+              output[i*dstStride] := selu_activate(x[i*srcStride]);
+
+        acGELU:
+          for i := start to finish do
+              output[i*dstStride] := gelu_activate(x[i*srcStride]);
+
+        acSWISH:
+          {$if defined(CPUX64) and defined(USE_AVX2) and not defined(DEBUG_GPU)}
+          if AVX2Support and (srcStride=1) and (dstStride=1) then
+            if assigned(output2) then
+              SiLU_array(finish-start+1, x+start, output2+start, output+start)
+            else
+              SiLU_array(finish-start+1, x+start, nil          , output+start)
+          else
+          {$endif}
+          if assigned(output2) then
+            for i := start to finish do begin
+              tmp := x[i*srcStride];
+              output2[i*dstStride] := logistic_activate(tmp);
+              output[i*dstStride] := tmp*output2[i*dstStride];
+            end
+          else
+            for i := start to finish do begin
+              tmp := x[i*srcStride];
+              output[i*dstStride] := tmp*logistic_activate(tmp);
+            end;
+
+        //
+        acMISH:
+          if Assigned(output2) then
+          for i := start to finish do
+            begin
+                tmp := x[i*srcStride];
+                output2[i] := tmp;
+                output[i*dstStride] := tmp * tanh_activate(softplus_activate(tmp, MISH_THRESHOLD))
+            end
+          else
+            for i := start to finish do
+              begin
+                  tmp := x[i*srcStride];
+                  output[i*dstStride] := tmp * tanh_activate(softplus_activate(tmp, MISH_THRESHOLD))
+              end;
+
+        //
+        //acHARD_MISH:
+        //           ;
+        //
+        //acNORM_CHAN:
+        //           ;
+        //
+        //acNORM_CHAN_SOFTMAX:
+        //           ;
+        //
+        //acNORM_CHAN_SOFTMAX_MAXVAL:
+        //           ;
+        else
+          assert(false, '[Activation] :'+GetEnumName(TypeInfo(TActivationType), ord(a))+' not Implemented')
+    end;
+  end;
+{$ifdef FPC}
+begin
+{$endif}
+  {$ifdef USE_TELEMETRY} if benchmark then metrics.act.start(a);{$endif}
+
+  if a <> acSOFTMAX then // todo : [Activation] CAUSION: acSoftmax here does not work with multithreading yet
+    {$ifdef USE_MULTITHREADING}
+    mp.&for(actMP, 0, N-1)
+    {$else}
+    actMP(0, N-1, nil)
+    {$endif}
+  else
+    softmax_activate(N, x, output);
+
+  {$ifdef USE_TELEMETRY} if benchmark then metrics.act.finish(a);{$endif}
+end;
+
+procedure activate_array(const N: NativeInt; x: PSingle; const a: TActivationType; output:PSingle=nil);
+begin
+  activate_array(N, x, 1, x, 1, a, output);
+end;
+
+procedure gradient_array(const N: NativeInt; const x: PSingle;
+  const srcStride: NativeInt; delta: PSingle; const dstStride: NativeInt;
+  const a: TActivationType; output: PSingle);
+
+{$ifdef FPC}
+procedure gradMP(const start, finish:IntPtr; const args:pointer);
+{$else}
+var gradMP : TGroupProcNested;
+begin
+  gradMP := procedure (const start, finish:IntPtr; const args:pointer)
+{$endif}
+var
+  i  : NativeInt;
+  tmp, sp, grad, grad_sp, tsp, grad_tsp: single;
+begin
+    // todo [Gradient array] SIMDfy & GPU
+    case a of
+        acLOGISTIC:
+          for i := start to finish do
               delta[i] := delta[i] * logistic_gradient(x[i]);
 
         acRELU:
-          for i := 0 to N-1 do
-              delta[i] := delta[i] * ord(x[i]>0);//relu_gradient(x[i]);
+          for i := start to finish do
+              delta[i] := delta[i] * Integer(x[i]>0);//relu_gradient(x[i]);
 
         acRELU6:
-          for i := 0 to N-1 do
+          for i := start to finish do
               delta[i] := delta[i] * relu6_gradient(x[i]);
 
         acRELIE:
-          for i := 0 to N-1 do
+          for i := start to finish do
               delta[i] := delta[i] * relie_gradient(x[i]);
 
         acLINEAR:
-          //for i := 0 to N-1 do
+          //for i := start to finish- do
           //    delta[i] := delta[i] *linear_gradient(x[i])
           ;
 
         acRAMP:
-          for i := 0 to N-1 do
+          for i := start to finish do
               delta[i] := delta[i] * ramp_gradient(x[i]);
 
         acTANH:
-          for i := 0 to N-1 do
+          for i := start to finish do
               delta[i] := delta[i] * tanh_gradient(x[i]);
 
         acPLSE:
-          for i := 0 to N-1 do
+          for i := start to finish do
               delta[i] := delta[i] * plse_gradient(x[i]);
 
         acREVLEAKY, acLEAKY:
-          for i := 0 to N-1 do
+          for i := start to finish do
               delta[i] := delta[i] * leaky_gradient(x[i]);
 
         acELU:
-          for i := 0 to N-1 do
+          for i := start to finish do
               delta[i] := delta[i] * elu_gradient(x[i]);
 
         acLOGGY:
-          for i := 0 to N-1 do
+          for i := start to finish do
               delta[i] := delta[i] * loggy_gradient(x[i]);
 
         acSTAIR:
-          for i := 0 to N-1 do
+          for i := start to finish do
               delta[i] := delta[i] * stair_gradient(x[i]);
 
         acHARDTAN:
-          for i := 0 to N-1 do
+          for i := start to finish do
               delta[i] := delta[i] * hardtan_gradient(x[i]);
 
         acLHTAN:
-          for i := 0 to N-1 do
+          for i := start to finish do
               delta[i] := delta[i] * lhtan_gradient(x[i]);
 
         acSELU:
-          for i := 0 to N-1 do
+          for i := start to finish do
               delta[i] := delta[i] * selu_gradient(x[i]);
 
         acGELU:
-          for i := 0 to N-1 do
+          for i := start to finish do
               delta[i] := delta[i] * gelu_gradient(x[i]);
-        //acSWISH:
-        //           ;
-    //
-    //    acMISH:
-    //               ;
+        acSWISH:
+          if assigned(output) then
+          for i := start to finish do
+              begin
+                  tmp := x[i];
+                  delta[i] := delta[i] * (tmp+output[i] * (-tmp))
+              end
+          else
+          for i := start to finish do
+              begin
+                  tmp := x[i];
+                  delta[i] := delta[i] * (tmp+logistic_activate(x[i]) * (-tmp))
+              end;
+        acMISH:
+          if assigned(output) then
+          for i := start to finish do
+              begin
+                  tmp := output[i];
+                  sp := softplus_activate(tmp, MISH_THRESHOLD);
+                  grad_sp := 1-exp(-sp);
+                  tsp := tanh(sp);
+                  grad_tsp := (1-tsp * tsp) * grad_sp;
+                  grad := tmp * grad_tsp+tsp;
+                  delta[i] := delta[i] * grad
+              end
+          else
+          for i := start to finish do
+              begin
+                  tmp := x[i];
+                  sp := softplus_activate(tmp, MISH_THRESHOLD);
+                  grad_sp := 1-exp(-sp);
+                  tsp := tanh(sp);
+                  grad_tsp := (1-tsp * tsp) * grad_sp;
+                  grad := tmp * grad_tsp+tsp;
+                  delta[i] := delta[i] * grad
+              end ;
     //
     //    acHARD_MISH:
     //               ;
@@ -713,65 +913,74 @@ begin
         assert(false, '[Derivitive] : not implemented!')
     end;
 
-    {$ifdef USE_TELEMETRY} if benchmark then metrics.grad.finish(a);{$endif}
 end;
 
-procedure swishMP(const f, t:IntPtr; const p:pointer);
-var
-  i: SizeInt;
-  x_val, sigmoid: single;
-  a:PMPParams absolute p;
-  x, output_sigmoid, output:PSingle;
+{$ifdef FPC}
 begin
-    x:=a.A;
-    output_sigmoid:=a.B;
-    output := a.C;
+{$endif}
+  {$ifdef USE_TELEMETRY} if benchmark then metrics.grad.start(a);{$endif}
 
-    {$if defined(CPUX64) and defined(USE_AVX2)}
-    if AVX2Support then
-      SiLU_array(output+f, output_sigmoid+f, x+f, t-f+1)
-    else
-    for i := f to t do
-      begin
-          x_val := x[i];
-          sigmoid := logistic_activate(x_val);
-          output_sigmoid[i] := sigmoid;
-          output[i] := x_val * sigmoid
-      end
-    {$else}
-    for i := f to t do
-      begin
-          x_val := x[i];
-          sigmoid := logistic_activate(x_val);
-          output_sigmoid[i] := sigmoid;
-          output[i] := x_val * sigmoid
-      end
-    {$endif}
+  {$ifdef USE_MULTITHREADING}
+  mp.&For(gradMP, 0, N-1);
+  {$else}
+  gradMP(0, N-1, nil);
+  {$endif}
+
+  {$ifdef USE_TELEMETRY} if benchmark then metrics.grad.finish(a);{$endif}
 end;
+
+procedure gradient_array(const N: NativeInt; const x: PSingle; delta: PSingle; const a: TActivationType; output: PSingle);
+begin
+  gradient_array(N, x, 1, delta, 1, a, output)
+end;
+
+//procedure swishMP(const f, t:IntPtr; const p:pointer);
+//var
+//  i: NativeInt;
+//  x_val, sigmoid: single;
+//  a:PMPParams absolute p;
+//  x, output_sigmoid, output:PSingle;
+//begin
+//    x:=a.A;
+//    output_sigmoid:=a.B;
+//    output := a.C;
+//
+//    {$if defined(CPUX64) and defined(USE_AVX2)}
+//    if AVX2Support then
+//      SiLU_array(output+f, output_sigmoid+f, x+f, t-f+1)
+//    else
+//    {$endif}
+//    for i := f to t do
+//      begin
+//          x_val := x[i];
+//          sigmoid := logistic_activate(x_val);
+//          output_sigmoid[i] := sigmoid;
+//          output[i] := x_val * sigmoid
+//      end
+//end;
 
 // SWISH aka SiLU
-procedure activate_array_swish(const x: Psingle; const N: SizeInt;
-  output_sigmoid, output: Psingle);
-var
-  p:TMPParams;
-begin
-// todo simdfy
-  {$ifdef USE_TELEMETRY} if benchmark then metrics.act.start(acSWISH);{$endif}
-  p.A:=x;
-  p.B:=output_sigmoid;
-  p.C:=output;
-  {$if defined(_USE_MULTITHREADING)}
-  mp2.&for(swishMP, 0, N-1,@p);
-  {$else}
-  swishMP(0, N-1, @p);
-  {$endif}
-  {$ifdef USE_TELEMETRY}if benchmark then metrics.act.finish(acSWISH);{$endif}
-end;
+//procedure activate_array_swish(const x: Psingle; const N: NativeInt; output_sigmoid, output: Psingle);
+//var
+//  p:TMPParams;
+//begin
+//// todo simdfy
+//  {$ifdef USE_TELEMETRY} if benchmark then metrics.act.start(acSWISH);{$endif}
+//  p.A:=x;
+//  p.B:=output_sigmoid;
+//  p.C:=output;
+//  {$if defined(_USE_MULTITHREADING)}
+//  mp2.&for(swishMP, 0, N-1,@p);
+//  {$else}
+//  swishMP(0, N-1, @p);
+//  {$endif}
+//  {$ifdef USE_TELEMETRY}if benchmark then metrics.act.finish(acSWISH);{$endif}
+//end;
 
+{$ifdef USE_MULTITHREADING}
 procedure mishMP(const f,t :IntPtr;const p:pointer=nil);
-const MISH_THRESHOLD : single=20;
 var
-  i: SizeInt;
+  i: NativeInt;
   x_val: single;
   a:PMPParams absolute p;
   x, activation_input, output:Psingle;
@@ -788,20 +997,29 @@ begin
           output[i] := x_val * tanh_activate(softplus_activate(x_val, MISH_THRESHOLD))
       end
 end;
+{$endif}
 
-procedure activate_array_mish(const x: Psingle; const N: SizeInt;
-  const activation_input, output: Psingle);
+procedure activate_array_mish(const x: Psingle; const N: NativeInt; const activation_input, output: Psingle);
 var
+  x_val :single;
+  i:NativeInt;
+  {$ifdef USE_MULTITHREADING}
   p:TMPParams;
+  {$endif}
 begin
   {$ifdef USE_TELEMETRY} if benchmark then metrics.act.start(acMISH);{$endif}
+  {$if defined(USE_MULTITHREADING)}
   p.A:=x;
   p.B:=activation_input;
   p.C:=output;
-  {$if defined(USE_MULTITHREADING)}
-  mp2.&for(mishMP, 0, n-1,@p);
+  mp.&for(mishMP, 0, n-1,@p);
   {$else}
-  mishMP(0, N-1, @p);
+  for i := 0 to N-1 do
+    begin
+        x_val := x[i];
+        activation_input[i] := x_val;
+        output[i] := x_val * tanh_activate(softplus_activate(x_val, MISH_THRESHOLD))
+    end;
   {$endif}
 
   {$ifdef USE_TELEMETRY} if benchmark then metrics.act.finish(acMISH);{$endif}
@@ -817,10 +1035,10 @@ begin
   exit(0)
 end;
 
-procedure activate_array_hard_mish(const x: Psingle; const N: SizeInt;
+procedure activate_array_hard_mish(const x: Psingle; const N: NativeInt;
   const activation_input, output: PSingle);
 var
-  i: SizeInt;
+  i: NativeInt;
   x_val: single;
 begin
 // todo SIMDfy
@@ -835,9 +1053,9 @@ begin
 end;
 
 procedure activate_array_normalize_channels(const x: Psingle; const N, batch,
-  channels, wh_step: SizeInt; const output: Psingle);
+  channels, wh_step: NativeInt; const output: Psingle);
 var
-  size, i, wh_i, b, k: SizeInt;
+  size, i, wh_i, b, k: NativeInt;
   sum, val: single;
 begin
   {$ifdef USE_TELEMETRY} if benchmark then metrics.act.start(acNORM_CHAN);{$endif}
@@ -871,10 +1089,10 @@ begin
 end;
 
 procedure activate_array_normalize_channels_softmax(const x: Psingle; const N,
-  batch, channels, wh_step: SizeInt; const output: PSingle;
+  batch, channels, wh_step: NativeInt; const output: PSingle;
   const use_max_val: boolean);
 var
-  size, i, wh_i, b, k: SizeInt;
+  size, i, wh_i, b, k: NativeInt;
   sum, max_val, val: single;
 begin
   {$ifdef USE_TELEMETRY} if benchmark then metrics.act.start(acNORM_CHAN_SOFTMAX);{$endif}
@@ -914,28 +1132,27 @@ begin
 end;
 
 
-procedure gradient_array_swish(const x: Psingle; const N: SizeInt;
-  const sigmoid: Psingle; delta: Psingle);
-var
-    i: SizeInt;
-    swish: single;
-begin
-    {$ifdef USE_TELEMETRY} if benchmark then metrics.grad.start(acSWISH);{$endif}
-    // todo SIMDfy
-    for i := 0 to N -1 do
-        begin
-            swish := x[i];
-            delta[i] := delta[i] * (swish+sigmoid[i] * (1-swish))
-        end;
-    {$ifdef USE_TELEMETRY} if benchmark then metrics.grad.finish(acSWISH);{$endif}
-end;
+//procedure gradient_array_swish(const x: Psingle; const N: NativeInt; const sigmoid: Psingle; delta: Psingle);
+//var
+//    i: NativeInt;
+//    swish: single;
+//begin
+//    {$ifdef USE_TELEMETRY} if benchmark then metrics.grad.start(acSWISH);{$endif}
+//    // todo SIMDfy
+//    for i := 0 to N -1 do
+//        begin
+//            swish := x[i];
+//            delta[i] := delta[i] * (swish+sigmoid[i] * (1-swish))
+//        end;
+//    {$ifdef USE_TELEMETRY} if benchmark then metrics.grad.finish(acSWISH);{$endif}
+//end;
 
-procedure gradient_array_mish(const N: SizeInt;
+procedure gradient_array_mish(const N: NativeInt;
   const activation_input: Psingle; delta: Psingle);
 const
     MISH_THRESHOLD: single = 20;
 var
-    i: SizeInt;
+    i: NativeInt;
     inp, sp, grad_sp, tsp, grad_tsp, grad: single;
 begin
     {$ifdef USE_TELEMETRY} if benchmark then metrics.grad.start(acMISH);{$endif}
@@ -963,10 +1180,10 @@ begin
     exit(0)
 end;
 
-procedure gradient_array_hard_mish(const N: SizeInt; const activation_input,
+procedure gradient_array_hard_mish(const N: NativeInt; const activation_input,
   delta: Psingle);
 var
-    i: SizeInt;
+    i: NativeInt;
     inp: single;
 begin
     {$ifdef USE_TELEMETRY} if benchmark then metrics.grad.start(acHARD_MISH);{$endif}
@@ -980,9 +1197,9 @@ begin
 end;
 
 procedure gradient_array_normalize_channels(const x: Psingle; const N, batch,
-  channels, wh_step: SizeInt; const delta: Psingle);
+  channels, wh_step: NativeInt; const delta: Psingle);
 var
-    size, i, wh_i, b, k, index: SizeInt;
+    size, i, wh_i, b, k, index: NativeInt;
     grad, &out, d: single;
 begin
     {$ifdef USE_TELEMETRY} if benchmark then metrics.grad.start(acNORM_CHAN);{$endif}
@@ -1018,9 +1235,9 @@ begin
 end;
 
 procedure gradient_array_normalize_channels_softmax(const x: PSingle; const N,
-  batch, channels, wh_step: SizeInt; const delta: Psingle);
+  batch, channels, wh_step: NativeInt; const delta: Psingle);
 var
-    size, i, wh_i, b, k, index: SizeInt;
+    size, i, wh_i, b, k, index: NativeInt;
     grad, &out, d: single;
 begin
     {$ifdef USE_TELEMETRY} if benchmark then metrics.grad.start(acNORM_CHAN_SOFTMAX);{$endif}

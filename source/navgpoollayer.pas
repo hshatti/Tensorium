@@ -38,8 +38,7 @@ begin
   inputShape := [batch, c, h , w];
   outputs := outC;
   inputs := h * w * c;
-  output:=TSingleTensor.Create([batch, outputs], batch);
-  delta:=TSingleTensor.Create([batch, outputs], batch);
+  output:=TSingleTensor.Create([batch, outputs], batch,'avgpool_output');
 end;
 
 procedure TAvgPoolLayer.setBatch(ABatch: SizeInt);
@@ -48,13 +47,18 @@ begin
   batch := ABatch;
   inputShape[0] := batch;
   output.reSize([batch, outputs], batch);
-  delta.reSize([batch, outputs], batch);
+  if FTrain then
+    delta.reSize([batch, outputs], batch);
 end;
 
 procedure TAvgPoolLayer.setTrain(ATrain: boolean);
 begin
-    if ATrain=FTrain then exit();
-  FTrain := ATrain
+  if ATrain=FTrain then exit();
+  FTrain := ATrain;
+  if FTrain then
+    delta:=TSingleTensor.Create([batch, outputs], batch,'avgpool_delta')
+  else
+    delta.free;
 end;
 
 procedure TAvgPoolLayer.forward(var state: TNNetState);

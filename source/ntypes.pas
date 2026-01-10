@@ -14,6 +14,7 @@ uses
   , FPImage, FPImgCanv
   , FPReadBMP, FPReadJPEG, FPReadPNG, FPReadTGA
   , FPWriteBMP, FPWriteJPEG, FPWritePNG, FPWriteTGA
+  //, Generics.Defaults, Generics.Collections
 //  {$elseif defined(FRAMEWORK_FMX)}
 //  , UITypes, FMX.Graphics
 //  {$elseif defined(FRAMEWORK_VCL)}
@@ -24,7 +25,8 @@ uses
   {$ifdef USE_OPENCL}
   , OpenCL
   {$endif}
-  ,  nTensors
+  , nActivation
+  , nTensors
   ;
 
 const
@@ -42,13 +44,37 @@ type
 
 type
 
+  TActivationType = nActivation.TActivationType;
+
+// redefine some common activation defaults
+  const
+    acLINEAR   = TActivationType.acLINEAR;
+    acRELU     = TActivationType.acRELU;
+    acLOGISTIC = TActivationType.acLOGISTIC;
+    acSOFTMAX  = TActivationType.acSOFTMAX;
+    acLOGGY    = TActivationType.acLOGGY;
+    acSTAIR    = TActivationType.acSTAIR;
+    acLEAKY    = TActivationType.acLEAKY;
+    acTANH     = TActivationType.acTANH;
+    acSWISH    = TActivationType.acSWISH;
+    acMISH     = TActivationType.acMISH;
+
+
+
+
+type
+  TNeuralTensor = TSingleTensor;//TTensor<single>;
+  PNeuralTensor = ^TNeuralTensor;
+
   PNNetState = ^TNNetState;
   TNNetState = record
       net : TObject;
-      truth : TSingleTensor;
-      input : PSingleTensor;
-      delta : PSingleTensor;
-      workspace : TSingleTensor;
+      truth : TNeuralTensor;
+      input : PNeuralTensor;
+      delta : PNeuralTensor;
+      inputs : TArray<PNeuralTensor>;
+      deltas : TArray<PNeuralTensor>;
+      workspace : TNeuralTensor;
       isTraining : boolean;
       index : SizeInt;
       label_smooth_eps : single;
@@ -61,14 +87,6 @@ type
       ev    : TArray<cl_int>;
       {$endif}
   end;
-
-  PActivationType = ^TActivationType;
-  TActivationType = (
-    acLOGISTIC, acRELU, acRELU6, acRELIE, acLINEAR, acRAMP, acTANH, acPLSE,
-    acREVLEAKY, acLEAKY, acELU, acLOGGY, acSTAIR, acHARDTAN, acLHTAN, acSELU, acSOFTMAX,
-    acGELU, acSWISH, acMISH, acHARD_MISH, acNORM_CHAN, acNORM_CHAN_SOFTMAX,
-    acNORM_CHAN_SOFTMAX_MAXVAL
-  );
 
   PLearningRatePolicy = ^TLearningRatePolicy;
   TLearningRatePolicy = (lrpCONSTANT, lrpSTEP, lrpEXP, lrpPOLY, lrpSTEPS, lrpSIG, lrpRANDOM, lrpSGDR, lrpCOST);
@@ -98,12 +116,12 @@ type
     ltDETECTION,
     ltDROPOUT,
     ltCROP,
-    ltROUTE,
+    ltCONCAT,
     ltCOST,
     ltNORMALIZATION,
     ltAVGPOOL,
     ltLOCAL,
-    ltSHORTCUT,
+    ltADD,
     ltScaleChannels,
     ltSAM,
     ltACTIVE,
@@ -130,10 +148,17 @@ type
     ltCONTRASTIVE,
     ltIMPLICIT
   );
+const
+  ltROUTE     = ltCONCAT;
+  ltSHORTCUT  = ltADD;
 
+type
   PCostType = ^TCostType;
   TCostType = (ctSSE, ctMASKED, ctL1, ctSEG, ctSMOOTH, ctWGAN);
+const
+  ctL2      = ctSSE;
 
+type
   TIOULoss = (
       ilIOU, ilGIOU, ilMSE, ilDIOU, ilCIOU
   ) ;
@@ -177,9 +202,12 @@ type
     c : SizeInt;
     n : SizeInt;
     data : TArray<Single>;
-    procedure fromTensor(const src:TSingleTensor);
-    function toTensor():TSingleTensor;
+    function size():SizeInt;
+    procedure fromTensor(const src:TNeuralTensor);
+    procedure toTensor(var dst:TNeuralTensor);overload;
+    function asTensor(const deepCopy:boolean = false):TNeuralTensor;overload;
     constructor Create(const aWidth, aHeight, aChannels: SizeInt; const aImageCount : SizeInt=1);
+    procedure init(const aWidth, aHeight, aChannels: SizeInt; const aImageCount : SizeInt=1);
     procedure loadFromFile(const fileName:string);                                                   overload;
     procedure loadFromFile(const fileNames:TArray<string>; const resizeWidth, resizeHeight:SizeInt); overload;
     procedure saveToFile(const filename:string);
@@ -192,6 +220,7 @@ type
     procedure rect(const x1, y1, x2, y2: SizeInt; const r, g, b: single; const alpha: single= 1; const aBatch:SizeInt = 0);  overload;
     procedure rect(const x1, y1, x2, y2, w: SizeInt; const r, g, b: single; const alpha: single=1; const aBatch:SizeInt = 0);  overload;
     procedure rect(const x1, y1, x2, y2, w: SizeInt; const brightness:single; const aBatch:SizeInt = 0);                     overload;
+    procedure ellipse(const x0,y0, x1, y1, w:SizeInt; const r,g,b:single; const alpha:single = 1; const aBatch:SizeInt =0);
     property pixels[x, y, c:SizeInt]: Single read Getpixels write Setpixels;
   end;
 
@@ -296,8 +325,16 @@ type
 
   TDetectionsHelper = record helper for TDetections
     //detections : TDetections;
+  type
+
+    { TDetComparer }
+
+    //TDetComparer = class (TComparer<TDetection>)
+    //  function Compare(constref Left, Right: TDetection): Integer; override;
+    //end;
   private
-    class function Comparer(const a, b: TDetection):SizeInt; static; WINAPI;
+    class function Comparer(const a, b: TDetection):integer; overload; WINAPI; static;
+    class function Comparer(const aa, bb: pointer): integer; overload; WINAPI; static;
   public
     procedure doNMSObj(const classes: SizeInt; const thresh: single = 0.45);
     procedure doNMSSort(const classes: SizeInt; const thresh: single = 0.45);
@@ -325,13 +362,13 @@ type
   TData = record
     //w : SizeInt;
     //h : SizeInt;
-    X : TSingleTensor;
-    y : TSingleTensor;
+    X : TNeuralTensor;
+    y : TNeuralTensor;
     shallow : boolean;
     num_boxes : PInteger;
     boxes : PPBox;
-    procedure getRandomBatch(const N: SizeInt; const inData, truthData: TSingleTensor);
-    procedure getBatch(const N, offset: SizeInt; const inData, truthData: TSingleTensor);
+    procedure getRandomBatch(const N: SizeInt; const inData, truthData: TNeuralTensor);
+    procedure getBatch(const N, offset: SizeInt; const inData, truthData: TNeuralTensor);
   end;
   PDataType = ^TDatatype;
   TDataType = (
@@ -452,14 +489,6 @@ type
   );
 
 
-const
-  acSIGMOID = acLOGISTIC;
-  acSiLU    = acSWISH;
-  ctL2      = ctSSE;
-
-  ltCONCAT = ltROUTE;
-  ltADD    = ltSHORTCUT;
-
 implementation
 uses math, typinfo, nChrono;
 
@@ -564,6 +593,180 @@ begin
         draw_box(a, x1+i, y1+i, x2-i, y2-i, r, g, b, alpha, aBatch)
 end;
 
+procedure draw_ellipse(const a:TImageData; const x0, y0, x1, y1, thickness:Sizeint; const r, g, b:single; const alpha:single; const aBatch:SizeInt=0);
+const br = 3.0;
+type
+  TPixel = record
+    r,g,b,a:single;
+  end;
+var
+  batch : SizeInt;
+  procedure setP(const a:TImageData ;const x, y:SizeInt; const pixel:TPixel; batch:SizeInt=0; const color:boolean=true); inline;
+  var
+    c:TPixel;
+    invA:single;
+    i:integer;
+    FData : PSingle;
+  begin
+    if (x<0) or (y<0) or (x>=a.w) or (y >= a.h) then exit;
+    //assert((x>=0) and (y>=0) and (x<width) and (y<Height), format('Pixel out of bounds! [%d , %d]', [width, height]));
+    FData:=batch + PSingle(@a.Data[y*a.w]);
+    i := x;
+    if pixel.a=1.0 then
+      begin
+        FData[i]:=pixel.r;
+        if color then begin
+          inc(i, a.h*a.w);
+          FData[i]:=pixel.g;
+          inc(i, a.h*a.w);
+          FData[i]:=pixel.g;
+        end;
+        exit;
+      end;
+    if pixel.a=0.0 then
+      exit;
+    c.r:=FData[i];
+    if color then begin
+      inc(i, a.h*a.w);
+      c.g:=FData[i];
+      inc(i, a.h*a.w);
+      c.b:=FData[i];
+      i:=x;
+    end;
+    invA:=1.0-pixel.a;
+
+    c.r := pixel.r*pixel.a + c.r*invA;
+    FData[i] := c.r;
+    if color then begin
+      inc(i, a.h*a.w);
+      FData[i] := c.g;
+      c.g := pixel.g*pixel.a + c.g*invA;
+      inc(i, a.h*a.w);
+      FData[i] := c.b;
+      c.b := pixel.b*pixel.a + c.b*invA
+    end;
+
+  end;
+
+var
+  cx, cy, rx1, ry1, rx2, ry2:integer;
+  i, x, y,  d, band:single ;c : TPixel;
+begin
+  //c := styler.stroke.Colors[0];
+  c.r := r;
+  c.g := g;
+  c.b := b;
+  c.a := alpha;
+
+  cx := round((x0 + x1) / 2);
+  cy := round((y0 + y1) / 2);
+  i := thickness / 2;
+  rx1 := round(abs(x1 - x0) / 2 + i);
+  ry1 := round(abs(y1 - y0) / 2 + i);
+  rx2 := rx1 - thickness;
+  ry2 := ry1 - thickness;
+  batch := aBatch * a.c*a.h*a.w;
+  //if styler.fill.Colors[0].a>0 then begin
+  //  FillEllipse(cx - rx2, cy -ry2, cx + rx2, cy + ry2);
+  //end;
+  if rx1 * ry1 = 0 then exit;
+  if rx1/ry1 < 1 then
+  begin
+    y := - ry1 ;
+    x := sqr(rx1) * (1 - sqr(y)/sqr(ry1));
+    d:=0;
+    if x >= 0 then
+      begin
+        x := sqrt(x);
+        while true do
+          begin
+            if abs(y) >= abs(ry2) then begin
+              i := -x ;
+              while i < x do begin
+                setP(a, trunc(cx + i), trunc(cy + y), c, batch);
+                i:= i + 1
+              end;
+            end else begin
+              if (thickness=1) and not InRange(rx1/ry1, 1/br, br) then
+                band := x-1
+              else
+                band := ceil(sqrt(sqr(rx2) * (1 - sqr(y)/sqr(ry2))));
+              i := -x;
+              while i < -band do begin
+                setP(a, trunc(cx + i), trunc(cy + y), c, batch);
+                i := i + 1
+              end;
+              // fill
+              //c := styler.fill.colors[0];
+              //while (c.a>0) and (i< band) do begin
+              //  setP(trunc(cx + i), trunc(cy + y), c, batch);
+              //  i:= i+1
+              //end;
+              //c := styler.stroke.colors[0];
+              i := band;
+              while i < x do begin
+                setP(a, trunc(cx + i), trunc(cy + y), c, batch);
+                i := i + 1
+              end;
+            end;
+            y := y + 1;
+            d := sqr(rx1) * (1 - sqr(y)/sqr(ry1));
+            if d < 0 then
+              break;
+            d := x - sqrt(d);
+            x := x - d
+          end;
+      end;
+    exit;
+  end;
+  x := - rx1 ;
+  //x :=  rx1;
+  y := sqr(ry1) * (1 - sqr(x)/sqr(rx1));
+  d:=0;
+  if y >= 0 then
+    begin
+      y := sqrt(y);
+      while true do
+        begin
+          if abs(x) >= abs(rx2) then begin
+            i := -y  ;
+            while i < y do begin
+              setP(a, trunc(cx + x), trunc(cy + i), c, batch);
+              i:= i + 1
+            end;
+          end else begin
+            if (thickness=1) and not InRange(ry1/rx1, 1/br, br) then
+              band := y-1
+            else
+              band := ceil(sqrt(sqr(ry2) * (1 - sqr(x)/sqr(rx2))));
+            i := -y;
+            while i < - band do begin
+              setP(a, trunc(cx + x), trunc(cy + i), c, batch);
+              i := i + 1
+            end;
+            // fill
+            //c := styler.fill.colors[0];
+            //while (c.a>0) and (i< band) do begin
+            //  setP(trunc(cx + x), trunc(cy + i), c, batch);
+            //  i:= i+1
+            //end;
+            //c := styler.stroke.colors[0];
+            i := band;
+            while i < y do begin
+              setP(a, trunc(cx + x), trunc(cy + i), c, batch);
+              i := i + 1
+            end;
+          end;
+          x := x + 1;
+          d := sqr(ry1) * (1 - sqr(x)/sqr(rx1));
+          if d < 0 then
+            break;
+          d := y - sqrt(d);
+          y := y - d
+        end;
+    end;
+end;
+
 procedure draw_box_bw(const a: TImageData; x1, y1, x2, y2: SizeInt; const brightness: single; const aBatch:SizeInt = 0);
 var
     i: SizeInt;
@@ -634,7 +837,12 @@ begin
   data[idx] := data[idx] + AValue;
 end;
 
-procedure TImageData.fromTensor(const src: TSingleTensor);
+function TImageData.size(): SizeInt;
+begin
+  result := length(data)
+end;
+
+procedure TImageData.fromTensor(const src: TNeuralTensor);
 begin
   w := src.w();
   h := src.h();
@@ -645,15 +853,44 @@ begin
   end else
     n:=1;
   setLength(Data, w*h*c*n );
-  move(src.Data[0], Data[0], src.size()*SizeOf(single));
+  if PTypeInfo(TypeInfo(Single)).Kind = PTypeInfo(TypeInfo(TNeuralTensor.T)).Kind then
+    move(src.Data[0], Data[0], src.size()*SizeOf(TNeuralTensor.T))
+  else
+    src.toSingles(pointer(Data));
 end;
 
-function TImageData.toTensor(): TSingleTensor;
+procedure TImageData.toTensor(var dst: TNeuralTensor);
 var imSize : SizeInt;
 begin
   imSize := h*w;
-  result := TSingleTensor.Create([n, c, h, w]);
-  move(Data[0], result.Data[0], length(data)*SizeOf(single));
+  if size<>dst.size() then
+    dst.resize([n, c, h, w]);
+  if PTypeInfo(TypeInfo(Single)).Kind = PTypeInfo(TypeInfo(TNeuralTensor.T)).Kind then
+    move(Data[0], dst.Data[0], length(data)*SizeOf(TNeuralTensor.T))
+  else
+    dst.fromSingles(pointer(Data));
+  {$if defined(USE_OPENCL) or defined(USE_CUDART)}
+  dst.setCPU;
+  {$endif}
+
+end;
+
+function TImageData.asTensor(const deepCopy: boolean): TNeuralTensor;
+var sameType:boolean;
+begin
+  assert(n*c*h*w>0, '[toTensor] no stored image to convert');
+  sameType := PTypeInfo(TypeInfo(Single)).Kind = PTypeInfo(TypeInfo(TNeuralTensor.T)).Kind;
+  if deepCopy or not sameType then begin
+    result.reSize([n, c, h, w], n);
+    if sametype then
+      move(pointer(Data)^, result.data^, result.size()*sizeOf(TNeuralTensor.T))
+    else
+      result.fromSingles(pointer(Data))
+  end
+  else begin
+    result.ShallowCopy(Data, [n, c, h, w]);
+    result.Groups := n;
+  end;
 end;
 
 constructor TImageData.Create(const aWidth, aHeight, aChannels: SizeInt;
@@ -663,7 +900,17 @@ begin
   h := aHeight;
   c := aChannels;
   n := aImageCount;
-  setLength(Data, w*h*c)
+  setLength(Data, w*h*c*n)
+end;
+
+procedure TImageData.init(const aWidth, aHeight, aChannels: SizeInt;
+  const aImageCount: SizeInt);
+begin
+  w := aWidth;
+  h := aHeight;
+  c := aChannels;
+  n := aImageCount;
+  setLength(Data, w*h*c*n)
 end;
 
 procedure TImageData.loadFromFile(const fileName: string);
@@ -968,6 +1215,13 @@ procedure TImageData.rect(const x1, y1, x2, y2, w: SizeInt;
   const brightness: single; const aBatch: SizeInt);
 begin
   draw_box_width_bw(self, x1, y1, x2, y2, w, brightness, aBatch)
+end;
+
+procedure TImageData.ellipse(const x0, y0, x1, y1, w: SizeInt; const r, g,
+  b: single; const alpha: single; const aBatch: SizeInt);
+begin
+  if aBatch>=N then exit;
+  draw_ellipse(self, x0, y0, x1, y1, w, r, g, b, alpha, aBatch)
 end;
 
 { TCoord }
@@ -1551,7 +1805,7 @@ end;
 
 { TDetectionsHelper }
 
-class function TDetectionsHelper.Comparer(const a, b: TDetection): SizeInt;
+class function TDetectionsHelper.Comparer(const a, b: TDetection): integer;WINAPI;
 var diff : single;
 begin
     result :=0;
@@ -1562,6 +1816,20 @@ begin
    if diff <0 then exit(1);
    if diff >0 then exit(-1)
 
+end;
+
+class function TDetectionsHelper.Comparer(const aa, bb: pointer): integer;WINAPI;
+var diff : single;
+    a:PDetection absolute aa;
+    b:PDetection absolute bb;
+begin
+    result :=0;
+    if b.sort_class >= 0 then
+        diff := a.prob[b.sort_class] - b.prob[b.sort_class]
+    else
+        diff := a.objectness - b.objectness;
+   if diff <0 then exit(1);
+   if diff >0 then exit(-1)
 end;
 
 procedure TDetectionsHelper.doNMSObj(const classes: SizeInt; const thresh: single);
@@ -1588,7 +1856,8 @@ begin
   for i := 0 to total-1 do
       self[i].sort_class := -1;
 
-  TTools<TDetection>.QuickSort(pointer(self),0, total-1, Comparer);
+  qsort(pointer(self), total, sizeOf(TDetection), comparer);
+  //TTools<TDetection>.QuickSort(pointer(self),0, total-1, Comparer);
   for i := 0 to total-1 do
       begin
           if self[i].objectness = 0 then
@@ -1613,9 +1882,12 @@ procedure TDetectionsHelper.doNMSSort(const classes: SizeInt; const thresh: sing
 var
   i,j,k, total: SizeInt;
   swap: TDetection;
-  a: TBox;
-  b: TBox;
+  //a: TBox;
+  //b: TBox;
+  //clk, eps : int64;
 begin
+
+  //eps:=0;
   total := high(self);
   k := total;
   i:=0;
@@ -1635,23 +1907,42 @@ begin
       begin
           for i := 0 to total-1 do
               self[i].sort_class := k;
-          TTools<TDetection>.QuickSort(pointer(self), 0, total-1, Comparer);
+          //clk:=clock();
+          if total>1 then begin
+            qsort(pointer(self), total, sizeof(TDetection), comparer);
+            //TTools<TDetection>.QuickSort(pointer(self), 0, total-1, Comparer);
+          end;
+          //inc(eps, clock()-clk);
           for i := 0 to total-1 do begin
               if self[i].prob[k] = 0 then continue;
-              a := self[i].bbox;
               for j := i+1 to total-1 do begin
-                  b := self[j].bbox;
-                  if a.iou(b) > thresh then
+                  if self[i].bbox.iou(self[j].bbox) > thresh then
                       self[j].prob[k] := 0
               end
           end
-      end
+      end;
+  //writeln('EPS : ', eps/CLOCKS_PER_SEC:1:3)
+
 end;
+
+//{ TDetectionsHelper.TDetComparer }
+//
+//function TDetectionsHelper.TDetComparer.Compare(constref Left, Right: TDetection): Integer;
+//var diff : single;
+//begin
+//    result :=0;
+//    if right.sort_class >= 0 then
+//        diff := Left.prob[right.sort_class] - right.prob[right.sort_class]
+//    else
+//        diff := Left.objectness - right.objectness;
+//   if diff <0 then exit(1);
+//   if diff >0 then exit(-1)
+//end;
 
 { TData }
 
 // tensors X (input) and Y (truth) must be of two dimensions
-procedure TData.getRandomBatch(const N: SizeInt; const inData, truthData: TSingleTensor);
+procedure TData.getRandomBatch(const N: SizeInt; const inData, truthData: TNeuralTensor);
 var
     j, inSize, truthSize, batchCount, index: SizeInt;
     S, D:PSingle;
@@ -1668,18 +1959,18 @@ begin
           //move(X.data[X.w() * index], A[j * X.w()], X.w() * sizeof(single));
           S := pointer(X.data + inSize* index);
           D := pointer(inData.Data + j* inSize);
-          move(S[0], D[0], inSize * sizeof(single));
+          move(S[0], D[0], inSize * sizeof(TNeuralTensor.T));
 
           S := pointer(Y.data + truthSize * index);
           D := pointer(truthData.Data + j* truthSize);
-          move(S[0], D[0], truthSize * sizeof(single));
+          move(S[0], D[0], truthSize * sizeof(TNeuralTensor.T));
       end;
 
   inData.pushToDevice;
   truthData.pushToDevice;
 end;
 
-procedure TData.getBatch(const N, offset: SizeInt; const inData, truthData: TSingleTensor);
+procedure TData.getBatch(const N, offset: SizeInt; const inData, truthData: TNeuralTensor);
 var
     j, inSize, truthSize: SizeInt;
     S, D:PSingle;
@@ -1694,12 +1985,12 @@ begin
       begin
           S := pointer(X.data + offset*inSize + j*inSize);
           D := pointer(inData.Data + j * inSize);
-          move(S[0], D[0], inSize * sizeof(single));
+          move(S[0], D[0], inSize * sizeof(TNeuralTensor.T));
           //for i:=0 to X.w()-1 do
           //    D[i]  := S[i];
           S := pointer(Y.data + offset*truthSize + j*truthSize);
           D := pointer(truthData.Data + j * truthSize);
-          move(S[0], D[0], truthSize * sizeof(single));
+          move(S[0], D[0], truthSize * sizeof(TNeuralTensor.T));
           //for i:=0 to Y.w()-1 do
           //  D[i]  := S[i]
       end;

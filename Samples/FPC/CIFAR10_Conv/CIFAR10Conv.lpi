@@ -25,6 +25,7 @@
           </Target>
           <SearchPaths>
             <IncludeFiles Value="$(ProjOutDir)"/>
+            <Libraries Value="..\..\..\..\..\..\..\..\..\msys64\mingw64\lib"/>
             <OtherUnitFiles Value="..\..\..\source;..\..\..\source\3rdparty\cuda\source;..\..\..\source\3rdparty\clblast\source;..\..\..\source\3rdparty\oneAPI\mkl\source;..\..\..\source\3rdparty\openblas\source"/>
             <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
@@ -50,11 +51,12 @@
             <LinkSmart Value="True"/>
           </Linking>
           <Other>
-            <CustomOptions Value="-dUSE_OPENCL
--dUSE_AVX2
+            <CustomOptions Value="-dUSE_AVX2
 -dUSE_MULTITHREADING
--dBIG_MATRECIES"/>
-            <OtherDefines Count="10">
+-dUSE_TELEMETRY
+-dBIG_MATRECIES
+-dUSE_CUDART"/>
+            <OtherDefines Count="12">
               <Define0 Value="USE_OPENCL"/>
               <Define1 Value="USE_AVX2"/>
               <Define2 Value="USE_OPENBLAS"/>
@@ -65,6 +67,8 @@
               <Define7 Value="USE_CUDNN"/>
               <Define8 Value="USE_CUDART"/>
               <Define9 Value="GPU_TEST"/>
+              <Define10 Value="DEBUG_GPU"/>
+              <Define11 Value="USE_ONEAPI"/>
             </OtherDefines>
           </Other>
         </CompilerOptions>
@@ -159,7 +163,8 @@
       <Filename Value="CIFAR10Conv"/>
     </Target>
     <SearchPaths>
-      <OtherUnitFiles Value="..\..\..\source;..\..\..\source\3rdparty\clblast\source;..\..\..\source\3rdparty\cuda\source;..\..\..\source\3rdparty\oneAPI\mkl\source;..\..\..\source\3rdparty\openblas\source"/>
+      <Libraries Value="..\..\..\..\..\..\..\..\..\msys64\mingw64\lib;..\..\..\..\..\..\..\..\..\msys64\usr\lib"/>
+      <OtherUnitFiles Value="..\..\..\source;..\..\..\source\3rdparty\clblast\source;..\..\..\source\3rdparty\cuda\source;..\..\..\source\3rdparty\oneAPI\mkl\source;..\..\..\source\3rdparty\oneAPI\dnnl;..\..\..\source\3rdparty\openblas\source"/>
       <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
     </SearchPaths>
     <Parsing>
@@ -187,10 +192,11 @@
     <Other>
       <CustomOptions Value="-dUSE_OPENCL
 -dUSE_AVX2
+-dUSE_MKL
 -dUSE_MULTITHREADING
--dBIG_MATRECIES
--dUSE_CUDART"/>
-      <OtherDefines Count="10">
+-dUSE_TELEMETRY
+-dBIG_MATRECIES"/>
+      <OtherDefines Count="12">
         <Define0 Value="USE_OPENCL"/>
         <Define1 Value="USE_AVX2"/>
         <Define2 Value="USE_OPENBLAS"/>
@@ -201,6 +207,8 @@
         <Define7 Value="USE_CUDNN"/>
         <Define8 Value="USE_CUDART"/>
         <Define9 Value="GPU_TEST"/>
+        <Define10 Value="DEBUG_GPU"/>
+        <Define11 Value="USE_ONEAPI"/>
       </OtherDefines>
     </Other>
   </CompilerOptions>

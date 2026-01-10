@@ -30,8 +30,25 @@ interface
 
 type
   TCursorDirection =(cmUp, cmDown, cmBackward, cmForward);
-const
 
+const
+  BRAILLE: array[0..255] of rawbytestring = (
+      ' ', '⠁', '⠂', '⠃', '⠄', '⠅', '⠆', '⠇', '⡀','⡁', '⡂', '⡃', '⡄', '⡅', '⡆', '⡇'
+    , '⠈', '⠉', '⠊', '⠋', '⠌', '⠍', '⠎', '⠏', '⡈','⡉', '⡊', '⡋', '⡌', '⡍', '⡎', '⡏'
+    , '⠐', '⠑', '⠒', '⠓', '⠔', '⠕', '⠖', '⠗', '⡐','⡑', '⡒', '⡓', '⡔', '⡕', '⡖', '⡗'
+    , '⠘', '⠙', '⠚', '⠛', '⠜', '⠝', '⠞', '⠟', '⡘','⡙', '⡚', '⡛', '⡜', '⡝', '⡞', '⡟'
+    , '⠠', '⠡', '⠢', '⠣', '⠤', '⠥', '⠦', '⠧', '⡠','⡡', '⡢', '⡣', '⡤', '⡥', '⡦', '⡧'
+    , '⠨', '⠩', '⠪', '⠫', '⠬', '⠭', '⠮', '⠯', '⡨','⡩', '⡪', '⡫', '⡬', '⡭', '⡮', '⡯'
+    , '⠰', '⠱', '⠲', '⠳', '⠴', '⠵', '⠶', '⠷', '⡰','⡱', '⡲', '⡳', '⡴', '⡵', '⡶', '⡷'
+    , '⠸', '⠹', '⠺', '⠻', '⠼', '⠽', '⠾', '⠿', '⡸','⡹', '⡺', '⡻', '⡼', '⡽', '⡾', '⡿'
+    , '⢀', '⢁', '⢂', '⢃', '⢄', '⢅', '⢆', '⢇', '⣀','⣁', '⣂', '⣃', '⣄', '⣅', '⣆', '⣇'
+    , '⢈', '⢉', '⢊', '⢋', '⢌', '⢍', '⢎', '⢏', '⣈','⣉', '⣊', '⣋', '⣌', '⣍', '⣎', '⣏'
+    , '⢐', '⢑', '⢒', '⢓', '⢔', '⢕', '⢖', '⢗', '⣐','⣑', '⣒', '⣓', '⣔', '⣕', '⣖', '⣗'
+    , '⢘', '⢙', '⢚', '⢛', '⢜', '⢝', '⢞', '⢟', '⣘','⣙', '⣚', '⣛', '⣜', '⣝', '⣞', '⣟'
+    , '⢠', '⢡', '⢢', '⢣', '⢤', '⢥', '⢦', '⢧', '⣠','⣡', '⣢', '⣣', '⣤', '⣥', '⣦', '⣧'
+    , '⢨', '⢩', '⢪', '⢫', '⢬', '⢭', '⢮', '⢯', '⣨','⣩', '⣪', '⣫', '⣬', '⣭', '⣮', '⣯'
+    , '⢰', '⢱', '⢲', '⢳', '⢴', '⢵', '⢶', '⢷', '⣰','⣱', '⣲', '⣳', '⣴', '⣵', '⣶', '⣷'
+    , '⢸', '⢹', '⢺', '⢻', '⢼', '⢽', '⢾', '⢿', '⣸','⣹', '⣺', '⣻', '⣼', '⣽', '⣾', '⣿');
 
   setOverline    = #$1B'[53m';
   setBold        = #$1B'[1m';
@@ -79,7 +96,8 @@ const
   colorWhite   = 15;
 
 
-function cursorMove(const direction:TCursorDirection; const count:integer=1):ansistring;
+function cursorMove(const direction:TCursorDirection; const count:integer=1):ansistring; overload;
+function cursorMove(const relativeCol, relativeRow:integer):ansistring; overload;
 
 function setColor4(const color:integer):ansistring;
 function setBackColor4(const color:integer):ansistring;
@@ -90,13 +108,16 @@ function setBackColor(const r,g,b:byte):ansistring;
 function setGray(const brightness:byte):ansistring;
 function setBackGray(const brightness:byte):ansistring;
 function setCursorPos(const x, y:integer):ansistring;
+function setCursorScrollDown(const count: integer =1):ansistring;
+function setCursorScrollUp(const count: integer =1):ansistring;
+
 procedure resetModes();
 function setFont(font : byte):ansistring;
 
 procedure cursorUp(const count: integer=1);
 procedure cursorDown(const count: integer=1);
-procedure cursorLeft(const count: integer=1);
-procedure cursorRight(const count: integer=1);
+procedure cursorForward(const count: integer=1);
+procedure cursorBack(const count: integer=1);
 procedure cursorAbsPos(const x:integer=1; const y:integer=1);
 procedure cursorScrollUp(const count:integer=1);
 procedure cursorScrollDown(const count:integer=1);
@@ -123,6 +144,21 @@ begin
       result := #$1B'['+intToStr(count)+'C';
     cmBackward:
       result := #$1B'['+intToStr(count)+'D';
+  end;
+end;
+
+function cursorMove(const relativeCol, relativeRow: integer): ansistring;
+var cm:TCursorDirection;
+begin
+  result :='';
+  if (relativeCol<>0) then begin
+    if relativeCol<0 then cm := cmBackward else cm := cmForward;
+    result := cursorMove(cm, abs(relativeCol));
+  end;
+
+  if (relativeRow<>0) then begin
+    if relativeRow<0 then cm := cmUp else cm := cmDown;
+    result := result + cursorMove(cm, abs(relativeRow));
   end;
 end;
 
@@ -185,6 +221,16 @@ begin
   result := #$1B'[' + intTostr(y) + ';' + intToStr(x) + 'H'
 end;
 
+function setCursorScrollDown(const count: integer):ansistring;
+begin
+  result := #$1B'['+intToStr(count)+'T'
+end;
+
+function setCursorScrollUp(const count: integer):ansistring;
+begin
+  result := #$1B'['+intToStr(count)+'S'
+end;
+
 function setBackColor(const r, g, b: byte): ansistring;
 begin
   result := #$1B'[48;2;'+intToStr(r)+';'+intToStr(g)+';'+intToStr(b)+'m';
@@ -210,12 +256,12 @@ begin
   write(#$1B'[',count, 'B')
 end;
 
-procedure cursorLeft(const count: integer);
+procedure cursorForward(const count: integer);
 begin
   write(#$1B'[',count, 'C')
 end;
 
-procedure cursorRight(const count: integer);
+procedure cursorBack(const count: integer);
 begin
   write(#$1B'[',count, 'D')
 end;

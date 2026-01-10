@@ -536,7 +536,7 @@ procedure TRegionLayer.getBoxes(const aWidth, aHeight: SizeInt;
   const thresh: single; var probs: TArray<TArray<Single>>; var boxes: TArray<
   TBox>; const only_objectness: boolean; const map: TArray<SizeInt>);
 var
-    i, j, _n, row, col, index, p_index, box_index, class_index: SizeInt;
+    i, j, _n, row, col, idx, p_index, box_index, class_index: SizeInt;
     found :boolean;
     predictions: PSingle;
     scale, prob: single;
@@ -550,18 +550,18 @@ begin
             col := i mod w;
             for _n := 0 to n -1 do
                 begin
-                    index := i*n + _n;
-                    p_index := index * (classes+5)+4;
+                    idx := i*n + _n;
+                    p_index := idx * (classes+5)+4;
                     scale := predictions[p_index];
                     if (classfix = -1) and (scale < 0.5) then
                         scale := 0;
-                    box_index := index * (classes+5);
-                    boxes[index] := getBox(_n, box_index, col, row, w, h);
-                    boxes[index].x := boxes[index].x * aWidth;
-                    boxes[index].y := boxes[index].y * aHeight;
-                    boxes[index].w := boxes[index].w * aWidth;
-                    boxes[index].h := boxes[index].h * aHeight;
-                    class_index := index * (classes+5)+5;
+                    box_index := idx * (classes+5);
+                    boxes[idx] := getBox(_n, box_index, col, row, w, h);
+                    boxes[idx].x := boxes[idx].x * aWidth;
+                    boxes[idx].y := boxes[idx].y * aHeight;
+                    boxes[idx].w := boxes[idx].w * aWidth;
+                    boxes[idx].h := boxes[idx].h * aHeight;
+                    class_index := idx * (classes+5)+5;
                     if assigned(softmaxTree) then
                         begin
                             hierarchy_predictions(predictions+class_index, classes, softmaxTree[0], false);
@@ -571,9 +571,9 @@ begin
                                     begin
                                         prob := scale * predictions[class_index+map[j]];
                                         if (prob > thresh) then
-                                            probs[index][j] := prob
+                                            probs[idx][j] := prob
                                         else
-                                            probs[index][j] := 0
+                                            probs[idx][j] := 0
                                     end
                             else
                                 j := classes-1;
@@ -584,9 +584,9 @@ begin
                                         predictions[class_index+j] := 0;
                                     prob := predictions[class_index+j];
                                     if (scale > thresh) then
-                                        probs[index][j] := prob
+                                        probs[idx][j] := prob
                                     else
-                                        probs[index][j] := 0;
+                                        probs[idx][j] := 0;
                                     dec(j)
                                 end
                         end
@@ -595,12 +595,12 @@ begin
                             begin
                                 prob := scale * predictions[class_index+j];
                                 if (prob > thresh) then
-                                    probs[index][j] := prob
+                                    probs[idx][j] := prob
                                 else
-                                    probs[index][j] := 0
+                                    probs[idx][j] := 0
                             end;
                     if only_objectness then
-                        probs[index][0] := scale
+                        probs[idx][0] := scale
                 end
         end
 end;
@@ -659,7 +659,7 @@ procedure TRegionLayer.getDetections(const width, height, net_w,
   const letter: boolean);
 var
     probs: TArray<TArray<Single>>;
-    i, j: SizeInt;
+    i, j, row, col, idx, im_size: SizeInt;
     highest_prob: single;
     boxes :TArray<TBox>;
 begin
@@ -667,12 +667,14 @@ begin
     setLength(probs, w * h * n, classes);
     //for j := 0 to l.w * l.h * l.n -1 do
     //    probs[j] := single(xcalloc(l.classes, sizeof(float)));
+    im_size := w*h;
     getBoxes(1, 1, thresh, probs, boxes, false, map);
     for j := 0 to w * h * n -1 do
         begin
             dets[j].classes := classes;
             dets[j].bbox := boxes[j];
-            dets[j].objectness := 1;
+            idx := (j mod im_size)*n + j div im_size;
+            dets[j].objectness := output.data[idx * (classes+5)+coords];
             highest_prob := 0;
             dets[j].best_class_idx := -1;
             for i := 0 to classes -1 do

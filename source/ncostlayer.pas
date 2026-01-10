@@ -47,8 +47,8 @@ begin
     inputShape := [batch, inputs];
     outputs := AInputs;
     CostType := ACostType;
-    delta := TSingleTensor.Create([ABatch, AInputs], ABatch);
-    output := TSingleTensor.Create([ABatch, AInputs], ABatch);
+    delta := TSingleTensor.Create([ABatch, AInputs], ABatch,'cost_delta');
+    output := TSingleTensor.Create([ABatch, AInputs], ABatch,'cost_output');
     cost := [0];
 end;
 

@@ -43,31 +43,31 @@ begin
 
   //n                := c;
 
-  output           := TSingleTensor.Create([batch, c ,h, w], batch);
+  output           := TSingleTensor.Create([batch, c ,h, w], batch,'bn_output');
 
-  delta            := TSingleTensor.Create([batch, c ,h, w], batch);
+  delta            := TSingleTensor.Create([batch, c ,h, w], batch,'bn_delta');
 
   inputs           := w * h * c;
   inputShape       := [batch, c, h, w];
   outputs          := inputs;
 
-  biases           := TSingleTensor.Create([c]);
+  biases           := TSingleTensor.Create([c],'bn_biases');
 
-  bias_updates     := TSingleTensor.Create([c]);
+  bias_updates     := TSingleTensor.Create([c],'bn_bias_update');
 
-  scales           := TSingleTensor.Create([c]);
+  scales           := TSingleTensor.Create([c],'bn_scales');
   scales.fill(1);
-  scale_updates    := TSingleTensor.Create([c]);
+  scale_updates    := TSingleTensor.Create([c],'bn_scale_update');
 
-  mean             := TSingleTensor.Create([c]);
-  variance         := TSingleTensor.Create([c]);
-  rolling_mean     := TSingleTensor.Create([c]);
-  rolling_variance := TSingleTensor.Create([c]);
-  mean_delta       := TSingleTensor.Create([c]);
-  variance_delta   := TSingleTensor.Create([c]);
+  mean             := TSingleTensor.Create([c],'bn_mean');
+  variance         := TSingleTensor.Create([c],'bn_var');
+  rolling_mean     := TSingleTensor.Create([c],'bn_rolling_mean');
+  rolling_variance := TSingleTensor.Create([c],'bn_rolling_var');
+  mean_delta       := TSingleTensor.Create([c],'bn_mean_delta');
+  variance_delta   := TSingleTensor.Create([c],'bn_var_delta');
 
-  x                := TSingleTensor.Create([batch, c ,h, w], batch);
-  x_norm           := TSingleTensor.Create([batch, c ,h, w], batch);
+  x                := TSingleTensor.Create([batch, c ,h, w], batch,'bn_x');
+  x_norm           := TSingleTensor.Create([batch, c ,h, w], batch,'bn_x_norm');
 end;
 
 procedure TBatchNormLayer.setBatch(ABatch: SizeInt);

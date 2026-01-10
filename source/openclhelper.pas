@@ -404,10 +404,12 @@ end;
 
 procedure TOpenCL.CheckError(const msg: string);
 begin
-  {$ifdef DEBUG}
   if FErr<>CL_SUCCESS then
+  {$ifdef DEBUG}
     //writeln(msg, clErrorText(FErr));
     raise Exception.Create(clErrorText(FErr)+msg);
+  {$else}
+    writeln('[Error] ' + clErrorText(FErr)+msg)
   {$endif}
 end;
 
@@ -731,6 +733,7 @@ begin
 {$ifdef DEBUG}
    if FBuildlog<>'' then begin
       writeln(ErrOutput, FBuildLog);
+      writeln('press enter...');
       readln
     end;
 {$endif}
@@ -890,6 +893,7 @@ procedure TOpenCL.readBuffer(const clMem: cl_mem; const bufferSize: size_t;
 begin
   if not assigned(aQueue) then aQueue:=FQueue;
   FErr := clEnqueueReadBuffer(aQueue, clMem, CL_TRUE, offset, bufferSize, buffer, 0, nil, nil); checkError();
+  CheckError()
 end;
 
 procedure TOpenCL.writeBuffer(const clMem: cl_mem; const bufferSize: size_t;
@@ -897,6 +901,7 @@ procedure TOpenCL.writeBuffer(const clMem: cl_mem; const bufferSize: size_t;
 begin
   if not assigned(aQueue) then aQueue:=FQueue;
   FErr := clEnqueueWriteBuffer(aQueue, clMem, CL_TRUE, offset, bufferSize, buffer, 0, nil, nil); checkError();
+  CheckError()
 end;
 
 (*

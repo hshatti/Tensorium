@@ -11,7 +11,7 @@ uses
   {$ENDIF}
   SysUtils, ntensors, ntypes, nDatasets, nBaseLayer, nConnectedlayer
   , nLogisticLayer, nSoftmaxLayer, nCostLayer, nnet, nChrono, nConvolutionLayer, nUpSampleLayer, nDropOutLayer
-  , nAttentionLayer, nModels, {Keyboard, nParser,} termesc, steroids, nXML
+  , nAttentionLayer, nModels, {Keyboard, nParser,} termesc, steroids, nXML, dnnl
   {$if defined(MSWINDOWS)}
   , ShellApi
   //, cudnn_graph
@@ -19,7 +19,7 @@ uses
   //, cudnn_ops
   //, cudnn_cnn
   {$endif}
-  , uTokenizer, sixel, SortedMap, nhttp
+  , uTokenizer, sixel, SortedMap, nhttp, dnnl_api
   {$if defined(USE_OPENCL)}
   , OpenCLHelper, OpenCL, nnOpenCL, nOpMetrics//
   {$elseif defined(USE_CUDART)}
@@ -71,13 +71,13 @@ begin
       bottom := xmls[j]['bndbox']['ymax'];
       img.rect(left, top, right, bottom, 4, 1, 0, 0, 0.3);
     end;
-    t1 := img.toTensor();
+    img.toTensor(t1);
     t1.reshape([t1.c, t1.h, t1.w]);
     t1.Multiply($FF);
 
     t2.resize(t1.Shape);
     t1.toBytes(pointer(t2.Data));
-    printSixel(t2.Data, img.w, img.h, true, poCHW);
+    printSixel(t2.Data, img.w, img.h, true, false, poCHW);
     readln
 
   end;
@@ -120,7 +120,7 @@ end;
 
 
 
-procedure inferYOLO();
+procedure trainCIFAR10();
 var
   Neural:TNNet;
   CF10 : TCIFAR10Data;
@@ -343,6 +343,7 @@ begin
       write(#13, cursorMove(cmForward, 42), cursorMove(cmDown, 1));
 
       coor := trainingHistory.plot;
+      write(Neural.OpsPerSec/1000000000:1:3,' GFLOPs');
       {$ifdef USE_TELEMETRY}
       termesc.cursorAbsPos(1, 24);
       writeln(sLineBreak, metrics.print(TELEMETRY_OPS {or TELEMETRY_FWD or TELEMETRY_BWD or TELEMETRY_UPD}));
@@ -426,5 +427,6 @@ begin
 end;
 
 begin
-  trainYOLO
+//  trainYOLO
+  trainCIFAR10
 end.

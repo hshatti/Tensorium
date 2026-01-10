@@ -11,7 +11,9 @@ unit sixel;
 interface
 
 uses
-  Classes, SysUtils, Math, Generics.Collections, windows, SortedMap, termesc, nTensors
+  Classes, SysUtils, Math, Generics.Collections
+  //, SortedMap, termesc
+  //, nTensors
   {$ifdef USE_MULTITHREADING}
   , steroids
   {$endif}
@@ -20,11 +22,11 @@ uses
 type
   TPixelOrder = (poHWC, poCHW);
 
-procedure printSixel(const buf:Pointer; const width, height:SizeInt; const Dither:boolean = false; const pixelOrder:TPixelOrder = poHWC);
+procedure printSixel(const buf:Pointer; const width, height:SizeInt; const Dither:boolean = false; const monoChrome:boolean = false; const pixelOrder:TPixelOrder = poHWC);
 
 implementation
 
-
+(*
 function mapX(const x:single):single;inline;
 begin
   exit( x*3-2.1);
@@ -110,14 +112,14 @@ begin
 {$endif}
   lnxp1_max_iteration := LnXP1(max_iteration);
   {$if defined(USE_MULTITHREADING)}
-  mp2.&For(renderLine, 0, h);
+  mp.&For(renderLine, 0, h);
   {$else}
   for y:=0 to h-1 do begin
     renderLine(y, nil);
   end
   {$endif}
 end;
-
+*)
 
 type
 
@@ -125,6 +127,8 @@ type
 
   TSixel = packed record
     r,g,b:byte;
+    constructor create(const aR,aG,aB :byte);  overload;
+    constructor create(const L :byte);      overload;
     class operator add      (const a, b:TSixel):TSixel;
     class operator subtract (const a, b:TSixel):TSixel;
     class operator multiply (const a, b:TSixel):TSixel;
@@ -132,6 +136,7 @@ type
     class operator multiply (const a:TSixel; const b:byte):TSixel;
     class operator IntDivide(const a:TSixel; const b:byte):TSixel;
     class operator multiply (const a:TSixel; const b:single):TSixel;
+    class operator Implicit (const a:byte):TSixel;
 
 
   end;
@@ -158,7 +163,8 @@ begin
 end;
 
 procedure printSixel(const buf: Pointer; const width, height: SizeInt;
-  const Dither: boolean; const pixelOrder: TPixelOrder);
+  const Dither: boolean; const monoChrome: boolean;
+  const pixelOrder: TPixelOrder);
 const pixel = 1;
      pixcount = 6 div pixel;
      COLOR_SPACE : array[0..2] of byte = (8, 8, 4);
@@ -175,6 +181,11 @@ var
   function getSixel(const y, x :SizeInt)    : TSixel;
   begin
     result := p[y*width + x]
+  end;
+
+  function getMono(const y, x :SizeInt)    : TSixel;
+  begin
+    result := 100*bytes[y*width + x] div 255
   end;
 
   function getSixelHWC(const data: PSixel; const y, x :SizeInt; const aHeight, aWidth:SizeInt): TSixel;
@@ -246,12 +257,14 @@ var
     result := sxlScaler * (col div sxlScaler);
   end;
 
-  procedure reCalcPalette(var mi, ma:TSixel; var s:TSixel);
+  procedure reCalcPalette(var mi, ma:TSixel; var scaler:TSixel);
   var i, r, g, b:longint; sx :TSixel;
   begin
     //clrCount := 0;
     colorPal.Clear;
-    case pixelOrder of
+    if monoChrome then
+      mi.r := bytes[0]
+    else case pixelOrder of
       pohwc :
         begin
           mi := p[0];
@@ -269,45 +282,63 @@ var
     //ma.r := p[0].r;
     //ma.g := p[0].g;
     //ma.b := p[0].b;
-    for i:=1 to height*width-1 do begin
-      case pixelOrder of
-        poHWC :
-          sx := p[i];
-        poCHW:
-          sx := getSixelCHW(bytes, 0, i, 1, height*width);
+    if monoChrome then
+      for i:=1 to height*width-1 do begin
+        sx.r := bytes[i];
+        mi.r := Math.min(sx.r, mi.r);
+        ma.r := Math.max(sx.r, ma.r);
+      end
+    else
+      for i:=1 to height*width-1 do begin
+        case pixelOrder of
+          poHWC :
+            sx := p[i];
+          poCHW:
+            sx := getSixelCHW(bytes, 0, i, 1, height*width);
+        end;
+        mi.r := Math.min(sx.r, mi.r);
+        mi.g := Math.min(sx.g, mi.g);
+        mi.b := Math.min(sx.b, mi.b);
+        ma.r := Math.max(sx.r, ma.r);
+        ma.g := Math.max(sx.g, ma.g);
+        ma.b := Math.max(sx.b, ma.b);
       end;
-      mi.r := Math.min(sx.r, mi.r);
-      mi.g := Math.min(sx.g, mi.g);
-      mi.b := Math.min(sx.b, mi.b);
-      ma.r := Math.max(sx.r, ma.r);
-      ma.g := Math.max(sx.g, ma.g);
-      ma.b := Math.max(sx.b, ma.b);
-    end;
     //s.r := round(100 *(ma.r-mi.r) / 255) div 5;     // scaler
     //s.g := round(100 *(ma.g-mi.g) / 255) div 5;
     //s.b := round(100 *(ma.b-mi.b) / 255) div 5;
-    s.r := 100 div (COLOR_SPACE[0]-1);
-    s.g := 100 div (COLOR_SPACE[1]-1);
-    s.b := 100 div (COLOR_SPACE[2]-1);
-    i:=16;
-
-    for r:=0 to COLOR_SPACE[0]-1 do
-      for g :=0 to COLOR_SPACE[1]-1 do
-        for b :=0 to COLOR_SPACE[2]-1 do begin
-          sx.r := s.r*r;
-          sx.g := s.g*g;
-          sx.b := s.b*b;
-          encodeNum('#', i);
-          encodeNum(';', 2);
-          //encodeNum(';', mi.r + s.r*r);
-          //encodeNum(';', mi.g + s.g*g);
-          //encodeNum(';', mi.b + s.b*b); // encodeStr(#13#10);
-          encodeNum(';', s.r*r);
-          encodeNum(';', s.g*g);
-          encodeNum(';', s.b*b); // encodeStr(#13#10);
-          colorPal.Add(sx, i);
-          inc(i)
-        end;
+    if monoChrome then
+      for i:=0 to 100 do begin
+        encodeNum('#', i);
+        encodeNum(';', 2);
+        encodeNum(';', i);
+        encodeNum(';', i);
+        encodeNum(';', i);
+        colorPal.Add(TSixel.create(i), i);
+      end
+    else begin
+      scaler.r := 100 div (COLOR_SPACE[0]-1);
+      scaler.g := 100 div (COLOR_SPACE[1]-1);
+      scaler.b := 100 div (COLOR_SPACE[2]-1);
+      //i:=16;
+      i := 0;
+      for r:=0 to COLOR_SPACE[0]-1 do
+        for g :=0 to COLOR_SPACE[1]-1 do
+          for b :=0 to COLOR_SPACE[2]-1 do begin
+            sx.r := scaler.r*r;
+            sx.g := scaler.g*g;
+            sx.b := scaler.b*b;
+            encodeNum('#', i);
+            encodeNum(';', 2);
+            //encodeNum(';', mi.r + s.r*r);
+            //encodeNum(';', mi.g + s.g*g);
+            //encodeNum(';', mi.b + s.b*b); // encodeStr(#13#10);
+            encodeNum(';', sx.r);
+            encodeNum(';', sx.g);
+            encodeNum(';', sx.b); // encodeStr(#13#10);
+            colorPal.Add(sx, i);
+            inc(i)
+          end;
+    end
   end;
 
 const           // enable SIXEL + START SIXEL
@@ -334,13 +365,15 @@ begin
   p := pointer(buf); bytes := pointer(buf);
   reCalcPalette(sxlMin, sxlMax, sxlScaler);
 
-  case pixelOrder of
-    poHWC:
-      for i:=0 to high(dith) do dith[i] := clr100(p[i]);
-    poCHW:
-      for i:=0 to height*width-1 do
-         dith[i] := clr100(getSixelCHW(buf, 0, i, 1, height*width));
-  end;
+  if monoChrome then
+  else
+    case pixelOrder of
+      poHWC:
+        for i:=0 to high(dith) do dith[i] := clr100(p[i]);
+      poCHW:
+        for i:=0 to height*width-1 do
+           dith[i] := clr100(getSixelCHW(buf, 0, i, 1, height*width));
+    end;
 
   p := pointer(dith);
 
@@ -379,7 +412,10 @@ begin
         //c := col2Index(p[idx]);
         //sxl := col100(getSixel(y*pixCount + i, x));
         //sxl := col2Six(sxl);
-        sxl := clrSpc(getSixel(y*pixCount + i, x));
+        if monoChrome then
+          sxl := getMono(y*pixCount + i, x)
+        else
+          sxl := clrSpc(getSixel(y*pixCount + i, x));
         bitPix := 63 + ((1 shl pixel)-1) shl (i*pixel);
         if sxlIsEqual(sxl, lastSxl) then begin
         //if c=lastC then begin
@@ -453,11 +489,21 @@ done:
 end;
 
 
-var
-  bt : TByteTensor;
-  t:int64;
-
 { TSixel }
+
+constructor TSixel.create(const aR, aG, aB: byte);
+begin
+  r := aR;
+  g := aG;
+  b := ab
+end;
+
+constructor TSixel.create(const L: byte);
+begin
+  r := L;
+  g := L;
+  b := L;
+end;
 
 class operator TSixel.add(const a, b: TSixel): TSixel;
 begin
@@ -508,14 +554,28 @@ begin
   result.b := trunc(a.b * b);
 end;
 
+class operator TSixel.Implicit(const a: byte): TSixel;
+begin
+  result.r := a;
+  result.g := a;
+  result.b := a
+end;
+
+
+//var
+//  bt : TSingleTensor;
+//  t:int64;
+
+
 initialization
+// ************ test sixel draw ***************
   //{$ifdef FPC}
   //bt.loadFromImage('dog.jpg');
   //{$else}
   //bt.loadFromImage('../../../../FPC/ConsoleTest/dog.jpg');
   //{$endif}
   ////bt.print(0.2);
-  //bt := bt.Permute([1, 2, 0]);
+  ////bt := bt.Permute([1, 2, 0]);
   ////bt.resize([400, 600, 3]);
   ////Mandel(bt.Data, bt.h(), bt.c());
   ////bt := bt.Permute([1, 2 , 0]);
@@ -523,7 +583,8 @@ initialization
   //repeat
   //  cursorHome();
   //  t := getTickCount64;
-  //  printSixel(bt.data, bt.h, bt.c, true);
+  //  bt.print(psSIXELGray);
+  //  //printSixel(bt.data, bt.h, bt.c, true);
   //  write((GetTickCount64-t)/1000:1:3,'s');
   //  readln
   //until false;

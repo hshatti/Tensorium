@@ -205,7 +205,7 @@ private
   procedure WaitForPool;
   function getWorkers:longint;
 public
-  constructor Create;
+  constructor Create(poolCount: Integer =0);
   class function CPUName():TBuff ;static;
   class function CPUFreqMhz():TCPUFreq; static;
   destructor Destroy; override;
@@ -230,7 +230,7 @@ public
   property PendingWorkCount:integer read OTCount;
   //FCriticalSection:TRTLCriticalSection;
 end;
-var MP, MP2, MP3:TOPool;
+var MP, MP2, MP4, MP8:TOPool;
 function ExecuteInThread(const proc:TThreadProc; args:Pointer):TThread;   overload;
 function ExecuteInThread(const proc:TThreadMeth; args:Pointer):TThread;   overload;
 function ExecuteInThread(const proc:TThreadNest; args:Pointer):TThread;   overload;
@@ -297,13 +297,15 @@ end;
 {$endif}
 
 { TOPool }
-constructor TOPool.Create;
+constructor TOPool.Create(poolCount: Integer);
 var i:integer;
 begin
-  inherited;
+  inherited create;
   OTCount:=0;
   //InitCriticalSection(FCriticalSection);
-  Setlength(Pool, GetSystemThreadCount);
+  if poolCount=0 then
+    poolCount := GetSystemThreadCount;
+  Setlength(Pool, poolCount);
   for i:=0 to High(Pool) do begin
     Pool[i]:=TOthread.Create(false);
     Pool[i].FID:=i;
@@ -414,6 +416,7 @@ begin
     {$else}
     {$ifdef MSWINDOWS}setEvent(Pool[i].Fire){$else}Pool[i].Fire.SetEvent{$endif};
     {$endif}
+    // FPC is raising an exception while freeing
     //pool[i].free
     //freeandNil(Pool[i]);
   end;
@@ -468,14 +471,14 @@ begin
     FMethod2 := nil;
     exit
   end;
-  while true do begin
+  while not Terminated do begin
 
     {$ifdef FPC}
     RTLEventWaitFor(Fire);
     {$else}
     {$ifdef MSWINDOWS}WaitForSingleObject(Fire,INFINITE){$else}Fire.WaitFor(){$endif};
     {$endif}
-    if not Terminated then begin
+    //if not Terminated then begin
       if Assigned(FProc) then begin
         FProc(FStart,FEnd,FParams);
         FProc:=nil;
@@ -523,8 +526,9 @@ begin
       FPool.PoolDone.SetEvent;
       TInterLocked.Decrement(FPool.OTCount);
       {$endif}
-    end else
-      exit;
+    //end
+    //else
+    //    exit;
   end
 end;
 
@@ -556,6 +560,14 @@ end;
 destructor TOThread.Destroy;
 begin
   {$ifdef FPC}
+  FProc        := nil;
+  FProcNested  := nil;
+  FMethod      := nil;
+  FMethod2     := nil;
+  FThreadProc  := nil;
+  FThreadNest  := nil;
+  FThreadProc2 := nil;
+  FThreadProcNested := nil;
   RTLEventDestroy(Fire);
   Fire := nil;
   {$else}
@@ -786,15 +798,19 @@ end;
 
 initialization
   MP:=TOPool.Create;
-  MP2:=TOPool.Create;
-  MP3:=TOPool.Create;
+  MP2:=TOPool.Create(2);
+  MP4:=TOPool.Create(4);
+  MP8:=TOPool.Create(8);
 
 
 finalization
-  if assigned(mp3) then
-     freeAndNil(MP3);
+  if assigned(mp8) then
+     freeAndNil(MP8);
+  if assigned(mp4) then
+     freeAndNil(MP4);
   if assigned(mp2) then
      freeAndNil(MP2);
   if assigned(mp) then
      freeAndNil(MP);
 end.
+

@@ -1,6 +1,7 @@
 program CIFAR10Conv;
 {$ifdef FPC}
 {$mode Delphi}{$H+}
+{$asmmode intel}
 {$endif}
 uses
   {$IFDEF UNIX}
@@ -27,19 +28,6 @@ const
   READ_BATCH   : SizeInt = 32;
   READ_MEASURE : SizeInt = 8;
   READ_TEST    : SizeInt = 3;
-var
-  Neural:TNNet;
-  CF10 : TCIFAR10Data;
-  i, j, k, l :SizeInt;
-  Data : TData;
-  cost :single;
-  costDelta : single;
-  s : clock_t;
-  Predicted, Truth : TInt64Tensor;
-  output  : PSingleTensor;
-  sampled : TSingleTensor;
-  c : shortstring;
-
 
 procedure _conv2d(const src: PSingle; ker: PSingle; var dest: PSingle;
   const wSrc, hSrc, wKernel, hKernel, wPad, hPad, xStr, yStr, xDil,
@@ -65,7 +53,7 @@ begin
       for ky := 0{-kh} to hKernel-1{kh} do begin
         srcIM := src + (i*yStr + ky*yDil)*wSrc + j*xStr + hP*wSrc + wp;
         ker2 := ker + ky*wKernel;
-        acc := acc + TSingleTensor.dotvv(wKernel, ker2, 1, srcIm, xDil);
+        acc := acc + TNeuralTensor.dotvv(wKernel, ker2, 1, srcIm, xDil);
         //for kx := 0{-kw} to wKernel-1{kw} do
         //  acc :=  plus(acc , ker2[kx]*srcIM[kx*xDil]);
       end;
@@ -75,9 +63,21 @@ begin
 end;
 
 var
+  Neural:TNNet;
+  CF10 : TCIFAR10Data;
+  i, j, k, l :SizeInt;
+  Data : TData;
+  cost :single;
+  costDelta : single;
+  s : clock_t;
+  Predicted, Truth : TInt64Tensor;
+  output  : PNeuralTensor;
+  sampled : TNeuralTensor;
+  c : shortstring;
+
   //img : TImageData;
   coor : TArray<SizeInt>;
-  trainingHistory , bmp: TSingleTensor;
+  trainingHistory , bmp: TNeuralTensor;
   //drop: TDropoutLayer;
   //sn : TNNetState;
 
@@ -86,14 +86,17 @@ var
   res1, res2 : single;
   t : int64;
   {$endif}
+  const TXT : pansichar = 'hollow world';
+
 begin
   //write(#$1B'[1J');
+
 {$if defined(USE_OPENCL)}
   i:=0;
   j:=0;
   //initOpenCL(i, j);
 
-  TSingleTensor.defaultDevice := cdOpenCL;
+  TNeuralTensor.defaultDevice := cdOpenCL;
   if TOpenCL.PlatformCount>1 then
   repeat
     writeln('Choose computing platform:');
@@ -285,6 +288,7 @@ begin
       write(#13, cursorMove(cmForward, 42), cursorMove(cmDown, 1));
 
       coor := trainingHistory.plot;
+      if l>1 then write(Neural.OpsPerSec/1000000000:1:3,' GFLOPs per second');
       {$ifdef USE_TELEMETRY}
       termesc.cursorAbsPos(1, 24);
       writeln(sLineBreak, metrics.print(TELEMETRY_OPS {or TELEMETRY_FWD or TELEMETRY_BWD or TELEMETRY_UPD}));

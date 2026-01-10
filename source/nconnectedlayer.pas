@@ -35,7 +35,7 @@ type
   end;
 
   { TFeedForwardLayer }
-
+  // aka (MLP) MultiLayer Perceptron  https://en.wikipedia.org/wiki/Multilayer_perceptron
   TFeedForwardLayer = class(TBaseLayer)
     hiddenLayers : TArray<TConnectedLayer>;
     constructor Create(const aBatch, aSteps, aInputs: SizeInt; const aHiddenOutputs:TArray<SizeInt>; const aActivationTypes: TArray<TActivationType>; const aIsBatchNormalized: TArray<boolean> = nil);   overload;
@@ -74,13 +74,17 @@ begin
   outputs               := aOutputs;
   isBatchNormalized     := AIsBatchNormalized;
   FWithBias             := aWithBias;
-  output                := TSingleTensor.Create([steps * batch , outputs], steps * Batch);
-  weights               := TSingleTensor.Create([outputs , inputs]);
+  output                := TSingleTensor.Create([steps * batch , outputs], steps * Batch,'FC_output');
+  weights               := TSingleTensor.Create([outputs , inputs],'FC_weights');
   randomRange           := sqrt(2/inputs);
   weights.UniformDistribution(-randomRange, randomRange);
 
   if FWithBias then
-    biases                := TSingleTensor.Create([outputs]);
+    biases                := TSingleTensor.Create([outputs], 'FC_bias');
+
+  //*************************** estimate forward operations ***************************
+  opCount := getOpCount;
+  //***********************************************************************************
 
   if isBatchNormalized then begin
     //if train then begin
@@ -93,9 +97,9 @@ begin
     //    x                   := TSingleTensor.Create([steps * batch, outputs], steps * Batch);
     //    x_norm              := TSingleTensor.Create([steps * batch, outputs], steps * Batch)
     //end;
-    rolling_mean        := TSingleTensor.Create([outputs]);
-    rolling_variance    := TSingleTensor.Create([outputs]);
-    scales              := TSingleTensor.Create([outputs]);
+    rolling_mean        := TSingleTensor.Create([outputs],0,'FC_rolling_mean');
+    rolling_variance    := TSingleTensor.Create([outputs],0,'FC_rolling_var');
+    scales              := TSingleTensor.Create([outputs],0,'FC_scales');
     scales.fill(1.0);
   end;
   //writeln('FC ', steps,' X ', batch, ' X ', inputs);
@@ -117,6 +121,11 @@ begin
     x.reSize([steps * batch, outputs], steps * batch);
     x_norm.reSize([steps * batch, outputs], steps * Batch);
   end;
+
+  //*************************** estimate forward operations ***************************
+  opCount := getOpCount
+  //***********************************************************************************
+
 end;
 
 procedure TConnectedLayer.setTrain(ATrain: boolean);
@@ -125,18 +134,18 @@ begin
   FTrain := ATrain;
 
   if FTrain then begin
-    delta                 := TSingleTensor.Create([steps * batch , outputs], steps * Batch);
-    weight_updates        := TSingleTensor.Create([inputs , outputs]);
+    delta                 := TSingleTensor.Create([steps * batch , outputs], steps * Batch,'FC_delta');
+    weight_updates        := TSingleTensor.Create([inputs , outputs],'FC_weight_updates');
     if assigned(biases.Data) then
-      bias_updates          := TSingleTensor.Create([outputs]);
+      bias_updates          := TSingleTensor.Create([outputs],'FC_bias_updates');
     if isBatchNormalized then begin
-        x                     := TSingleTensor.Create([steps * batch , outputs], steps * Batch);
-        x_norm                := TSingleTensor.Create([steps * batch , outputs], steps * Batch);
-        mean                  := TSingleTensor.Create([outputs]);
-        variance              := TSingleTensor.Create([outputs]);
-        mean_delta            := TSingleTensor.Create([outputs]);
-        variance_delta        := TSingleTensor.Create([outputs]);
-        scale_updates         := TSingleTensor.Create([outputs]);
+        x                     := TSingleTensor.Create([steps * batch , outputs], steps * Batch,'FC_x');
+        x_norm                := TSingleTensor.Create([steps * batch , outputs], steps * Batch,'FC_x_norm');
+        mean                  := TSingleTensor.Create([outputs],'FC_mean');
+        variance              := TSingleTensor.Create([outputs],'FC_var');
+        mean_delta            := TSingleTensor.Create([outputs],'FC_mean_delta');
+        variance_delta        := TSingleTensor.Create([outputs],'FC_var_delta');
+        scale_updates         := TSingleTensor.Create([outputs],'FC_scale_update');
     end;
   end else begin
     delta          .free;
@@ -695,7 +704,7 @@ output.CopyTo(x, offset, 1, offset, 1, outputStep);
 
           cuda.normalize(mean.Size(), outputStep, output.groups, mean.devData, 1, variance.devData, 1, output.devData, offset);
 {$ifdef DEBUG_GPU}
-output.Normalize(mean, variance, offset, outputStep);
+output.blockNormalize(mean, variance, offset, outputStep);
 {$endif}
           cuda.copy(outputStep, output.devData, offset, 1, x_norm.devData, offset, 1);
 {$ifdef DEBUG_GPU}
@@ -705,7 +714,7 @@ output.copyTo(x_norm, offset, 1, offset, 1, outputStep) ;
       end else begin
           cuda.normalize(rolling_mean.Size(), outputStep, output.Groups, rolling_mean.devData, 1, rolling_variance.devData, 1, output.devData, offset);
 {$ifdef DEBUG_GPU}
-output.Normalize(rolling_mean, rolling_variance, offset, outputStep);
+output.blockNormalize(rolling_mean, rolling_variance, offset, outputStep);
 {$endif}
       end;
       if assigned(biases.devData) then
@@ -769,6 +778,12 @@ begin
   if not weight_updates.wasGPU() then weight_updates.pushToDevice;
 
   cuda.clamp(delta.Size(), 1, delta.devData, delta.devData);
+{$ifdef DEBUG_GPU}
+delta.Clamp(-1, 1);
+delta.printGpuSumSqrDiff();
+{$endif}
+
+
   cuda.DeriveArray(outStepSize, output.devData, outOffset, longint(ActivationType), delta.devData);
 
 {$ifdef DEBUG_GPU}
@@ -777,12 +792,13 @@ output.printGpuSumSqrDiff();
 delta.printGpuSumSqrDiff();
 {$endif}
 
-  if assigned(biases.devData) then
+  if assigned(biases.devData) then begin
     cuda.backwardBias(bias_updates.size(), bias_updates.devData, outStepSize, delta.devData, outOffset, 1, batch);
 {$ifdef DEBUG_GPU}
 bias_updates.addSums(delta, outOffset, outStepSize);
 bias_updates.printGpuSumSqrDiff();
 {$endif}
+  end;
 
   if isBatchNormalized {and (batch > 1)} then begin
       {$ifdef USE_TELEMETRY}
@@ -833,6 +849,7 @@ TSingleTensor.gemm(CblasRowMajor, CblasTrans, CblasNoTrans, outputs, inputs, bat
   , delta.Data + outOffset, outputs
   , state.input^.Data + state.inputStep*inStepSize, inputs
   , 1, weight_updates.Data, inputs);
+weight_updates.printGpuSumSqrDiff();
 {$endif}
 
   if assigned(state.delta) and assigned(state.delta^.devData) then begin
@@ -852,14 +869,9 @@ TSingleTensor.gemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, batch, inputs, out
   , delta.Data + outOffset, outputs
   , weights.Data, inputs
   , 1, state.delta^.Data + state.deltaStep*inStepSize, inputs);
-{$endif}
-  end ;
-
-{$ifdef DEBUG_GPU}
-bias_updates.printGpuSumSqrDiff();
-weight_updates.printGpuSumSqrDiff();
 state.delta^.printGpuSumSqrDiff();
 {$endif}
+  end ;
 
   {$ifdef USE_TELEMETRY}
   if benchmark

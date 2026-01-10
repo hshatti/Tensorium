@@ -91,7 +91,7 @@ __kernel void mandel(__global uchar *buf, const int w, const int h){
   //   [...]      [...]      [...]
 
 typedef enum {
-    acLOGISTIC, acRELU, acRELU6, acRELIE, acLINEAR, acRAMP, acTANH, acPLSE,
+    acLINEAR, acLOGISTIC, acRELU, acRELU6, acRELIE, acRAMP, acTANH, acPLSE,
     acREVLEAKY, acLEAKY, acELU, acLOGGY, acSTAIR, acHARDTAN, acLHTAN, acSELU, acSOFTMAX,
     acGELU, acSWISH, acMISH, acHARD_MISH, acNORM_CHAN, acNORM_CHAN_SOFTMAX,
     acNORM_CHAN_SOFTMAX_MAXVAL
@@ -1740,7 +1740,7 @@ extern "C" __global__ void vars(const long N, const long blocksize, const long g
         for(i = 0; i < BLOCK; ++i){
             variance_tmp += local[i];
         }
-        variance_tmp /= (blocksize * groups);
+        variance_tmp /= (blocksize * groups - 1);
         vars[filter] = variance_tmp;
     }
 }

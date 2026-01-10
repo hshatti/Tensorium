@@ -90,7 +90,7 @@ __kernel void mandel(__global uchar *buf, const int w, const int h){
   //   [...]      [...]      [...]
 
 typedef enum {
-    acLOGISTIC, acRELU, acRELU6, acRELIE, acLINEAR, acRAMP, acTANH, acPLSE,
+    acLINEAR, acLOGISTIC, acRELU, acRELU6, acRELIE, acRAMP, acTANH, acPLSE,
     acREVLEAKY, acLEAKY, acELU, acLOGGY, acSTAIR, acHARDTAN, acLHTAN, acSELU, acSOFTMAX,
     acGELU, acSWISH, acMISH, acHARD_MISH, acNORM_CHAN, acNORM_CHAN_SOFTMAX,
     acNORM_CHAN_SOFTMAX_MAXVAL
@@ -850,7 +850,7 @@ __kernel void forward_maxpool(
      __global nfloat* input
      , const n_int c, const n_int h, const n_int w
      , const n_int stride_x, const n_int stride_y, const n_int padding, const n_int kernelSize
-     , __global n_int* indexes, __global nfloat* output){
+     , __global int* indexes, __global nfloat* output){
 
   const n_int w_offset = -padding / 2;
   const n_int h_offset = -padding / 2;
@@ -1222,7 +1222,7 @@ void Xcol2imKernelNormal(const n_int input_h, const n_int input_w, const n_int c
 }
 
 
-__kernel void upsample(__global nfloat* in, const n_int stride, const int isForward, const nfloat scale, __global nfloat* out, const int zero){
+__kernel void UpSample(__global nfloat* in, const n_int stride, const int isForward, const nfloat scale, __global nfloat* out, const int zero){
 
    const n_int c = get_global_id(0);
    const n_int y = get_global_id(1);
@@ -1313,7 +1313,7 @@ __kernel void vars(const n_int blocksize, const n_int groups, __global nfloat* s
         for(i = 0; i < BLOCK; ++i){
             variance_tmp += buf[i];
         }
-        variance_tmp /= (blocksize * groups);
+        variance_tmp /= (blocksize * groups - 1);
         vars[filter] = variance_tmp;
     }
 }
@@ -1374,7 +1374,7 @@ __kernel void means_vars(const n_int blocksize, const n_int groups, __global nfl
         for(i = 0; i < BLOCK; ++i){
             variance_tmp += buf[i];
         }
-        variance_tmp /= (blocksize * groups);
+        variance_tmp /= (blocksize * groups - 1);
         vars[filter] = variance_tmp;
     }
 
@@ -1726,7 +1726,7 @@ __kernel void power(__global nfloat* base, const n_int srcOffset, const n_int sr
    dst[i*dstStride + dstOffset] = pow(base[i*srcStride + srcOffset], expo);
 }
 
-__kernel void clamp(const nfloat alpha, __global const nfloat* src, __global nfloat* dst, const n_int stride, const n_int offset ){
+__kernel void Clamp(const nfloat alpha, __global const nfloat* src, __global nfloat* dst, const n_int stride, const n_int offset ){
    const n_int i = get_global_id(0);
    src += i*stride + offset;
    dst += i*stride + offset;

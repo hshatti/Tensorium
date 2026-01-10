@@ -19,24 +19,25 @@ uses
   , nAddLayer
   , nMaxPoolLayer
   , nConcatLayer
-  , nModels, Keyboard, nparser, nXML, termesc, sixel
-  {$ifdef MSWINDOWS}, ShellApi, nHttp, nRegionLayer {$endif}
+  , nHttp, nRegionLayer
+  , nModels, Keyboard, nparser, nXML, termesc, nffmpeg_proc, dnnl
+  {$ifdef MSWINDOWS}, ShellApi {$endif}
   { you can add units after this };
 
 
 const
-    //cfgFile = '../../../../../cfg/yolov7.cfg';
-    //weightFile = '../../../../../yolov7.weights';
+    cfgFile = '../../../../../cfg/yolov7.cfg';
+    weightFile = '../../../../../yolov7.weights';
     cfgFileVOC = '../../../../../cfg/yolov3-voc.cfg';
     //cfgFile = '../../../../../cfg/yolov3.cfg';
     //weightFile = '../../../../../yolov3.weights';
-    cfgFile = '../../../../../cfg/yolo9000.cfg';
-    weightFile = '../../../../../yolo9000.weights';
+    //cfgFile = '../../../../../cfg/yolo9000.cfg';
+    //weightFile = '../../../../../yolo9000.weights';
 
-    images :TStringArray = ['eagle.jpg', 'kite.jpg', 'person.jpg', 'dog.jpg', 'giraffe.jpg', 'horses.jpg', 'startrek1.jpg'];
+    images :TStringArray = ['kite.jpg', 'eagle.jpg', 'person.jpg', 'dog.jpg', 'giraffe.jpg', 'horses.jpg', 'startrek1.jpg'];
     imageRoot = '../../../../../data/';
-    classNamesFile = '../cfg/9k.names';
-    //classNamesFile = '../cfg/coco.names';
+    //classNamesFile = '../cfg/9k.names';
+    classNamesFile = '../cfg/coco.names';
     scaleDownSteps = 4.0 ;
 
     colors: array [0..5,0..2] of single = ( (1,0,1), (0,0,1),(0,1,1),(0,1,0),(1,1,0),(1,0,0) );
@@ -109,14 +110,14 @@ begin
         selected_detections_num[0] := selected_num;
 end;
 
-function compare_by_lefts(const a, b: TDetectionWithClass):SizeInt; WINAPI;
+function compare_by_lefts(const a, b: TDetectionWithClass):integer; WINAPI;
 var delta: single;
 begin
     delta := (a.det.bbox.x-a.det.bbox.w / 2)-(b.det.bbox.x-b.det.bbox.w / 2);
     //exit(ifthen(delta < 0, -1, ifthen(delta > 0, 1, 0)))
 end;
 
-function compare_by_probs(const a, b: TDetectionWithClass):SizeInt; WINAPI;
+function compare_by_probs(const a, b: TDetectionWithClass):integer; WINAPI;
 var
     delta: single;
 begin
@@ -194,10 +195,10 @@ begin
                 bot := im.h-1;
             if im.c = 1 then
                 //draw_box_width_bw(im, left, top, right, bot, 2{width}, 0.8)
-                im.rect(left, top, right, bot, 6{width}, 0.8, aBatch)
+                im.rect(left, top, right, bot, 3{width}, 0.8, aBatch)
             else
                 //draw_box_width(im, left, top, right, bot, 2{width}, red, green, blue, labelAlpha);
-                im.rect(left, top, right, bot, 6{width}, red, green, blue, labelAlpha, aBatch);
+                im.rect(left, top, right, bot, 3{width}, red, green, blue, labelAlpha, aBatch);
 
             //if assigned(alphabet) then
             //    begin
@@ -249,8 +250,8 @@ end;
 //
 //end;
 
-const thresh = 0.45;
-    NMS =0.45;
+const thresh = 0.5;
+    NMS =0.5;
     //M = 10;
     //N = 20;
     //K =30;
@@ -317,7 +318,7 @@ begin
 
   {$if defined(USE_OPENCL)}
   initOpenCL(0, 0);
-  ocl.useBLAS := 0;
+  ocl.useBLAS := 2;
   {$elseif defined(USE_CUDART)}
   initCUDART(0);
   cuda.useBLAS := 1;
@@ -338,6 +339,7 @@ begin
 
   //darknet.Neural.OnForward := OnForward();
   darknet.Neural.fuseBatchNorm;
+  //darknet.Neural.quantize(ptINT16);
   i:=0;
   {$ifdef USE_TELEMETRY}
   benchmark:= true;
@@ -354,9 +356,17 @@ begin
     {$ifdef USE_TELEMETRY}
     metrics.reset;
     {$endif}
+    sized.ToTensor(imageTensor);
     t := clock;
-    darknet.Neural.predict(sized.toTensor);
-    writeln('Inference : [',(clock()-t)/CLOCKS_PER_SEC:1:3,'] Seconds.');
+
+
+    darknet.Neural.predict(ImageTensor);
+    {$ifdef USE_TELEMETRY}
+    cursorClearScreen();
+    cursorHome();
+    writeln('Metrics :', sLineBreak, metrics.print);
+    {$endif}
+    writeln('Inference : [',(clock()-t)/CLOCKS_PER_SEC:1:3,'] Seconds. @', darknet.Neural.OpsPerSec/1000000000:1:3,' GFLOPs');
     t := clock;
     //for j:=0 to darknet.Neural.layerCount()-1 do
     //  if darknet.Neural.layers[j].layerType=ltYOLO then
@@ -375,22 +385,25 @@ begin
     //readln;
     t := clock;
     draw_detections_v3(img, detections, length(detections), thresh, classNames, nil, length(classNames), 0.5);
-    writeln('Drawing : [',(clock()-t)/CLOCKS_PER_SEC:1:3,'] Seconds.');
+    //write(
+    //      setCursorPos(50, 1),
+    //      'Drawing : [',(clock()-t)/CLOCKS_PER_SEC:1:3,'] Seconds.',
+    //      setCursorPos(50, 2)
+    //
+    //);
 
-    {$ifdef USE_TELEMETRY}
-    writeln('Metrics :', sLineBreak, metrics.print);
-    {$endif}
 
-    //img.toTensor.print(0.3);
-    if not DeleteFile(GetCurrentDir+PathDelim+'tmp.jpg') then
-        writeln('No result image, Saving...');
-    img.saveToFile(GetCurrentDir+PathDelim+'tmp.jpg');
-    ShellExecute(0,'open',PChar( GetCurrentDir+PathDelim+'tmp.jpg'),'','', 5);
+    //img.asTensor().print(0.2);
+    img.asTensor().print(psSIXELDithered);
+    //if not DeleteFile(GetCurrentDir+PathDelim+'tmp.jpg') then
+    //    writeln('No result image, Saving...');
+    //img.saveToFile(GetCurrentDir+PathDelim+'tmp.jpg');
+    //ShellExecute(0,'open',PChar( GetCurrentDir+PathDelim+'tmp.jpg'),'','', 5);
     inc(i);
     if i>high(images) then i:=0;
-    writeln('press [Enter] for next image...');
+    writeln(sLineBreak, 'press [Enter] for next image...');
     readLn(c)
-  until lowerCase(c) ='Q';
+  until lowerCase(c) ='q';
 
   //writeln('workspace : [', length(darknet.Neural.workspace)*4/1000000:1:1,'] MB');
   writeln(sLineBreak);
@@ -502,6 +515,7 @@ procedure OnAfterOptimize(const net:TNNet; const batchId: SizeInt);
 var i:SizeInt;
   detections : TDetections;
   img : TImageData;
+  imgTensor:TSingleTensor;
 begin
   if batchId <2 then exit;
   cursorClearUp();
@@ -517,7 +531,8 @@ begin
       if assigned(detections) then begin
         detections.doNMSSort(darknet.Neural.classCount(), NMS);
         draw_detections_v3(img, detections, length(detections), thresh, classNames, nil, length(classNames), 0.5, i);
-        img.toTensor.print(0.4, false, 2);
+        img.toTensor(imgTensor);
+        imgTensor.print(0.4, false, 2);
       end;
     end;
   end;
@@ -537,6 +552,21 @@ end;
 procedure OnAfterPropagation(var state:TNNetState);
 begin
   write(setClearLineEnd, 100*TNNet(state.net).currentSubDivision/TNNet(state.net).subDivisions:1:2 , '%'#13);
+end;
+
+procedure testTensors;
+//var
+//  t1, t2, t3,t4:TSingleTensor;
+begin
+  //sDigits := 1;
+  //t1.reSize([100, 100]);
+  //t1.linSpace(-10, 9);
+  //t2.resize(t1.shape);
+  //t1.forwardEltWise(TActivationType.acRELIE, t2);
+  //
+  //t2.plot(t1);
+  //readln
+
 end;
 
 procedure trainYOLO;
@@ -588,9 +618,7 @@ begin
   //darknet.Neural.OnBackward := OnBackward;
   darknet.Neural.OnAfterPropagation:=OnAfterPropagation;
   for i:=0 to length(imgList) div BATCH_SIZE-1 do begin
-    TSingleTensor.noDeviceAllocation := true;
     train := loadVOCBatch(imgList, 416, 416, i*BATCH_SIZE, BATCH_SIZE, darknet.Neural.maxBoxes);
-    TSingleTensor.noDeviceAllocation := false;
     if not assigned(darknet.Neural.truth.Data) then
       darknet.Neural.truth.resize([darknet.Neural.batch, train.y.h, train.y.w], darknet.Neural.batch);
     darknet.Neural.trainEpoch(train);
@@ -600,4 +628,7 @@ end;
 begin
   //trainYOLO;
   inferYOLO;
+  //testTensors;
+
+  WriteLn('Exiting...');
 end.

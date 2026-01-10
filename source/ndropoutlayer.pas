@@ -60,7 +60,7 @@ begin
   outputs := Ainputs;
   batch := Abatch;
   inputShape := [batch, inputs];
-  rand := TSingleTensor.Create([batch, inputs], batch);
+  rand := TSingleTensor.Create([batch, inputs], batch,'dropout_rand');
 
   scale := 1 / (1.0-probability);
 end;

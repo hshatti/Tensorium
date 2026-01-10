@@ -39,7 +39,7 @@ type
   public
     n, classes, maxBoxes, total : SizeInt;
     tuneSize, TruthSize, truths, embeddingSize, embeddingLayerId, trackHistorySize, detsForTrack, detsForShow : SizeInt;
-    Mask, Labels, classIds, map : TSizeIntTensor;
+    Mask, Labels, classIds, map : TIntTensor;
     classesMultipliers : TSingleTensor;
     Threads    : TArray<TThread>;
     ThreadArgs : TArray<TTrainYoloArgs>;
@@ -50,7 +50,7 @@ type
     iouLoss :TIOULoss;
     NMSKind : TNMSKind;
     embeddingOutput : TSingleTensor;
-    constructor Create(const ABatch, aWidth, aHeight, aN, ATotal: SizeInt; const AMask: TArray<SizeInt>; const aClasses, aMaxBoxes: SizeInt; const ATrain: boolean=false);
+    constructor Create(const ABatch, aWidth, aHeight, aN, ATotal: SizeInt; const AMask: TArray<longint>; const aClasses, aMaxBoxes: SizeInt; const ATrain: boolean=false);
     procedure setBatch(ABatch: SizeInt); override;
     procedure setTrain(ATrain: boolean); override;
 
@@ -281,7 +281,7 @@ begin
 end;
 
 constructor TYoloLayer.Create(const ABatch, aWidth, aHeight, aN,
-  ATotal: SizeInt; const AMask: TArray<SizeInt>; const aClasses,
+  ATotal: SizeInt; const AMask: TArray<longint>; const aClasses,
   aMaxBoxes: SizeInt; const ATrain: boolean);
 var
     i: SizeInt;
@@ -302,7 +302,7 @@ begin
         mask := AMask
     else
         begin
-            mask := TSizeIntTensor.Create([n]);
+            mask := TIntTensor.Create([n],'YOLO_mask');
             mask.fill(0, 1);
         end;
     outputs            :=  n * (classes+4+1) * h * w;
@@ -313,22 +313,22 @@ begin
     truths             := maxBoxes * truthSize;
 
     //setLength(labels, batch * result.w * result.h * result.n);// := longint(xcalloc(batch * result.w * result.h * result.n, sizeof(int)));
-    labels             := TSizeIntTensor.Create([batch, n, h, w], batch);
+    labels             := TIntTensor.Create([batch, n, h, w], batch,'YOLO_labels');
     //for i := 0 to batch * result.w * result.h * result.n -1 do
     //    labels[i] := -1;
     labels.Fill(-1);
     //setLength(result.class_ids, batch * result.w * result.h * result.n) ;//:= longint(xcalloc(batch * result.w * result.h * result.n, sizeof(int)));
-    classIds := TSizeIntTensor.create([batch, n, h, w], batch);
+    classIds := TIntTensor.create([batch, n, h, w], batch,'YOLO_classIds');
     //for i := 0 to batch * result.w * result.h * result.n -1 do
     //    result.class_ids[i] := -1;
     classIds.Fill(-1);
 
-    biases := TSingleTensor.Create([total * 2]);
+    biases := TSingleTensor.Create([total * 2],'YOLO_biases');
     biases.fill(0.5);
-    output := TSingleTensor.Create([batch, n, (classes+4+1), h, w], batch);
+    output := TSingleTensor.Create([batch, n, (classes+4+1), h, w], batch,'YOLO_output');
     FTrain := aTrain;
     if FTrain then  begin
-        delta := TSingleTensor.Create([batch, n, (classes+4+1), h, w], batch);
+        delta := TSingleTensor.Create([batch, n, (classes+4+1), h, w], batch,'YOLO_delta');
         //bias_updates       := TSingleTensor.Create([n * 2]);
         setLength(threads, batch);
         setLength(ThreadArgs, batch)
@@ -363,7 +363,7 @@ begin
   if ATrain = FTrain then exit;
   FTrain := ATrain;
   if FTrain then begin
-      delta              := TSingleTensor.Create([batch, (classes+4+1), n, h, w], batch);
+      delta              := TSingleTensor.Create([batch, (classes+4+1), n, h, w], batch,'YOLO_delta');
       //bias_updates       := TSingleTensor.Create([n * 2]);
       setLength(threads, batch);
       setLength(ThreadArgs, batch)
@@ -383,6 +383,7 @@ begin
     result := 0;
     {$if defined(USE_OPENCL) or defined(USE_CUDART)}
     if output.wasGPU() then output.pullFromDevice();
+
     {$endif}
     for i := 0 to w * h -1 do
         for _n := 0 to n -1 do
@@ -809,14 +810,14 @@ begin
           bbox_index := entryIndex(b, _n * w * h, 0); // 1st pixel of 1st image from each channel
           if not newCoords then
             begin
-              activate_array(pointer(output.data + bbox_index), 2 * w * h, acLOGISTIC); // activate 1st 2 images only for each channel
+              activate_array(2 * w * h, pointer(output.data + bbox_index), acLOGISTIC); // activate 1st 2 images only for each channel
 
               //_n := location div (w * h);
               //loc := location mod (w * h);
               //result := aBatch*outputs + _n*(classes + 4+1)*w*h + entry*w*h + loc
 
               obj_index := entryIndex(b, _n * w * h, 4); // fifth image of each channel
-              activate_array(pointer(output.Data + obj_index), (1+classes) * w * h, acLOGISTIC) // activate the fifth image and all the rest classifying images in each channel
+              activate_array((1+classes) * w * h, pointer(output.Data + obj_index), acLOGISTIC) // activate the fifth image and all the rest classifying images in each channel
             end;
           //scal_add_cpu(2 * l.w * l.h, l.scale_x_y, -0.5 * (l.scale_x_y-1), l.output+bbox_index, 1)
           if scaleXY<>1 then
@@ -1031,9 +1032,16 @@ begin
   {$ifdef USE_TELEMETRY}
   if benchmark then metrics.forward.start(layerType);
   {$endif}
+{$ifdef DEBUG_GPU}
+writeln(sLineBreak, '[', index, ']',LayerTypeStr);
+{$endif}
+
   if not state.input.wasGPU() then state.input.pushToDevice;
   output.setOCL;
   ocl.copy(state.input.size(), state.input.devData, 0, 1, output.devData, 0, 1);
+{$ifdef DEBUG_GPU}
+state.input.copyTo(output);
+{$endif}
   for b := 0 to batch -1 do
       for _n := 0 to n -1 do
           begin
@@ -1041,13 +1049,29 @@ begin
               if not newCoords then
                   begin
                       ocl.ActivateArray(2 * w * h, output.devData, bbox_index, longint(acLOGISTIC));
+{$ifdef DEBUG_GPU}
+activate_array(2 * w * h, pointer(output.data + bbox_index), acLOGISTIC); // activate 1st 2 images only for each channel
+{$endif}
                       obj_index := entryIndex(b, _n * w * h, 4);
-                      ocl.ActivateArray((1+classes) * w * h, output.devData , obj_index, longint(acLOGISTIC))
+                      ocl.ActivateArray((1+classes) * w * h, output.devData , obj_index, longint(acLOGISTIC));
+{$ifdef DEBUG_GPU}
+activate_array((1+classes) * w * h, pointer(output.Data + obj_index), acLOGISTIC) // activate the fifth image and all the rest classifying images in each channel
+{$endif}
                   end;
               //scal_add_cpu(2 * l.w * l.h, l.scale_x_y, -0.5 * (l.scale_x_y-1), l.output+bbox_index, 1)
-              if scaleXY<>1 then
+              if scaleXY<>1 then begin
                   ocl.fmavss(2*w*h, output.devData, bbox_index, scaleXY, 0.5*(1-scaleXY), output.devData);
+{$ifdef DEBUG_GPU}
+output.FusedMultiplyAdd(scaleXY, 0.5*(1-scaleXY), bbox_index, 2*w*h);
+{$endif}
+              end;
           end;
+{$ifdef DEBUG_GPU}
+output.printGpuSumSqrDiff();
+{$endif}
+  if not Train then begin
+      output.pullFromDevice;
+  end;
   forward(state);
   {$ifdef USE_TELEMETRY}
   ocl.finish();
@@ -1100,6 +1124,8 @@ begin
 //output.FusedMultiplyAdd(scaleXY, 0.5*(1-scaleXY), bbox_index, 2*w*h);
               end;
           end;
+  if not Train then
+      output.pullFromDevice;
   forward(state);
 //write(LayerTypeStr, ' ');
 //output.printGpuSumSqrDiff();

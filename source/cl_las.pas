@@ -1,7 +1,13 @@
 
  (*
- This is a Pascal/Delphi implementation/port of the GEMM part from
+ **************************************************
+ *          CL Linear algebra subsystem           *
+ *         Author : Haitham Shatti (2025)         *
+ *            haitham.shatti@gmail.com            *
+ **************************************************
+ This is a Pascal/Delphi Re-implementation/port of the GEMM part from
  CLBlast library by Cedric Nugteren ( https://github.com/cnugteren/CLBlast )
+ this library performs exactly the same as CLBlast without any external dependancy
  which is licensed under Apache Version 2.0.
  *)
 
@@ -55,7 +61,7 @@ type
   end;
 
 {$if not declared(size_t)}
-  size_t         = IntPtr;
+  size_t         = UIntPtr;
 {$endif}
   TQueue         = cl_command_queue;
   TEvent         = cl_event;
@@ -67,6 +73,7 @@ type
 
   TBuffer<T>     = record
     buf   : cl_mem;
+    //tag : ansistring;
     function GetSize():size_t;
     constructor create(const aContext:TContext; const size:size_t; const access: cl_mem_flags= CL_MEM_READ_WRITE; const host:pointer =nil);
     function Context():TContext;
@@ -74,6 +81,23 @@ type
     procedure free;
     class operator implicit(const buf:cl_mem):TBuffer<T>;
     class operator implicit(const buf:TBuffer<T>):cl_mem;
+    {$ifdef FPC}
+    class operator Initialize(var dst:TBuffer<T>);
+    {$else}
+    class operator Initialize(out dst: TBuffer<T>);
+    {$endif}
+    (*
+    {$ifdef FPC}
+    class operator Copy(constref Src: TBuffer<T>; var Dst: TBuffer<T>);
+    class operator AddRef(var src:TBuffer<T>);
+    {$else}
+    class operator Assign(var Dst: TBuffer<T>; const [ref] Src: TBuffer<T>);
+    {$endif}
+
+    class operator Finalize(var dst: TBuffer<T>);
+  private
+    _ref:TArray<integer>;
+    *)
   end;
 
   { TKernel }
@@ -84,10 +108,22 @@ type
     function Name:ansistring;
     procedure setArgument<T>(const index: cl_uint; const value:T);           overload;
     procedure setArgument<T>(const index: cl_uint; const value:TBuffer<T>);  overload;
-
+    procedure free;
     class operator implicit(const src:TKernel):cl_kernel;
     class operator implicit(const src:cl_kernel):TKernel;
+(*
     class operator initialize({$ifdef fpc}var{$else}out{$endif} dst:TKernel);
+    class operator Finalize(var dst: TKernel);
+    {$ifdef FPC}
+    class operator Copy(constref Src: TKernel; var Dst: TKernel);
+    class operator AddRef(var src:TKernel);
+    {$else}
+    class operator Assign(var Dst: TKernel; const [ref] Src: TKernel);
+    {$endif}
+  private
+    _ref : TArray<integer>;
+*)
+
   end;
 
   { TDevice }
@@ -419,7 +455,6 @@ type
     databaseCache : TDictionary<TRoutineDesc, TDatabase>;
     programCache : TDictionary<TProgramDesc, cl_program>;
     binaryCache   : TDictionary<TBinDesc, RawByteString>;
-
   public
     class function PrecisionValue<T>:TPrecision;static;
     // Initializes db_, fetching cached database or building one
@@ -444,6 +479,7 @@ type
           const userDatabase : TArray<TDatabaseEntry>;
           const source : TInitList);
 
+    destructor Destroy; override;
 
     // List of kernel-routine look-ups
 
@@ -509,8 +545,9 @@ type
         PAD_DIMY                : size_t;
 
 
-      class var ConstantOne : T ;
-
+      class var
+        ConstantOne : T ;
+        bufferCache : array[0..2] of TBuffer<T>;
       class function a_want_rotated_(const gemm_kernel_id:size_t):boolean;static;
       class function b_want_rotated_(const gemm_kernel_id:size_t):boolean;static;
       class function c_want_rotated_(const gemm_kernel_id:size_t):boolean;static;
@@ -562,10 +599,10 @@ type
       procedure DoGemm(const layout :TLayout; const a_transpose, b_transpose: TTranspose;
                   const m, n, k: size_t;
                   const alpha : T;
-                  const a_buffer    :TBuffer<T>; const a_offset, a_ld:size_t;
-                  const b_buffer    :TBuffer<T>; const b_offset, b_ld:size_t;
+                  const a_buffer    :cl_mem; const a_offset, a_ld:size_t;
+                  const b_buffer    :cl_mem; const b_offset, b_ld:size_t;
                   const beta:T;
-                  const c_buffer    :TBuffer<T>; const c_offset, c_ld:size_t;
+                  const c_buffer    :cl_mem; const c_offset, c_ld:size_t;
                   const temp_buffer :cl_mem = nil; const temp_buffer_provided:boolean = false);
 
       procedure PadCopyTransposeMatrix(
@@ -592,10 +629,10 @@ type
       procedure GemmIndirect(
                   const m, n, k: size_t;
                   const alpha : T;
-                  const a_buffer    :TBuffer<T>; const a_offset, a_ld:size_t;
-                  const b_buffer    :TBuffer<T>; const b_offset, b_ld:size_t;
+                  const a_buffer    :cl_mem; const a_offset, a_ld:size_t;
+                  const b_buffer    :cl_mem; const b_offset, b_ld:size_t;
                   const beta:T;
-                  const c_buffer    :TBuffer<T>; const c_offset, c_ld:size_t;
+                  const c_buffer    :cl_mem; const c_offset, c_ld:size_t;
                   const a_do_transpose, b_do_transpose, c_do_transpose, a_conjugate, b_conjugate:boolean;
                   const a_one, a_two, b_one, b_two, c_one, c_two : size_t;
                   const temp_buffer :cl_mem = nil; const temp_buffer_provided:boolean = false);
@@ -604,29 +641,29 @@ type
       procedure GemmDirect(
                   const m, n, k: size_t;
                   const alpha : T;
-                  const a_buffer    :TBuffer<T>; const a_offset, a_ld:size_t;
-                  const b_buffer    :TBuffer<T>; const b_offset, b_ld:size_t;
+                  const a_buffer    :cl_mem; const a_offset, a_ld:size_t;
+                  const b_buffer    :cl_mem; const b_offset, b_ld:size_t;
                   const beta:T;
-                  const c_buffer    :TBuffer<T>; const c_offset, c_ld:size_t;
+                  const c_buffer    :cl_mem; const c_offset, c_ld:size_t;
                   const a_do_transpose, b_do_transpose, c_do_transpose, a_conjugate, b_conjugate:boolean);
 
       procedure DoGemmStridedBatch(
                   const layout :TLayout; const a_transpose, b_transpose: TTranspose;
                   const m, n, k: size_t;
                   const alpha : T;
-                  const a_buffer    :TBuffer<T>; const a_offset, a_ld, a_stride:size_t;
-                  const b_buffer    :TBuffer<T>; const b_offset, b_ld, b_stride:size_t;
+                  const A    :cl_mem; const a_offset, a_ld, a_stride:size_t;
+                  const B    :cl_mem; const b_offset, b_ld, b_stride:size_t;
                   const beta:T;
-                  const c_buffer    :TBuffer<T>; const c_offset, c_ld, c_stride:size_t;
+                  const C    :cl_mem; const c_offset, c_ld, c_stride:size_t;
                   const batch_count : size_t);
 
       procedure BatchedGemmIndirect(
                   const m, n, k: size_t;
                   const alpha : T;
-                  const a_buffer    :TBuffer<T>; const a_offset, a_ld, a_stride:size_t;
-                  const b_buffer    :TBuffer<T>; const b_offset, b_ld, b_stride:size_t;
+                  const A    :cl_mem; const a_offset, a_ld, a_stride:size_t;
+                  const B    :cl_mem; const b_offset, b_ld, b_stride:size_t;
                   const beta:T;
-                  const c_buffer    :TBuffer<T>; const c_offset, c_ld, c_stride:size_t;
+                  const C    :cl_mem; const c_offset, c_ld, c_stride:size_t;
                   const a_do_transpose, b_do_transpose, c_do_transpose, a_conjugate, b_conjugate:boolean;
                   const a_one, a_two, b_one, b_two, c_one, c_two,
                   batch_count : size_t);
@@ -634,10 +671,10 @@ type
       procedure BatchedGemmDirect(
                   const m, n, k: size_t;
                   const alpha : T;
-                  const a_buffer    :TBuffer<T>; const a_offset, a_ld, a_stride:size_t;
-                  const b_buffer    :TBuffer<T>; const b_offset, b_ld, b_stride:size_t;
+                  const a_buffer    :cl_mem; const a_offset, a_ld, a_stride:size_t;
+                  const b_buffer    :cl_mem; const b_offset, b_ld, b_stride:size_t;
                   const beta:T;
-                  const c_buffer    :TBuffer<T>; const c_offset, c_ld, c_stride:size_t;
+                  const c_buffer    :cl_mem; const c_offset, c_ld, c_stride:size_t;
                   const a_do_transpose, b_do_transpose, c_do_transpose, a_conjugate, b_conjugate:boolean;
                   const batch_count :size_t);
 
@@ -1010,6 +1047,13 @@ begin
    SAFE_CALL(clSetKernelArg(kernel, index, SizeOf(cl_mem), @value.buf))
 end;
 
+procedure TKernel.free;
+begin
+  if assigned(kernel) then
+    SAFE_CALL(clReleaseKernel(kernel));
+  kernel := nil
+end;
+
 class operator TKernel.implicit(const src: TKernel): cl_kernel;
 begin
   result := src.kernel
@@ -1020,11 +1064,56 @@ begin
   result.kernel := src
 end;
 
+(*
 class operator TKernel.initialize({$ifdef fpc}var{$else}out{$endif} dst: TKernel);
 begin
   dst.kernel:=nil;
+  dst._ref:=[1]
 end;
 
+class operator TKernel.Finalize(var dst: TKernel);
+begin
+  if not assigned(dst._ref) then
+    exit;
+
+  {$ifdef FPC}
+  InterlockedDecrement(dst._ref[0]);
+  {$else}
+  TInterlocked.Decrement(dst.__ref[0]);
+  {$endif}
+
+  if dst._ref[0]>0 then
+    exit;
+
+  dst.free;
+  dst._ref := nil;
+
+
+end;
+
+{$ifdef fpc}
+class operator TKernel.Copy(constref Src: TKernel; var Dst: TKernel);
+{$else}
+class operator TKernel.Assign(var dst: TKernel; const [ref] src:TKernel);
+{$endif}
+begin
+  if assigned(src._ref) then begin
+    {$ifdef fpc}
+    InterlockedIncrement(src._ref[0]);
+    {$else}
+    TInterlocked.Increment(src.ref[0]);
+    {$endif}
+    dst._ref := src._ref;
+  end;
+  dst.kernel := src.kernel;
+  //move(src, dst, sizeOf(TBuffer<T>));
+end;
+
+class operator TKernel.AddRef(var src: TKernel);
+begin
+  InterlockedIncrement(src._ref[0])
+end;
+*)
 { TDevice }
 
 function TDevice.getInfo<T>(const info: cl_device_info): T;
@@ -1274,6 +1363,7 @@ end;
 function TBuffer<T>.GetSize(): size_t;
 var sz:size_t;
 begin
+  if not assigned(buf) then exit(0);
   SAFE_CALL(clGetMemObjectInfo(buf, CL_MEM_SIZE, sizeOf(size_t), @result, sz))
 end;
 
@@ -1281,6 +1371,7 @@ constructor TBuffer<T>.create(const aContext: TContext; const size: size_t; cons
 var err:cl_int;
 begin
   buf := clCreateBuffer(aContext, access, size*sizeOf(T), host, err);
+//  tag := 'create';
   SAFE_CALL(err)
 end;
 
@@ -1293,13 +1384,17 @@ end;
 procedure TBuffer<T>.Alloc(const aContext: TContext; const size: size_t; const access: cl_mem_flags; const host: pointer);
 var err:cl_int;
 begin
+  if assigned(buf) then
+    SAFE_CALL(clReleaseMemObject(buf)); // no memory left behind
   buf := clCreateBuffer(aContext, access, size*sizeOf(T), host, err);
   SAFE_CALL(err)
 end;
 
 procedure TBuffer<T>.free;
 begin
-  SAFE_CALL(clReleaseMemObject(buf));
+  if assigned(buf) then
+    SAFE_CALL(clReleaseMemObject(buf));
+  buf := nil
 end;
 
 class operator TBuffer<T>.implicit(const buf: cl_mem): TBuffer<T>;
@@ -1309,8 +1404,60 @@ end;
 
 class operator TBuffer<T>.implicit(const buf: TBuffer<T>): cl_mem;
 begin
-  result := buf.buf
+  result := buf.buf;
 end;
+
+{$ifdef FPC}
+class operator TBuffer<T>.Initialize(var dst: TBuffer<T>);
+{$else}
+class operator TBuffer<T>.Initialize(out dst: TBuffer<T>);
+{$endif}
+begin
+  dst.buf := nil;
+  //dst._ref:=[0];
+end;
+
+(*
+{$ifdef fpc}
+class operator TBuffer<T>.Copy(constref Src: TBuffer<T>; var Dst: TBuffer<T>);
+{$else}
+class operator TBuffer<T>.Assign(var dst: TBuffer<T>; const [ref] src:TBuffer<T>);
+{$endif}
+begin
+  if assigned(src._ref) then begin
+    {$ifdef fpc}
+    InterlockedIncrement(src._ref[0]);
+    {$else}
+    TInterlocked.Increment(src.ref[0]);
+    {$endif}
+    dst.buf := src.buf;
+  end;
+  //move(src, dst, sizeOf(TBuffer<T>));
+end;
+
+{$ifdef FPC}
+class operator TBuffer<T>.AddRef(var src: TBuffer<T>);
+begin
+  InterlockedIncrement(src._ref[0])
+end;
+
+class operator TBuffer<T>.Finalize(var dst: TBuffer<T>);
+begin
+  if not assigned(dst._ref) // initiated create constructor
+      or (dst._ref[0]<0) // or iniiated by an assign
+  then begin
+    assert(assigned(dst.buf));
+    dst.free;
+    dst._ref := nil;
+  end else
+  {$ifdef FPC}
+    InterlockedDecrement(dst._ref[0]);
+  {$else}
+    TInterlocked.Decrement(dst.__ref[0]);
+  {$endif}
+end;
+{$endif}
+*)
 
 { TDatabaseArchitecture }
 
@@ -1448,7 +1595,7 @@ begin
       is_apple := Pos('cl_APPLE_SetMemObjectDestructor', extensions)>0;
       is_likely_apple := device.MaxWorkGroupSize() <= 32;
       if is_apple or is_likely_apple then
-        insert(apple_cpu_fallback, databases, length(databases);
+        insert(apple_cpu_fallback, databases, length(databases));
     end;
   {$endif}
   for i:=0 to high(databases) do begin
@@ -1687,6 +1834,13 @@ begin
 
   InitDatabase(device_, routines, precision, userDatabase, db_);
   InitProgram(source);
+end;
+
+destructor TRoutine.Destroy;
+var i:integer;
+begin
+
+  inherited Destroy;
 end;
 
 procedure TRoutine.InitProgram(const source: TInitList);
@@ -2013,10 +2167,10 @@ end;
 
 procedure TXgemm<T>.DoGemm(const layout: TLayout; const a_transpose,
   b_transpose: TTranspose; const m, n, k: size_t; const alpha: T;
-  const a_buffer: TBuffer<T>; const a_offset, a_ld: size_t;
-  const b_buffer: TBuffer<T>; const b_offset, b_ld: size_t; const beta: T;
-  const c_buffer: TBuffer<T>; const c_offset, c_ld: size_t;
-  const temp_buffer: cl_mem; const temp_buffer_provided: boolean);
+  const a_buffer: cl_mem; const a_offset, a_ld: size_t; const b_buffer: cl_mem;
+  const b_offset, b_ld: size_t; const beta: T; const c_buffer: cl_mem;
+  const c_offset, c_ld: size_t; const temp_buffer: cl_mem;
+  const temp_buffer_provided: boolean);
 var
   do_gemm_direct, a_do_transpose, b_do_transpose, c_do_transpose, a_conjugate, b_conjugate:boolean;
   gemm_kernel_id, a_one, a_two, b_one, b_two, c_one, c_two:size_t;
@@ -2178,6 +2332,7 @@ begin
     end
   end;
   SAFE_CALL(clEnqueueNDRangeKernel(queue_, kernel, length(global), pointer(dummy), pointer(global), pointer(local), length(waitForEvents), pointer(waitForEvents), event));
+  kernel.free;
 end;
 
 procedure TXgemm<T>.PadCopyTransposeMatrixStridedBatched(
@@ -2238,16 +2393,16 @@ begin
     local := [PAD_DIMX, PAD_DIMY, 1];
   end;
   SAFE_CALL(clEnqueueNDRangeKernel(queue_, kernel, length(global), pointer(dummy), pointer(global), pointer(local), length(waitForEvents), pointer(waitForEvents), event));
-
+  kernel.free
 end;
 
 procedure TXgemm<T>.GemmIndirect(const m, n, k: size_t; const alpha: T;
-  const a_buffer: TBuffer<T>; const a_offset, a_ld: size_t;
-  const b_buffer: TBuffer<T>; const b_offset, b_ld: size_t; const beta: T;
-  const c_buffer: TBuffer<T>; const c_offset, c_ld: size_t;
-  const a_do_transpose, b_do_transpose, c_do_transpose, a_conjugate,
-  b_conjugate: boolean; const a_one, a_two, b_one, b_two, c_one, c_two: size_t;
-  const temp_buffer: cl_mem; const temp_buffer_provided: boolean);
+  const a_buffer: cl_mem; const a_offset, a_ld: size_t; const b_buffer: cl_mem;
+  const b_offset, b_ld: size_t; const beta: T; const c_buffer: cl_mem;
+  const c_offset, c_ld: size_t; const a_do_transpose, b_do_transpose,
+  c_do_transpose, a_conjugate, b_conjugate: boolean; const a_one, a_two, b_one,
+  b_two, c_one, c_two: size_t; const temp_buffer: cl_mem;
+  const temp_buffer_provided: boolean);
 var
   a_no_temp, b_no_temp, c_no_temp : boolean;
   global_divider_one, global_divider_two, m_ceiled, n_ceiled,
@@ -2296,9 +2451,12 @@ begin
    if temp_buffer_provided then
      temp_buffer_all:=temp_buffer
    else
-     if temp_size>0 then
+     if temp_size>0 then begin
+       //if bufferCache[0].getSize()<temp_size then
+       //  bufferCache[0].alloc(context_, temp_size);
+       //temp_buffer_all := bufferCache[0];
        temp_buffer_all.alloc(context_, temp_size)
-     else
+     end else
        temp_buffer_all := a_buffer;
 
    // Verifies if the provided temporary buffer is large enough
@@ -2384,7 +2542,7 @@ begin
    SAFE_CALL(clEnqueueNDRangeKernel(queue_, kernel, length(global), pointer(dummy),
        pointer(global), pointer(local),
        length(eventWaitList), pointer(eventWaitList), eventPointer));
-
+   kernel.free;
    // Runs the post-processing kernel if needed
    if (not c_no_temp) then begin
      //Assert(false, 'PadCopyTransposeMatrix not implemented');
@@ -2395,15 +2553,19 @@ begin
                             ConstantOne,
                             false, c_do_transpose, false);
 
-   end
+   end;
+
+   if not temp_buffer_provided and (temp_size>0) then
+     temp_buffer_all.free
+     //bufferCache[0].free
+
 end;
 
 procedure TXgemm<T>.GemmDirect(const m, n, k: size_t; const alpha: T;
-  const a_buffer: TBuffer<T>; const a_offset, a_ld: size_t;
-  const b_buffer: TBuffer<T>; const b_offset, b_ld: size_t; const beta: T;
-  const c_buffer: TBuffer<T>; const c_offset, c_ld: size_t;
-  const a_do_transpose, b_do_transpose, c_do_transpose, a_conjugate,
-  b_conjugate: boolean);
+  const a_buffer: cl_mem; const a_offset, a_ld: size_t; const b_buffer: cl_mem;
+  const b_offset, b_ld: size_t; const beta: T; const c_buffer: cl_mem;
+  const c_offset, c_ld: size_t; const a_do_transpose, b_do_transpose,
+  c_do_transpose, a_conjugate, b_conjugate: boolean);
 var
   name : ansistring;
   kernel : TKernel;
@@ -2457,21 +2619,23 @@ begin
 
   local := [MDIMCD, NDIMCD];
 
-   dummy:=[0, 0];
-   // Launches the kernel
-   //RunKernel(kernel, queue_, device_, global, local, event_);
-   SAFE_CALL(clEnqueueNDRangeKernel(queue_, kernel, length(global), pointer(dummy), pointer(global), pointer(local), ord(assigned(event_)), event_, event_));
+  dummy:=[0, 0];
+  // Launches the kernel
+  //RunKernel(kernel, queue_, device_, global, local, event_);
+  SAFE_CALL(clEnqueueNDRangeKernel(queue_, kernel, length(global), pointer(dummy), pointer(global), pointer(local), ord(assigned(event_)), event_, event_));
+kernel.free
 end;
 
 procedure TXgemm<T>.DoGemmStridedBatch(const layout: TLayout;
   const a_transpose, b_transpose: TTranspose; const m, n, k: size_t;
-  const alpha: T; const a_buffer: TBuffer<T>; const a_offset, a_ld,
-  a_stride: size_t; const b_buffer: TBuffer<T>; const b_offset, b_ld,
-  b_stride: size_t; const beta: T; const c_buffer: TBuffer<T>; const c_offset,
-  c_ld, c_stride: size_t; const batch_count: size_t);
+  const alpha: T; const A: cl_mem; const a_offset, a_ld, a_stride: size_t;
+  const B: cl_mem; const b_offset, b_ld, b_stride: size_t; const beta: T;
+  const C: cl_mem; const c_offset, c_ld, c_stride: size_t;
+  const batch_count: size_t);
 var
   do_gemm_direct, a_do_transpose, b_do_transpose, c_do_transpose, a_conjugate, b_conjugate:boolean;
   gemm_kernel_id, a_one, a_two, b_one, b_two, c_one, c_two:size_t;
+
 begin
   //if c_stride=0 then
   //  exit;
@@ -2499,30 +2663,29 @@ begin
   // Selects which version of GEMM to run
   if do_gemm_direct then // for small sizes (single kernel)
     BatchedGemmDirect(m, n, k, alpha,
-            a_buffer, a_offset, a_ld, a_stride,
-            b_buffer, b_offset, b_ld, b_stride, beta,
-            c_buffer, c_offset, c_ld, c_stride,
+            A, a_offset, a_ld, a_stride,
+            B, b_offset, b_ld, b_stride, beta,
+            C, c_offset, c_ld, c_stride,
             a_do_transpose, b_do_transpose, c_do_transpose, a_conjugate, b_conjugate,
             batch_count)
   else  // for larger sizes (pre/post-processing plus a very fast kernel)
     BatchedGemmIndirect(m, n, k, alpha,
-            a_buffer, a_offset, a_ld, a_stride,
-            b_buffer, b_offset, b_ld, b_stride, beta,
-            c_buffer, c_offset, c_ld, c_stride,
+            A, a_offset, a_ld, a_stride,
+            B, b_offset, b_ld, b_stride, beta,
+            C, c_offset, c_ld, c_stride,
             a_do_transpose, b_do_transpose, c_do_transpose, a_conjugate, b_conjugate,
             a_one, a_two, b_one, b_two, c_one, c_two,
             batch_count);
 end;
 
 procedure TXgemm<T>.BatchedGemmIndirect(const m, n, k: size_t; const alpha: T;
-  const a_buffer: TBuffer<T>; const a_offset, a_ld, a_stride: size_t;
-  const b_buffer: TBuffer<T>; const b_offset, b_ld, b_stride: size_t;
-  const beta: T; const c_buffer: TBuffer<T>; const c_offset, c_ld,
-  c_stride: size_t; const a_do_transpose, b_do_transpose, c_do_transpose,
-  a_conjugate, b_conjugate: boolean; const a_one, a_two, b_one, b_two, c_one,
-  c_two, batch_count: size_t);
+  const A: cl_mem; const a_offset, a_ld, a_stride: size_t; const B: cl_mem;
+  const b_offset, b_ld, b_stride: size_t; const beta: T; const C: cl_mem;
+  const c_offset, c_ld, c_stride: size_t; const a_do_transpose, b_do_transpose,
+  c_do_transpose, a_conjugate, b_conjugate: boolean; const a_one, a_two, b_one,
+  b_two, c_one, c_two, batch_count: size_t);
 var m_ceiled, n_ceiled, k_ceiled ,
-  a_one_i, a_two_i, b_one_i, b_two_i, c_one_i, c_two_i: size_t;
+  a_one_i, a_two_i, b_one_i, b_two_i, c_one_i, c_two_i, temp_size: size_t;
   a_no_temp, b_no_temp, c_no_temp : boolean;
   a_temp, b_temp, c_temp : TBuffer<T>;
   eventWaitList, emptyEventList : TArray<TEvent>;
@@ -2530,7 +2693,6 @@ var m_ceiled, n_ceiled, k_ceiled ,
   eventPointer : TEventPointer;
   local, global, dummy : TArray<size_t>;
   kernel: TKernel;
-
 begin
   // Calculates the ceiled versions of m, n, and k
   m_ceiled := Ceil(Ceil(m, MWG), VWM);
@@ -2548,9 +2710,32 @@ begin
   c_no_temp := (c_one = c_one_i ) and ( c_two = c_two_i ) and ( c_ld = c_one ) and not c_do_transpose;
 
   // Creates the temporary matrices
-  if a_no_temp then a_temp := a_buffer else a_temp := TBuffer<T>.Create(context_, batch_count * a_one_i * a_two_i);
-  if b_no_temp then b_temp := b_buffer else b_temp := TBuffer<T>.Create(context_, batch_count * b_one_i * b_two_i);
-  if c_no_temp then c_temp := c_buffer else c_temp := TBuffer<T>.Create(context_, batch_count * c_one_i * c_two_i);
+  if a_no_temp then a_temp := A else
+  begin
+    temp_size := batch_count * a_one_i * a_two_i;
+    //if bufferCache[0].getSize()<temp_size then
+    //  bufferCache[0].alloc(context_, temp_size);
+    //a_temp := bufferCache[0];
+    a_temp.alloc(context_, temp_size)
+  end;
+
+  if b_no_temp then b_temp := B else
+  begin
+    temp_size := batch_count * b_one_i * b_two_i;
+    //if bufferCache[1].getSize()<temp_size then
+    //  bufferCache[1].alloc(context_, temp_size);
+    //b_temp := bufferCache[1];
+    b_temp.alloc(context_, temp_size)
+  end;
+
+  if c_no_temp then c_temp := C else
+  begin
+    temp_size := batch_count * c_one_i * c_two_i;
+    //if bufferCache[2].getSize()<temp_size then
+    //  bufferCache[2].alloc(context_, temp_size);
+    //c_temp := bufferCache[2];
+    c_temp.alloc(context_, temp_size)
+  end;
 
   // Events of all kernels (including pre/post processing kernels)
 
@@ -2561,7 +2746,7 @@ begin
   eventWaitList := nil;
   if not a_no_temp then begin
     PadCopyTransposeMatrixStridedBatched(@eventProcessA, emptyEventList,
-                                         a_one, a_two, a_ld, a_offset, a_stride, a_buffer,
+                                         a_one, a_two, a_ld, a_offset, a_stride, A,
                                          a_one_i, a_two_i, a_one_i, 0, a_one_i * a_two_i, a_temp,
                                          true, a_do_transpose, a_conjugate, batch_count);
     insert(eventProcessA, eventWaitList, length(eventWaitList));
@@ -2570,7 +2755,7 @@ begin
   // As above, but now for matrix B
   if not b_no_temp then begin
     PadCopyTransposeMatrixStridedBatched(@eventProcessB, emptyEventList,
-                                         b_one, b_two, b_ld, b_offset, b_stride, b_buffer,
+                                         b_one, b_two, b_ld, b_offset, b_stride, B,
                                          b_one_i, b_two_i, b_one_i, 0, b_one_i * b_two_i, b_temp,
                                          true, b_do_transpose, b_conjugate, batch_count);
     insert(eventProcessB, eventWaitList, length(eventWaitList));
@@ -2579,7 +2764,7 @@ begin
   // As above, but now for matrix C
   if not c_no_temp then begin
     PadCopyTransposeMatrixStridedBatched(@eventProcessC, emptyEventList,
-                                         c_one, c_two, c_ld, c_offset, c_stride, c_buffer,
+                                         c_one, c_two, c_ld, c_offset, c_stride, C,
                                          c_one_i, c_two_i, c_one_i, 0, c_one_i * c_two_i, c_temp,
                                          true, c_do_transpose, false, batch_count);
     insert(eventProcessC, eventWaitList, length(eventWaitList));
@@ -2616,22 +2801,27 @@ begin
   // Launches the kernel
   if not c_no_temp then eventPointer := @eventKernel else eventPointer := event_;
   clEnqueueNDRangeKernel(queue_, kernel, length(global), pointer(dummy), pointer(global), pointer(local), length(eventWaitList), pointer(eventWaitList), eventPointer);
-
+  kernel.free;
   // Runs the post-processing kernel if needed
   if not c_no_temp then begin
     insert(eventKernel, eventWaitList, length(eventWaitList));
     PadCopyTransposeMatrixStridedBatched(event_, eventWaitList,
                                          c_one_i, c_two_i, c_one_i, 0, c_one_i * c_two_i, c_temp,
-                                         c_one, c_two, c_ld, c_offset, c_stride, c_buffer,
+                                         c_one, c_two, c_ld, c_offset, c_stride, C,
                                          false, c_do_transpose, false, batch_count);
   end;
-
+  //if not a_no_temp then bufferCache[0].free;
+  //if not b_no_temp then bufferCache[1].free;
+  //if not c_no_temp then bufferCache[2].free;
+  if not a_no_temp then a_Temp.free;
+  if not b_no_temp then b_Temp.free;
+  if not c_no_temp then c_Temp.free;
 end;
 
 procedure TXgemm<T>.BatchedGemmDirect(const m, n, k: size_t; const alpha: T;
-  const a_buffer: TBuffer<T>; const a_offset, a_ld, a_stride: size_t;
-  const b_buffer: TBuffer<T>; const b_offset, b_ld, b_stride: size_t;
-  const beta: T; const c_buffer: TBuffer<T>; const c_offset, c_ld,
+  const a_buffer: cl_mem; const a_offset, a_ld, a_stride: size_t;
+  const b_buffer: cl_mem; const b_offset, b_ld, b_stride: size_t;
+  const beta: T; const c_buffer: cl_mem; const c_offset, c_ld,
   c_stride: size_t; const a_do_transpose, b_do_transpose, c_do_transpose,
   a_conjugate, b_conjugate: boolean; const batch_count: size_t);
 var
@@ -2691,6 +2881,7 @@ begin
   dummy:=[0, 0, 0];
   // Launches the kernel
   SAFE_CALL(clEnqueueNDRangeKernel(queue_, kernel, length(global), pointer(dummy), pointer(global), pointer(local), ord(assigned(event_)), event_, event_));
+  kernel.free
 end;
 
 

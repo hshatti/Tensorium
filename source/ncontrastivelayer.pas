@@ -20,7 +20,7 @@ type
 
   TContrastiveLayer=class(TBaseImageLayer)
     n, truths, contrastive_neg_max, max_boxes, classes, embeddingSize, steps : SizeInt;
-    Labels, classIds : TTensor<SizeInt>;
+    Labels, classIds : TIntTensor;
     temperature, maxDelta, classNormalizer : single;
     cos_sim, exp_cos_sim, p_contrastive :TSingleTensor;
     Detection : boolean;
@@ -79,8 +79,7 @@ begin
     inputShape := [batch, inputs];;
     outputs := inputs;
     loss := [0];
-    output := TSingleTensor.Create([batch, inputs], batch);
-    delta := TSingleTensor.Create([batch, inputs], batch);
+    output := TSingleTensor.Create([batch, inputs], batch,'contrastive_out');
 //    cost := TSingles.Create(1);
     step := batch * n * h * w;
     //cos_sim := nil;
@@ -88,9 +87,9 @@ begin
     //p_constrastive := nil;
     if not detection then
         begin
-            cos_sim := TSingleTensor.Create([step * step]);
-            exp_cos_sim := TSingleTensor.Create([step * step]);
-            p_contrastive := TSingleTensor.Create([step * step])
+            cos_sim := TSingleTensor.Create([step * step],'contrastive_cos_sim');
+            exp_cos_sim := TSingleTensor.Create([step * step],'contrastive_exp_cos_sim');
+            p_contrastive := TSingleTensor.Create([step * step],'contrastive_p')
         end;
 end;
 
@@ -100,13 +99,17 @@ begin
     batch := ABatch;
     inputShape[0] := batch;
     output.resize([batch, inputs], batch);
-    delta.resize([batch, inputs], batch);
+    if FTrain then
+        delta.resize([batch, inputs], batch);
 end;
 
 procedure TContrastiveLayer.setTrain(ATrain: boolean);
 begin
   if FTrain = ATrain then exit();
-  FTrain := ATrain
+  FTrain := ATrain;
+  if FTrain then
+    delta := TSingleTensor.Create([batch, inputs], batch,'contrastive_delta')
+  else delta.free
 end;
 
 type
@@ -144,7 +147,7 @@ begin
     raise exception.Create(format(' Error: find_sim(): sim isn''t found: i = %zu, j = %zu, z = %zu ',[ i, j, z]));
 end;
 
-function P_contrastive_f(const i, l: SizeInt; const labels: PSizeInt; const z: TArray<TArray<single>>;
+function P_contrastive_f(const i, l: SizeInt; const labels: PLongInt; const z: TArray<TArray<single>>;
   const feature_size: SizeInt; const temperature: single; const contrast_p: TArray<TContrastiveParams>; const contrast_p_size:SizeInt): single;
 var
     sim, numerator, denominator: single;
@@ -169,7 +172,7 @@ begin
         result := 0.9999;
 end;
 
-function p_contrastive_f_det(const il: SizeInt; const labels: PSizeInt; const z: TArray<TArray<Single>>;
+function p_contrastive_f_det(const il: SizeInt; const labels: PLongInt; const z: TArray<TArray<Single>>;
   const feature_size: SizeInt; const temperature: Single; const contrast_p: TArray<TContrastiveParams>; const contrast_p_size:SizeInt): Single;
 var
     sim, numerator, denominator: single;
@@ -194,7 +197,7 @@ begin
         result := 0.9999;
 end;
 
-function calc_P_contrastive(const i, l: SizeInt; const labels: PSizeInt; const num_of_samples: SizeInt; const z: TArray<TArray<single>>; const feature_size: SizeInt; const temperature: single; const cos_sim, exp_cos_sim: PSingle):single;
+function calc_P_contrastive(const i, l: SizeInt; const labels: PLongInt; const num_of_samples: SizeInt; const z: TArray<TArray<single>>; const feature_size: SizeInt; const temperature: single; const cos_sim, exp_cos_sim: PSingle):single;
 var
     numerator, denominator: single;
     k: SizeInt;
@@ -209,7 +212,7 @@ begin
     result := numerator / denominator;
 end;
 
-procedure grad_contrastive_loss_positive(const i: SizeInt; const labels: PSizeInt; const num_of_samples: SizeInt; const z: TArray<TArray<single>>; const feature_size: SizeInt; const temperature: single; const cos_sim: PSingle; const p_constrastive: PSingle; delta: PSingle; const wh: SizeInt);
+procedure grad_contrastive_loss_positive(const i: SizeInt; const labels: PLongInt; const num_of_samples: SizeInt; const z: TArray<TArray<single>>; const feature_size: SizeInt; const temperature: single; const cos_sim: PSingle; const p_constrastive: PSingle; delta: PSingle; const wh: SizeInt);
 var
     j, N, m, out_i: SizeInt;
     vec_len, mult, sim, P, d: single;
@@ -236,7 +239,7 @@ begin
             end
 end;
 
-procedure grad_contrastive_loss_negative(const i: SizeInt; const labels: PSizeInt; const num_of_samples: SizeInt; const z: TArray<TArray<single>>; const feature_size: SizeInt; const temperature: single; const cos_sim: PSingle; const p_constrastive: PSingle; delta: PSingle; const wh: SizeInt);
+procedure grad_contrastive_loss_negative(const i: SizeInt; const labels: PLongInt; const num_of_samples: SizeInt; const z: TArray<TArray<single>>; const feature_size: SizeInt; const temperature: single; const cos_sim: PSingle; const p_constrastive: PSingle; delta: PSingle; const wh: SizeInt);
 var
     j, N, k, m, out_i: SizeInt;
     vec_len, mult, sim, P, d: single;
@@ -280,7 +283,7 @@ begin
     result := z
 end;
 
-procedure grad_contrastive_loss_positive_f(const i: SizeInt; const class_ids, labels: PSizeInt; const num_of_samples: SizeInt;
+procedure grad_contrastive_loss_positive_f(const i: SizeInt; const class_ids, labels: PLongInt; const num_of_samples: SizeInt;
   const z: TArray<TArray<Single>>;
   const feature_size: SizeInt; const temperature: single; delta: PSingle; const wh: SizeInt;
   const contrast_p: TArray<TContrastiveParams>; const contrast_p_size: SizeInt);
@@ -313,7 +316,7 @@ begin
             end
 end;
 
-procedure grad_contrastive_loss_negative_f(const i: SizeInt; const class_ids, labels: PSizeInt; const num_of_samples: SizeInt;
+procedure grad_contrastive_loss_negative_f(const i: SizeInt; const class_ids, labels: PLongInt; const num_of_samples: SizeInt;
   z: TArray<TArray<single>>;const feature_size: SizeInt; const temperature: single; delta: PSingle; const wh: SizeInt;
   const contrast_p: TArray<TContrastiveParams>; const contrast_p_size: SizeInt; const neg_max: SizeInt);
 var

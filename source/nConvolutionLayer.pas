@@ -3,10 +3,20 @@ unit nConvolutionLayer;
 {$mode Delphi}
 {$endif}
 {$PointerMath on}
+{$T+S}
 interface
 
 uses
   SysUtils, nTensors, nTypes, nBaseLayer, nActivation
+  {$ifdef USE_ONEDNN}
+  , dnnl, dnnl_api
+  {$endif}
+  {$ifdef USE_MKL}
+  , mkl_cblas
+  {$endif}
+  {$ifdef USE_OPENBLAS}
+  , openblas
+  {$endif}
   {$ifdef USE_CUDNN}
   , cudnn_cnn, cudnn_ops, cudnn_graph, cudnn_adv
   {$endif}
@@ -27,7 +37,6 @@ type
     n, blurStride_x, blurStride_y : SizeInt;
     stride_x, stride_y            : SizeInt;
     kernelSize, Dilation, Padding : SizeInt;
-
     antialiasing                  : SizeInt;
     shareLayer                    : TBaseConvolutionalLayer;
     inputLayer                    : TBaseConvolutionalLayer;
@@ -37,11 +46,10 @@ type
     procedure fuseBatchNorm;  override;
     function getWorkspaceSize: SizeInt; override;
     function getWorkspaceShape: TArray<SizeInt>; override;
+    function getOpCount:UInt64; override;
     property Stride   : SizeInt read stride_x;
     property filters  : SizeInt read n write n;
   end;
-
-  { TConvolutionLayer }
 
   { TConvolutionalLayer }
 
@@ -56,7 +64,21 @@ type
     assistedExcitation            : SizeInt;
     //steps,
     ActivationInput               : TSingleTensor;
-
+    {$ifdef USE_ONEDNN}
+    srcDesc, inputDesc
+      , dstDesc
+      , weiDesc
+      , biaDesc                   : TDNNLTensorDesc;
+    src,wei,dst,bia               : TDNNLTensor;
+    isWeightReordered             : boolean;
+    convDesc                      : TDNNLPrimitiveDesc;
+    srcReord,
+      weiReord,
+      dstReord                    : TDNNLPrimitive;
+    convPrim                      : TDNNLPrimitive;
+    postOps                        : TDNNLPostOps;
+    PrimAttr                      : TDNNLPrimitiveAttr;
+    {$endif}
     constructor Create(const ABatch, Aheight, Awidth, Achannels,
       Afilters: SizeInt; AGroups, AKernelSize:SizeInt;
       AStride_x:SizeInt=1; AStride_y:SizeInt=1; const ADilation: SizeInt=1; APadding: SizeInt=-1;
@@ -65,8 +87,15 @@ type
       const AIndex: SizeInt=0; const AAntialiasing: SizeInt=0; const AShare_layer: TConvolutionalLayer=nil;
       const AAssistedExcitation: SizeInt=0; const ADeform: boolean=false;
       const ATrain: boolean=false);
+    {$ifdef USE_ONEDNN}
+    procedure prepareDNN;
+    procedure setBatchDNN;
+    procedure forwardDNN(var state: TNNetState);
+    procedure backwardDNN(var state: TNNetState);
+    {$endif}
     procedure setBatch( ABatch: SizeInt); override;
     procedure assistedForward(var state: TNNetState);
+    procedure quantize(const qType:TPrecisionType); override;
     procedure forward(var state: TNNetState); override;
     procedure backward(var state: TNNetState); override;
     procedure update(const args: TUpdateArgs); override;
@@ -122,7 +151,8 @@ begin
       if not assigned(shareLayer) then
           freeBatchNorm;
       isBatchNormalized := false;
-    end
+    end;
+  opCount := getOpCount;
 end;
 
 function TBaseConvolutionalLayer.getWorkspaceSize: SizeInt;
@@ -132,7 +162,19 @@ end;
 
 function TBaseConvolutionalLayer.getWorkspaceShape: TArray<SizeInt>;
 begin
-  result := [batch, (c div groups), outH , outW , kernelSize * kernelSize]
+  result := [batch, (c div groups), kernelSize*kernelSize, outH , outW]
+end;
+
+function TBaseConvolutionalLayer.getOpCount: UInt64;
+begin
+  //*********** estimate number of operations *******************
+  result:=                                     // operation count for forward
+     ord(kernelSize>1)*Batch*(c div groups)*sqr(kernelSize)*outW*outH           // im2col
+     + batch*filters*outW*outH*(2*(c div groups)*sqr(kernelSize)-1)             // gemm
+     + ord(isBatchNormalized)*3*batch*outputs + batch*outputs      // bn + bias
+     + batch*outputs*2                                               // activation
+     ;
+  //**************************************************************
 end;
 
 { TConvolutionalLayer }
@@ -147,9 +189,7 @@ constructor TConvolutionalLayer.Create(const ABatch, Aheight, Awidth, Achannels,
 
 var
   blur_nweights, i, blur_size, blur_pad: SizeInt;
-
   _scale : single;
-
 begin
   inherited Create;
   layerType := ltCONVOLUTIONAL;
@@ -192,6 +232,7 @@ begin
   isBatchNormalized := ABatch_normalize;
   learningRateScale := 1;
   //nweights := (c div groups) * filters * kernelSize * kernelSize;
+
   if assigned(shareLayer) then
       begin
           if (kernelSize <> shareLayer.kernelSize) or (weights.Size() <> shareLayer.weights.Size()) or (c <> shareLayer.c) or (n <> shareLayer.n) then
@@ -203,14 +244,14 @@ begin
       end
   else
       begin
-          weights := TSingleTensor.Create([c div groups, filters, kernelSize, kernelSize]);
-          biases := TSingleTensor.Create([filters]);
+          weights := TSingleTensor.Create([filters, c div groups, kernelSize, kernelSize],'conv2d_weighs');
+          biases := TSingleTensor.Create([filters],'conv2d_biases');
           if train then
               begin
-                  weight_updates := TSingleTensor.Create([c div groups, filters, kernelSize, kernelSize]);
-                  bias_updates := TSingleTensor.Create([filters]);
-                  weights_ema := TSingleTensor.Create([c div groups, filters, kernelSize, kernelSize]);
-                  biases_ema := TSingleTensor.Create([filters])
+                  weight_updates := TSingleTensor.Create([filters, c div groups, kernelSize, kernelSize],'conv2d_weights_update');
+                  bias_updates := TSingleTensor.Create([filters],'conv2d_bias_update');
+                  weights_ema := TSingleTensor.Create([filters, c div groups, kernelSize, kernelSize],'conv2d_weights_ema');
+                  biases_ema := TSingleTensor.Create([filters],'conv2d_biases_ema')
               end
       end;
   _scale := sqrt(2 / (kernelSize * kernelSize * c / groups));
@@ -225,10 +266,12 @@ begin
   inputs := w * h * c;
   inputShape := [batch, c, h, w];
   ActivationType := AActivation;
-  output := TSingleTensor.Create([batch , filters, outH, outW], batch);
+  output := TSingleTensor.Create([batch , filters, outH, outW], batch,'conv2d_output');
+
+  opCount := getOpCount;
 
   if FTrain then
-      delta := TSingleTensor.Create([batch , filters, outH, outW], batch);
+      delta := TSingleTensor.Create([batch , filters, outH, outW], batch,'conv2d_delta');
 
   if isBatchNormalized then
       begin
@@ -245,36 +288,36 @@ begin
               end
           else
               begin
-                  scales := TSingleTensor.Create([filters]);
+                  scales := TSingleTensor.Create([filters],'conv2d_scales');
                   scales.fill(1.0);
                   if train then
                       begin
-                          scales_ema := TSingleTensor.Create([filters]);
-                          scale_updates := TSingleTensor.Create([filters]);
-                          mean := TSingleTensor.Create([filters]);
-                          variance := TSingleTensor.Create([filters]);
-                          mean_delta := TSingleTensor.Create([filters]);
-                          variance_delta := TSingleTensor.Create([filters])
+                          scales_ema := TSingleTensor.Create([filters],'conv2d_scales_ema');
+                          scale_updates := TSingleTensor.Create([filters],'conv2d_scale_updates');
+                          mean := TSingleTensor.Create([filters],'conv2d_mean');
+                          variance := TSingleTensor.Create([filters],'conv2d_var');
+                          mean_delta := TSingleTensor.Create([filters],'conv2d_mean_delta');
+                          variance_delta := TSingleTensor.Create([filters],'conv2d_var_delta')
                       end;
-                  rolling_mean := TSingleTensor.Create([filters]);
-                  rolling_variance := TSingleTensor.Create([filters])
+                  rolling_mean := TSingleTensor.Create([filters],'conv2d_rolling_mean');
+                  rolling_variance := TSingleTensor.Create([filters],'conv2d_rolling_var')
               end;
           if train then
               begin
-                  x := TSingleTensor.Create([batch, filters, outH, outW], batch);
-                  x_norm := TSingleTensor.Create([batch, filters, outH, outW], batch)
+                  x := TSingleTensor.Create([batch, filters, outH, outW], batch,'conv2d_x');
+                  x_norm := TSingleTensor.Create([batch, filters, outH, outW], batch,'conv2d_x_norm')
               end
       end;
-  if ActivationType in [acSWISH, acMISH, acHARD_MISH] then
-      ActivationInput := TSingleTensor.Create([batch, filters, outH, outW], batch);
+  if FTrain and (ActivationType in [acSWISH, acMISH, acHARD_MISH]) then
+      ActivationInput := TSingleTensor.Create([batch, filters, outH, outW], batch,'conv2d_act_output');
   if adam then
       begin
-          m       := TSingleTensor.Create([(c div groups), filters, kernelSize, kernelSize]);
-          v       := TSingleTensor.Create([(c div groups), filters, kernelSize, kernelSize]);
-          bias_m  := TSingleTensor.Create([filters]);
-          scale_m := TSingleTensor.Create([filters]);
-          bias_v  := TSingleTensor.Create([filters]);
-          scale_v := TSingleTensor.Create([filters])
+          m       := TSingleTensor.Create([filters, (c div groups), kernelSize, kernelSize],'conv2d_m');
+          v       := TSingleTensor.Create([filters, (c div groups), kernelSize, kernelSize],'conv2d_v');
+          bias_m  := TSingleTensor.Create([filters],'conv2d_bias_m');
+          scale_m := TSingleTensor.Create([filters],'conv2d_scale_m');
+          bias_v  := TSingleTensor.Create([filters],'conv2d_bias_v');
+          scale_v := TSingleTensor.Create([filters],'conv2d_scale_v')
       end;
 
   if speedOverSize then
@@ -316,9 +359,104 @@ begin
               end;
           end;
           inputLayer.biases.fill(0);
-      end
+      end;
+{$ifdef USE_ONEDNN}
+   prepareDNN;
+{$endif}
+end;
+
+{$ifdef USE_ONEDNN}
+procedure TConvolutionalLayer.prepareDNN;
+begin
+  if postOps.count()=0 then begin
+    postOps.append(dnnl_eltwise, [ActivationType.toDNNLAlgKind(), 1, 0]);
+    primattr.PostOps := postOps;
+  end;
+  srcDesc  := TDNNLTensorDesc.create(inputShape, dnnl_f32, dnnl_format_tag_any);
+  dstDesc  := TDNNLTensorDesc.create(output.Shape, dnnl_f32, dnnl_format_tag_any);
+  weiDesc  := TDNNLTensorDesc.create(weights.Shape, dnnl_f32, dnnl_format_tag_any);
+  biaDesc  := TDNNLTensorDesc.create(biases.Shape, dnnl_f32, dnnl_format_tag_any);
+  convDesc := dnnlEngine.CreateConvolutional(
+                 [srcDesc, weiDesc, dstDesc, biaDesc],
+                 dnnl_convolution_auto,
+                 [stride_y, stride_x],
+                 [Padding, padding],
+                 nil,
+                 nil{[dilation, dilation]},
+                 false,
+                 nil,
+                 [PrimAttr]);
+  inputDesc := TDNNLTensorDesc.create(inputShape);
+  if not convDesc.srcDesc().isEqual(inputDesc) then begin
+    src      := dnnlEngine.newTensor(convDesc.srcDesc(), DNNL_MEMORY_ALLOCATE);
+    srcReord := TDNNLPrimitive.create(
+             dnnlEngine.CreateReOrder(
+                 inputDesc, convDesc.srcDesc())
+               , dnnlStream
+             );
+  end;
+  if not convDesc.dstDesc().isEqual(output) then begin
+    dst      := dnnlEngine.newTensor(convDesc.dstDesc(), DNNL_MEMORY_ALLOCATE);
+    dstReord := TDNNLPrimitive.create(
+               dnnlEngine.CreateReOrder(convDesc.dstDesc(), output)
+               , dnnlStream
+             );
+  end;
+  if not convDesc.weightsDesc().isEqual(weights) then begin
+    wei       := dnnlEngine.newTensor(convDesc.weightsDesc(), DNNL_MEMORY_ALLOCATE);
+    weiReord := TDNNLPrimitive.create(
+               dnnlEngine.CreateReOrder(weights, convDesc.weightsDesc())
+               , dnnlStream
+             );
+  end;
+
+  convPrim := TDNNLPrimitive.Create(convDesc, dnnlStream);
 
 end;
+
+procedure TConvolutionalLayer.setBatchDNN;
+begin
+  prepareDNN
+end;
+
+procedure TConvolutionalLayer.forwardDNN(var state: TNNetState);
+var
+  src1, dst1, wei1:TDNNLTensor;
+begin
+  src1 := state.input^;
+  if srcReord.isCreated() then begin
+
+    src1 := src;
+    srcReord.forward(state.input^, src1);
+  end;
+
+  if isWeightReordered then
+    wei1 := wei
+  else
+    wei1 := weights;
+  if not isWeightReordered and weiReord.isCreated() then begin
+    wei1 := wei;
+    weiReord.forward(weights, wei1);
+    isWeightReordered:=true;
+  end;
+
+  dst1:= output;
+  if dstReord.isCreated() then begin
+    dst1 := dst;
+  end;
+  convPrim.Forward(src1, dst1, wei1, biases);
+
+  if dstReord.isCreated() then begin
+    dst1 := dst;
+    dstReord.forward(dst1, output);
+  end;
+end;
+
+procedure TConvolutionalLayer.backwardDNN(var state: TNNetState);
+begin
+
+end;
+{$endif}
 
 procedure TConvolutionalLayer.setBatch(ABatch: SizeInt);
 //var total_batch : SizeInt;
@@ -331,7 +469,7 @@ begin
   output.reSize([batch , filters, outH, outW], batch);
   if train then
       delta.reSize([batch , filters, outH, outW], batch);
-  if ActivationType in [acSWISH, acMISH, acHARD_MISH] then
+  if train and (ActivationType in [acSWISH, acMISH, acHARD_MISH]) then
       ActivationInput.resize([batch, filters, outH, outW], batch);
   if train then
       begin
@@ -343,6 +481,8 @@ begin
 
   if antialiasing<>0 then
     inputLayer.setBatch(batch);
+
+  OpCount := getOpCount;
 end;
 
 
@@ -403,6 +543,16 @@ begin
                 end
 end;
 
+procedure TConvolutionalLayer.quantize(const qType: TPrecisionType);
+var qScale: Single;
+    qZero : smallInt;
+    ww:TSingleTensor;
+begin
+  quantizationType := qType;
+  weights.quantize0(quantizationType);
+  output.quantize0(ptINT32);
+end;
+
 procedure TConvolutionalLayer.setTrain(ATrain: boolean);
 //var
     //total_batch:SizeInt;
@@ -410,24 +560,24 @@ begin
   if ATrain = FTrain  then exit;
   FTrain := ATrain;
   if ATrain then begin
-      delta := TSingleTensor.Create([batch , filters, outH, outW], batch);
+      delta := TSingleTensor.Create([batch , filters, outH, outW], batch,'conv2d_delta');
       if not assigned(shareLayer) then begin
-          weight_updates := TSingleTensor.Create([c div groups, filters, kernelSize, kernelSize]);
-          bias_updates := TSingleTensor.Create([filters]);
-          weights_ema := TSingleTensor.Create([c div groups, filters, kernelSize, kernelSize]);
-          biases_ema := TSingleTensor.Create([filters]);
+          weight_updates := TSingleTensor.Create([filters, (c div groups), kernelSize, kernelSize],'conv2d_weighs_update');
+          bias_updates := TSingleTensor.Create([filters],'conv2d_bias_update');
+          weights_ema := TSingleTensor.Create([filters, (c div groups), kernelSize, kernelSize],'conv2d_weights_ema');
+          biases_ema := TSingleTensor.Create([filters],'conv2d_bias_ema');
           if isBatchNormalized then begin
-              scales_ema := TSingleTensor.Create([filters]);
-              scale_updates := TSingleTensor.Create([filters]);
-              mean := TSingleTensor.Create([filters]);
-              variance := TSingleTensor.Create([filters]);
-              mean_delta := TSingleTensor.Create([filters]);
-              variance_delta := TSingleTensor.Create([filters])
+              scales_ema := TSingleTensor.Create([filters],'conv2d_scales_ema');
+              scale_updates := TSingleTensor.Create([filters],'conv2d_scale_update');
+              mean := TSingleTensor.Create([filters],'conv2d_mean');
+              variance := TSingleTensor.Create([filters],'conv2d_var');
+              mean_delta := TSingleTensor.Create([filters],'conv2d_mean_delta');
+              variance_delta := TSingleTensor.Create([filters],'conv2d_var_delta')
           end;
       end;
       if isBatchNormalized then begin
-          x := TSingleTensor.Create([batch, filters, outH, outW], batch);
-          x_norm := TSingleTensor.Create([batch, filters, outH, outW], batch)
+          x := TSingleTensor.Create([batch, filters, outH, outW], batch,'conv2d_x');
+          x_norm := TSingleTensor.Create([batch, filters, outH, outW], batch,'conv2d_x_norm')
       end;
 
   end else begin
@@ -456,82 +606,113 @@ end;
 
 procedure TConvolutionalLayer.forward(var state: TNNetState);
 var
-    s: TNNetState;
+    s: TNNetState;  // antialias
     workspacePtr: PSingleTensor;
+    qScale: single;
+    qZero:SmallInt;
+    kSize, outImgSize, k, imcolSize, StrideA, StrideB, strideC, b : SizeInt;
+    _B:Pointer;
+    oa, ob: Int8;
+    oc : int32;
+    qi : TInt16Tensor;
     //q:string;
+label
+    done;
 begin
     {$ifdef USE_TELEMETRY}
     if benchmark then metrics.forward.start(layerType);
     {$endif}
 
     ////output.fill(0);
-
-
-    //outH := convolutional_out_height(l);
-    //outW := convolutional_out_width(l);
     // todo TConvolutionalLayer : implement forward and backward groups and groupId for multi GPU
-    //k := kernelSize * kernelSize * c div groups;
-    //outImgSize := outH * outW;
-    //imcolSize  := outImgSize * kernelSize * kernelSize * c ;
-    //m := filters div groups;
-    //nweights := weights.size();
-    //u := 0;
-    //inc(u);
-    //for i := 0 to batch -1 do
-    //    for j := 0 to groups -1 do
-    //    begin
-    //        _A := weights.Data;
-    //        im := state.input.data +(i * groups + j)*(c div groups) * h * w;
-    //        _B := pointer(state.workspace.data + (i * groups + j)*(c div groups)*imcolSize);
 
-            //im := state.input.data + i * c * h * w + j * c * h * w div groups;
-            //_B := pointer(state.workspace.data + i*c*imcolSize + j*c*imcolSize div groups);
+    // todo [TConvolutionalLayer] implement multi GPU groups
+    {$ifdef USE_ONEDNN}
+    forwardDNN(state);
+    goto done;
+    {$endif}
 
-    //        _C := output.data + i * outImgSize * m;
-    //        if (kernelSize = 1) and (stride = 1) and (dilation = 1) then
-    //            _B := im
-    //        else
-    //            im2col_cpu_ext(pointer(im), c div groups, h, w, kernelSize, kernelSize, Padding * dilation, Padding * dilation, stride_y, stride_x, dilation, dilation, pointer(_B));
-    //        TSingleTensor.gemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, m, outImgSize, k, 1, _A, k, _B, outImgSize, 1, _C, outImgSize);
-    //    end;
-
-    // todo [TConvolutionLayer] implement multi GPU groups
-
-    //if not state.input.wasGPU() then
-    //  state.input.pushToDevice;
-    //if train or not weights.wasGPU() then
-    //    weights.pushToDevice;
     if speedOverSize then
       workspacePtr := @workspace
     else
       workspacePtr := @state.workspace;
-    state.input.Conv2D(weights, output, Padding, Padding, stride_x, stride_y, Dilation, Dilation, workspacePtr^.Data);
-//output.print(psColor8,8);
-//readln(q);
-//if q='q' then halt(0);
-    //output.SaveToImage( 'tmp'+intToStr(index)+'.bmp');
-    //shellApi.ShellExecute(0, 'open', 'tmp'+intToStr(index)+'.bmp', '', '', 0);
-    //readln;
-    //state.input.conv2d(weights, output, Padding, padding, stride_x, stride_y, Dilation, Dilation) ;
 
+    if quantizationType = ptNone then begin
+        state.input.Conv2D(weights, output, Padding, Padding, stride_x, stride_y, Dilation, Dilation, workspacePtr^.Data);
+    end
+    else begin
+        //state.input.Conv2D(weights, output, Padding, Padding, stride_x, stride_y, Dilation, Dilation, workspacePtr^.Data);
+        qi.reShape(state.input.shape);
+        state.input.Quantize0(quantizationType);
+        qi.Data := pointer(state.Input.quant.Data);
 
-    //if not biases.wasGPU then
-    //    biases.pushToDevice;
+        kSize := kernelSize*kernelSize;
+        outImgSize := output.area();
+        //filters := weights.c();
+        k := c * kSize;
+        imColSize := c * kSize * outImgSize;
+        strideC := outImgSize * filters;
+        if (kSize <> 1) or (Stride_y * Stride_x <> 1) or (Dilation * Dilation <> 1) then begin
+          strideA := state.input.volume();
+          strideB := imColSize;
+          _B := workspacePtr.Data;
+
+          //state.input.im2col(kernelSize, kernelSize, Padding, Padding, stride_x, stride_y, Dilation, Dilation,  workspacePtr^);
+
+          //for b := 0 to batch - 1 do
+          //  begin
+          //    aOffset := b * strideA;
+          //    bOffset := b * strideB;
+              qi.im2col(kernelSize, kernelSize, Padding, Padding, stride_x, stride_y, Dilation, Dilation, PInt16Tensor(workspacePtr)^ );
+              //ocl.gemm(false, false, filters, outImgSize, k, 1, weights.devData, 0, k, state.workspace.devData, bOffset, outImgSize, 0, _C, b * strideC, outImgSize);
+              //batchesWeights[b] := weights.devData;
+              //workSpaces[b] := state.workspace.devData + bOffset;
+              //batchesOut[b] := _C + b * outImgSize * filters;
+            //end
+          //workspacePtr.Quantize(PSmallInt(state.qWorkspace), qScale);
+        end else begin
+          strideB := state.input.volume();
+          _B := qi.Data;
+        end;
+        oc :=0;
+        {$ifdef USE_MKL}
+        {$ifdef USE_TELEMETRY}
+        tensorMetrics.start(opGEMM);
+        {$endif}
+        for b := 0 to batch-1 do
+          // on Row Major layot A must be PByte B must be PInt8 otherwise A is PInt8 and B is PByte
+            // https://www.intel.com/content/www/us/en/docs/onemkl/developer-reference-c/2023-0/cblas-gemm-002.html
+          cblas_gemm_s16s16s32(CblasRowMajor, CblasNoTrans, CblasNoTrans, CblasFixOffset
+                           , filters, outImgSize, k
+                           , 1.0
+                           , PSmallInt(weights.quant.data), k, 0
+                           , PSmallInt(_B)+b*strideB , outImgSize, 0
+                           , 0, PInt32(Output.quant.data)+b*strideC, outImgSize, @oc);
+
+        {$ifdef USE_TELEMETRY}
+        tensorMetrics.finish(opGEMM);
+        {$endif}
+        {$endif}
+        output.quant.qScale:=0;
+        output.quant.qType:=ptInt32;
+        output.DeQuantize(state.input.quant.qScale*weights.quant.qScale);
+        //TSingleTensor.gemmStridedBatched( CblasRowMajor, CblasNoTrans, CblasNoTrans
+        //                 , filters, outImgSize, k, 1
+        //                 , weights.Data, k         , 0
+        //                 , _B             , outImgSize, strideB
+        //                 , 0, output.Data, outImgSize, strideC, batch);
+    end;
 
     if isBatchNormalized then
       batchNorm(state)
     else
-      output.forwardBias(biases);
-
-    //output.pullFromDevice;
-    //if output.wasGPU then output.pullFromDevice;
-    //if biases.wasGPU then biases.pullFromDevice;
-
+      output.forwardBias(biases)
+      ;
     case ActivationType of
-       acSWISH :
-          activate_array_swish(output, outputs * batch, activationInput, output);
-       acMISH :
-          activate_array_mish(output, outputs * batch, activationInput, output);
+       //acSWISH :
+       //   activate_array_swish(output, outputs * batch, activationInput, output);
+       //acMISH :
+       //   activate_array_mish(output, outputs * batch, activationInput, output);
        acHARD_MISH :
           activate_array_hard_mish(output, outputs * batch, ActivationInput, output);
        acNORM_CHAN :
@@ -540,10 +721,9 @@ begin
           activate_array_normalize_channels_softmax(output, outputs * batch, batch, outC, outW * outH, output, activationType = acNORM_CHAN_SOFTMAX_MAXVAL);
        else begin
            //output.print(true, 3);
-          activate()
+          activate(0, @activationInput)
        end;
     end;
-
 
     if (assistedExcitation<>0) and state.isTraining then
         assistedForward(state);
@@ -562,6 +742,8 @@ begin
     //state.input.printStat;
     //output.printStat;
     //readln;
+
+done:
     {$ifdef USE_TELEMETRY}
     if benchmark then metrics.forward.finish(layerType);
     {$endif}
@@ -585,10 +767,10 @@ begin
   colSize := getWorkspaceSize div batch;
 
   case activationType of
-    acSWISH :
-      gradient_array_swish(output, outputs * batch, activationInput, delta) ;
-    acMISH  :
-      gradient_array_mish(outputs * batch, activationInput, delta) ;
+    //acSWISH :
+    //  gradient_array_swish(output, outputs * batch, activationInput, delta) ;
+    //acMISH  :
+    //  gradient_array_mish(outputs * batch, activationInput, delta) ;
     acHARD_MISH :
       gradient_array_hard_mish(outputs * batch, activationInput, delta) ;
     acNORM_CHAN_SOFTMAX, acNORM_CHAN_SOFTMAX_MAXVAL :
@@ -596,7 +778,7 @@ begin
     acNORM_CHAN :
       gradient_array_normalize_channels(output, outputs * batch, batch, outC, outW * outW, delta) ;
     else
-      Derivative();
+      Derivative(0, @activationInput);
   end;
   if isBatchNormalized then
       batchNormBack(state)
@@ -637,7 +819,7 @@ begin
   else
   begin
     workspacePtr := @state.workspace;
-    state.input.im2Col(kernelSize, kernelSize, padding * dilation, padding * dilation, stride_y, stride_x, dilation, dilation, workspacePtr^, 1);
+    state.input.im2Col(kernelSize, kernelSize, padding * dilation, padding * dilation, stride_y, stride_x, dilation, dilation, workspacePtr^);
   end;
   {$ifdef USE_TELEMETRY}
   if benchmark then tensorMetrics.start(opGemm);
@@ -715,12 +897,19 @@ var
     b, aOffset, bOffset , outImgSize, kSize, k, imColSize,
       strideA, strideB, strideC :SizeInt;
     _A, _B, _C : TCLMemory;
+{$ifdef DEBUG_GPU}
+    _DA, _DB, _DC : PSingle;
+{$endif}
     s : TNNetState;
-    workspacePtr: PSingleTensor;
+    workspacePtr : PSingleTensor;
 begin
   {$ifdef USE_TELEMETRY}
   if benchmark then metrics.forward.start(layerType);
   {$endif}
+{$ifdef DEBUG_GPU}
+writeln(sLineBreak, '[', index, ']',LayerTypeStr);
+writeln('weights Diff: ');
+{$endif}
 
   if not state.input.wasGPU() then state.input.pushToDevice;
   if not weights.wasGPU() then weights.pushToDevice;
@@ -732,8 +921,8 @@ begin
   //filters := weights.c();
   k := c * kSize;
   imColSize := c * kSize * outImgSize;
-  _C := output.devData;
   strideC := outImgSize * filters;
+
   if (kSize <> 1) or (Stride_y * Stride_x <> 1) or (Dilation * Dilation <> 1) then begin
     strideA := state.input.volume();
     strideB := imColSize;
@@ -742,11 +931,14 @@ begin
     else
       workspacePtr := @state.workspace;
     _B := workspacePtr.devData;
+    {$ifdef DEBUG_GPU}
+    _DB := workspacePtr.Data;
+    {$endif}
     for b := 0 to batch - 1 do
       begin
         aOffset := b * strideA;
         bOffset := b * strideB;
-        ocl.im2col(c, h, w, kernelSize, kernelSize, Padding, Padding, stride_y, stride_x, Dilation, Dilation, state.input.devData, aOffset, _B, bOffset);
+        ocl.im2col(c, h, w, kernelSize, kernelSize, Padding, Padding, stride_y, stride_x, Dilation, Dilation, state.input.devData, aOffset, pointer(_B), bOffset);
         //ocl.gemm(false, false, filters, outImgSize, k, 1, weights.devData, 0, k, state.workspace.devData, bOffset, outImgSize, 0, _C, b * strideC, outImgSize);
         //batchesWeights[b] := weights.devData;
         //workSpaces[b] := state.workspace.devData + bOffset;
@@ -755,8 +947,21 @@ begin
   end else begin
     strideB := state.input.volume();
     _B := state.input.devData;
-
+    {$ifdef DEBUG_GPU}
+    _DB := state.input.Data
+    {$endif}
   end;
+
+{$ifdef DEBUG_GPU}
+if (kSize <> 1) or (Stride_y * Stride_x <> 1) or (Dilation * Dilation <> 1) then begin
+if not speedOverSize then
+  workspacePtr^.reShape(getWorkspaceShape(), batch);
+state.input.im2Col(kernelSize, kernelSize, padding, padding, stride_x, stride_y, dilation, dilation, workspacePtr^);
+workspacePtr^.printGpuSumSqrDiff();
+//workspacePtr^.printGpuDiff(0, 0, sEPSILON);
+end else
+state.input.printGpuSumSqrDiff();
+{$endif}
   //for b := 0 to batch - 1 do
   //  begin
   //    bOffset := b * strideB;
@@ -766,22 +971,32 @@ begin
   //    //batchesOut[b] := _C + b * outImgSize * filters;
   //  end;
 
+//output.im2Col(kernelSize, kernelSize, Padding, Padding, stride_x, stride_y, Dilation, Dilation, state.workspace);
+//state.workspace.printGpuSumSqrDiff();
+
   //ocl.WriteBuffer(workSpacesDev,     batch*sizeOf(pointer), Pointer(workSpaces));
   //ocl.WriteBuffer(batchesOutDev,     batch*sizeOf(pointer), Pointer(batchesOut));
   //ocl.WriteBuffer(batchesWeightsDev, batch*sizeOf(pointer), Pointer(batchesWeights));
   //ocl.gemmBatched(false, false, filters, outImgSize, k, 1, ppsingle(batchesWeightsDev), 0, k, ppsingle(workspacesDev), 0, outImgSize, 0, ppsingle(batchesOutDev), 0, outImgSize, batch);
-  ocl.gemmStridedBatched(false, false, filters, outImgSize, k, 1, weights.devData, 0,k, 0, _B, 0, outImgSize, strideB, 0, _C, 0, outImgSize, strideC, batch
-  {$ifdef GPU_TEST}, output.devTest{$endif}
-  );
+  ocl.gemmStridedBatched(false, false, filters, outImgSize, k, 1, weights.devData, 0,k, 0, pointer(_B), 0, outImgSize, strideB, 0, pointer(output.devData), 0, outImgSize, strideC, batch);
+//TSingleTensor.gemmStridedBatched(CblasRowMajor, CblasNoTrans, CblasNoTrans, filters, outImgSize, k, 1, weights.Data, k, 0, state.workspace.Data, outImgSize, strideB, 0, output.Data, outImgSize, strideC, batch);
 
+{$ifdef DEBUG_GPU}
 //state.input.Conv2D(weights, output, Padding, Padding, stride_x, stride_y, Dilation, Dilation);
-//output.printGpuSumSqrDiff();
+weights.printGpuSumSqrDiff();
+TSingleTensor.gemmStridedBatched(CblasRowMajor, CblasNoTrans, CblasNoTrans, filters, outImgSize, k, 1, weights.Data, k, 0, pointer(_DB), outImgSize, strideB, 0, output.Data, outImgSize, strideC, batch);
+output.printGpuSumSqrDiff();
+{$endif}
 
   if isBatchNormalized then
     batchNormGPU(state)
-  else begin
+  else if assigned(biases.devData) then begin
     ocl.forwardBias(output.Size(), output.devData, 0, biases.size(), biases.devData,1, Batch);
-//output.forwardBias(biases);
+{$ifdef DEBUG_GPU}
+if assigned(biases.Data) then
+  output.forwardBias(biases);
+output.printGpuSumSqrDiff();
+{$endif}
   end;
 
   {$ifdef USE_TELEMETRY}
@@ -808,7 +1023,11 @@ begin
   ocl.finish();
   if benchmark then metrics.act.finish(ActivationType);
   {$endif}
-//Activate();
+
+{$ifdef DEBUG_GPU}
+Activate();
+output.printGpuSumSqrDiff();
+{$endif}
 
   if (assistedExcitation<>0) and state.isTraining then
       assistedForward(state);
@@ -820,9 +1039,6 @@ begin
       inputLayer.forwardGPU(s);
       ocl.copy(output.Size(), inputLayer.output.devData, 0, 1, output.devData, 0, 1);
   end;
-
-//write(LayerTypeStr,' ');
-//output.printGpuSumSqrDiff();
   {$ifdef USE_TELEMETRY}
   ocl.finish();
   if benchmark then metrics.forward.finish(layerType);
@@ -872,18 +1088,20 @@ begin
 //bias_updates.addSums(delta);
   end;
 
-  if speedOverSize then
-    workspacePtr := @workspace
+  if speedOverSize then begin
+    workspacePtr := @workspace;
+    workspacePtr.setOCL;
+  end
   else
   begin
     workspacePtr := @state.workspace;
+    workspacePtr.setOCL;
     for b:=0 to batch-1 do begin
       ocl.im2col(c, h, w, kernelSize, kernelSize, Padding, Padding,
         stride_y, stride_x, dilation, dilation, state.input.devData , b*_vol, workspacePtr.devData, b*colSize);
     end;
 //state.input.im2Col(kernelSize, kernelSize, padding * dilation, padding * dilation, stride_y, stride_x, dilation, dilation, state.workspace, 1);
   end;
-  workspacePtr.setOCL;
 
   if not weight_updates.wasGPU() then weight_updates.pushToDevice;
 
@@ -1018,12 +1236,16 @@ begin
   if benchmark then metrics.update.finish(layerType);
   {$endif}
 end;
+
 {$elseif defined(USE_CUDART)}
 procedure TConvolutionalLayer.forwardGPU(var state: TNNetState);
 var
     b, aOffset, bOffset , outImgSize, kSize, k, imColSize,
       strideA, strideB, strideC :SizeInt;
     _A, _B, _C : PSingle;
+{$ifdef DEBUG_GPU}
+    _DA, _DB, _DC : PSingle;
+{$endif}
     s : TNNetState;
     workspacePtr : PSingleTensor;
 begin
@@ -1041,7 +1263,6 @@ begin
   //filters := weights.c();
   k := c * kSize;
   imColSize := c * kSize * outImgSize;
-  _C := output.devData;
   strideC := outImgSize * filters;
 
   if (kSize <> 1) or (Stride_y * Stride_x <> 1) or (Dilation * Dilation <> 1) then begin
@@ -1052,6 +1273,9 @@ begin
     else
       workspacePtr := @state.workspace;
     _B := workspacePtr.devData;
+    {$ifdef DEBUG_GPU}
+    _DB := workspacePtr.Data;
+    {$endif}
     for b := 0 to batch - 1 do
       begin
         aOffset := b * strideA;
@@ -1065,9 +1289,21 @@ begin
   end else begin
     strideB := state.input.volume();
     _B := state.input.devData;
-
+    {$ifdef DEBUG_GPU}
+    _DB := state.input.Data
+    {$endif}
   end;
 
+{$ifdef DEBUG_GPU}
+if (kSize <> 1) or (Stride_y * Stride_x <> 1) or (Dilation * Dilation <> 1) then begin
+if not speedOverSize then
+  workspacePtr^.reShape(getWorkspaceShape(), batch);
+state.input.im2Col(kernelSize, kernelSize, padding, padding, stride_x, stride_y, dilation, dilation, workspacePtr^);
+workspacePtr^.printGpuSumSqrDiff();
+//workspacePtr^.printGpuDiff(0, 0, sEPSILON);
+end else
+state.input.printGpuSumSqrDiff();
+{$endif}
   //for b := 0 to batch - 1 do
   //  begin
   //    bOffset := b * strideB;
@@ -1084,20 +1320,23 @@ begin
   //cuda.WriteBuffer(batchesOutDev,     batch*sizeOf(pointer), Pointer(batchesOut));
   //cuda.WriteBuffer(batchesWeightsDev, batch*sizeOf(pointer), Pointer(batchesWeights));
   //cuda.gemmBatched(false, false, filters, outImgSize, k, 1, ppsingle(batchesWeightsDev), 0, k, ppsingle(workspacesDev), 0, outImgSize, 0, ppsingle(batchesOutDev), 0, outImgSize, batch);
-  cuda.gemmStridedBatched(false, false, filters, outImgSize, k, 1, weights.devData, 0,k, 0, pointer(_B), 0, outImgSize, strideB, 0, pointer(_C), 0, outImgSize, strideC, batch);
+  cuda.gemmStridedBatched(false, false, filters, outImgSize, k, 1, weights.devData, 0,k, 0, pointer(_B), 0, outImgSize, strideB, 0, pointer(output.devData), 0, outImgSize, strideC, batch);
 //TSingleTensor.gemmStridedBatched(CblasRowMajor, CblasNoTrans, CblasNoTrans, filters, outImgSize, k, 1, weights.Data, k, 0, state.workspace.Data, outImgSize, strideB, 0, output.Data, outImgSize, strideC, batch);
 
 {$ifdef DEBUG_GPU}
-state.input.Conv2D(weights, output, Padding, Padding, stride_x, stride_y, Dilation, Dilation);
+//state.input.Conv2D(weights, output, Padding, Padding, stride_x, stride_y, Dilation, Dilation);
+TSingleTensor.gemmStridedBatched(CblasRowMajor, CblasNoTrans, CblasNoTrans, filters, outImgSize, k, 1, weights.Data, k, 0, pointer(_DB), outImgSize, strideB, 0, output.Data, outImgSize, strideC, batch);
 output.printGpuSumSqrDiff();
 {$endif}
 
   if isBatchNormalized then
     batchNormGPU(state)
-  else begin
+  else if assigned(biases.devData) then begin
     cuda.forwardBias(output.Size(), output.devData, 0, biases.size(), biases.devData,1, Batch);
 {$ifdef DEBUG_GPU}
-output.forwardBias(biases);
+if assigned(biases.Data) then
+  output.forwardBias(biases);
+output.printGpuSumSqrDiff();
 {$endif}
   end;
 
@@ -1128,6 +1367,7 @@ output.forwardBias(biases);
 
 {$ifdef DEBUG_GPU}
 Activate();
+output.printGpuSumSqrDiff();
 {$endif}
 
   if (assistedExcitation<>0) and state.isTraining then
@@ -1140,12 +1380,6 @@ Activate();
       inputLayer.forwardGPU(s);
       cuda.copy(output.Size(), inputLayer.output.devData, 0, 1, output.devData, 0, 1);
   end;
-
-{$ifdef DEBUG_GPU}
-write(LayerTypeStr,' ');
-output.printGpuSumSqrDiff();
-{$endif}
-
   {$ifdef USE_TELEMETRY}
   cuda.finish();
   if benchmark then metrics.forward.finish(layerType);
@@ -1187,7 +1421,7 @@ begin
   end;
 
 {$ifdef DEBUG_GPU}
-Derivative();
+Derivative(0, @activationInput);
 delta.printGpuSumSqrDiff();
 {$endif}
 
@@ -1197,22 +1431,26 @@ delta.printGpuSumSqrDiff();
     cuda.backwardBias(bias_updates.size(), bias_updates.devData, delta.size, delta.devData, 0, 1, batch);
 {$ifdef DEBUG_GPU}
 bias_updates.addSums(delta);
+bias_updates.printGpuSumSqrDiff();
 {$endif}
   end;
 
-  if speedOverSize then
-    workspacePtr := @workspace
+  if speedOverSize then begin
+    workspacePtr := @workspace;
+    workspacePtr.setCUDA;
+  end
   else begin
     workspacePtr := @state.workspace;
+    workspacePtr.setCUDA;
     for b:=0 to batch-1 do begin
       cuda.im2col(c, h, w, kernelSize, kernelSize, Padding, Padding,
         stride_y, stride_x, dilation, dilation, state.input.devData , b*_vol, workspacePtr.devData, b*colSize);
     end;
 {$ifdef DEBUG_GPU}
 state.input.im2Col(kernelSize, kernelSize, padding * dilation, padding * dilation, stride_y, stride_x, dilation, dilation, workspacePtr^, 1);
+workspacePtr^.printGpuSumSqrDiff();
 {$endif}
   end;
-  workspacePtr.setCUDA;
 
 
   if not weight_updates.wasGPU() then weight_updates.pushToDevice;
@@ -1238,6 +1476,7 @@ TSingleTensor.gemm(CblasRowMajor, CblasNoTrans, CblasTrans, i_m, i_n, i_k, 1
 , delta.data + b*i_m*i_k, i_k
 , workspacePtr.data + b*ColSize, i_k
 , 1, weight_updates.data, i_n);
+weight_updates.printGpuSumSqrDiff();
 {$endif}
 
   if assigned(state.delta) and assigned(state.delta.devdata) then begin
@@ -1259,13 +1498,20 @@ TSingleTensor.gemm(CblasRowMajor, CblasNoTrans, CblasTrans, i_m, i_n, i_k, 1
         , 0, workspacePtr.devData, 0, i_k, colSize, batch);
 
 {$ifdef DEBUG_GPU}
+//TSingleTensor.gemmStridedBatched(
+//  CblasRowMajor, CblasTrans, CblasNoTrans, i_n, i_k, i_m, 1
+//  , weights.Data, i_n, 0
+//  , delta.Data, i_k, i_m * i_k
+//  , 0, workspacePtr^.data, i_k, colSize, Batch);
+
 for b := 0 to batch -1 do begin
     TSingleTensor.gemm(
       CblasRowMajor, CblasTrans, CblasNoTrans, i_n, i_k, i_m, 1
       , weights.Data, i_n
       , delta.Data + b * i_m * i_k, i_k
-      , 0, state.workspace.data + b*colSize, i_k);
+      , 0, workspacePtr.data + b*colSize, i_k);
 end;
+state.workspace.printGpuSumSqrDiff();
 {$endif}
 
     imSize := state.delta.Volume();
@@ -1276,14 +1522,9 @@ end;
 
 {$ifdef DEBUG_GPU}
 state.delta.col2Im(kernelSize, kernelSize, padding*Dilation, padding*Dilation, stride_x, stride_y, dilation, dilation, workspacePtr^);
-{$endif}
-  end ;
-
-{$ifdef DEBUG_GPU}
-bias_updates.printGpuSumSqrDiff();
-weight_updates.printGpuSumSqrDiff();
 state.delta.printGpuSumSqrDiff();
 {$endif}
+  end ;
 
   {$ifdef USE_TELEMETRY}
   cuda.finish();

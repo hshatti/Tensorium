@@ -11,13 +11,13 @@ type
   SizeInt = IntPtr;
 {$endif}
   TMeasureOps = (
-    opIncFill, opFill, opCopy, opMaxNorm, opStdDevNorm, opRMSNorm, opBatchAddvs, opAddvs, opBatchMulvs,
+    opAllocCPU, opIncFill, opFill, opCopy, opMaxNorm, opStdDevNorm, opRMSNorm, opBatchAddvs, opAddvs, opBatchMulvs,
     opMulvs, opBatchSubvs, opSubvs, opBatchDivvs, opDivvs, opPow, opAxpy, opMulvv, opAddvv, opSubvv, opDivvv, opFmavv, opDot, opBatchFmavss, opFmavss, opGemm, opIm2col, opCol2im,
-    opConv2D, opConcat, opAddConcat, opHostToDevice, opDeviceToHost, opMemAllocate, opMemRelease, opGPUAllocate, opArgMax, opArgMin, opConvert,
+    opConv2D, opConcat, opAddConcat, opHostToDevice, opDeviceToHost, opMemAllocate, opMemRelease, opGPUAllocate, opArgMax, opArgMin, opConvert, opQuantize, opDequantize,
     opGPURelease, opIm2ColExt, opCol2ImExt, opMeans, opVariances, opSoftmax, opCrossEntropySoftmax,
-    opMeansVars, opNormalize,  opMeansVarsDelta, opNormalizeDelta, opAddDots, opForwardBias, opBackwardBias, opForwardScale, opForwardScaleAdd,
-    opReduce , opFwDropout, opBwDropout, opL2, opClip, opInvSqrt,
-    opInit, opActivate, opDerive
+    opMeansVars, opNormalize,  opMeansVarsDelta, opNormalizeDelta, opAddDots, opForwardBias, opBackwardBias, opForwardScale, opForwardScaleAdd, opFwMaxpool, opBwMaxpool,
+    opReduce , opFwDropout, opBwDropout, opL2, opClip, opInvSqrt, opMin, opMax, opMinAndMax,
+    opInit, opDispose, opActivate, opDerive
   );
 
   { TTensorOps }
@@ -39,9 +39,6 @@ type
       function total():int64;
       property Item[i:TMeasureOps]:int64 read GetItem ;default;
   end;
-
-var
-  tensorMetrics : TTensorMetrics;
 
 implementation
 uses nChrono, sysutils;

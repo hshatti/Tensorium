@@ -29,7 +29,8 @@ type
     timeSteps : SizeInt;
     maxBatches: SizeInt;
     EMA_Alpha: single;
-    input, truth: TSingleTensor;
+    input, truth: TNeuralTensor;
+    qInput: TArray<ShortInt>;
     layers: TArray<TBaseLayer>;
     seen: SizeInt;
     maxCrop, minCrop : SizeInt;
@@ -68,10 +69,12 @@ type
     totalBBox: SizeInt;
     rewrittenBBox: SizeInt;
 
-    //outTensor             : TSingleTensor;
+    //outTensor             : TNeuralTensor;
 
     //TrainablesX, TrainablesY : TArray<single>;
-    workspace: TSingleTensor;
+    workspace: TNeuralTensor;
+    quantizationType : TPrecisionType;
+    opCount, OpsPerSec: UInt64;
 
     constructor Create(const aLayers: TArray<TBaseLayer>);
     procedure setLayers(ALayers:TArray<TBaseLayer>);
@@ -85,15 +88,17 @@ type
     procedure forward(var state: TNNetState); overload;
     procedure backward(var state: TNNetState); overload;
     procedure update(); overload;
-    function predict(const tensor: TSingleTensor): PSingleTensor;
+    function predict(const tensor: TNeuralTensor): PNeuralTensor;
     function Propagate(): single;
     function trainEpoch(const Data: TData;  const randomSample: boolean = False ; batchCount: SizeInt = 0): single;
-    function output(): PSingleTensor;
+    function output(): PNeuralTensor;
     function cost(): single;
+    procedure quantize(const qType:TPrecisionType);
     function classCount(): SizeInt;
     function Detections(const aWidth, aHeight: SizeInt; const aThresh: single = 0.5; const aRelative: boolean=false; const aLetterBox : boolean=false ; const aBatch: SizeInt=0): TDetections;
     procedure freeLayers();
     function maxBoxes : SizeInt;
+    function getOpCount:UInt64;
     destructor Destroy; override;
 
     property batch: SizeInt read FBatch write setBatch;
@@ -101,6 +106,7 @@ type
 
 
 implementation
+uses nChrono, nMaxPoolLayer;
 
 const
   DEFAULT_LEARNING_RATE = 0.001;
@@ -142,6 +148,7 @@ begin
   Layers := ALayers;
   if wsSize>0 then
     workSpace.resize([wsSize]);
+  OPCount := getOpCount
 end;
 
 procedure TNNet.setTraining(const training: boolean);
@@ -173,13 +180,16 @@ begin
   except on E : Exception do
     raise Exception.Create('['+Layers[i].ClassName+'] : ' + E.Message)
   end;
-  if wsSize>0 then workspace.reSize([wsSize]);
+  if wsSize>0 then begin
+    workspace.reSize([wsSize]);
+  end;
   shape := copy(input.Shape);
   if assigned(input.shape) then begin
     shape[0]:=mini_batch;
     input.reSize(shape, mini_batch);
   end;
   FBatch := mini_batch;
+  OpCount := getOpCount;
 end;
 
 function TNNet.layerCount(): SizeInt;
@@ -270,16 +280,21 @@ var i:sizeInt;
 begin
   for i := 0 to layerCount() -1 do
     layers[i].fuseBatchNorm;
+  opCount:=getOpCount;
 end;
 
 procedure TNNet.forward(var state: TNNetState);
 var
   i: SizeInt;
   currentLayer: TBaseLayer;
+  t:clock_t;
+  r:double;
 begin
   state.workspace := workspace;
   state.step:=0;
   state.seen := @seen;
+  OpsPerSec :=0;
+  t := clock();
   for i := 0 to High(Layers) do
   begin
     state.index := i;
@@ -295,32 +310,42 @@ begin
     end;
     if assigned(OnForward) then OnForward(state);
 
-    if state.isTraining then
-      write(#13, 'FW [', i:3, '] : ',currentLayer.LayerTypeStr:20);
+    //if state.isTraining then
+    //  write(#13, 'FW [', i:3, '] : ',currentLayer.LayerTypeStr:20);
     {$if defined(USE_OPENCL)}
     {$if defined(CL_EVENTS)}
     currentLayer.events := state.events;
     currentLayer.ev     := state.ev;
     {$endif}
+
     currentLayer.forwardGPU(state);
     ocl.finish();
     {$elseif defined(USE_CUDART)}
+      {$ifdef DEBUG_GPU}
+    writeln(i:3,' FW[',currentLayer.LayerTypeStr,' ', currentLayer.ActivationType,']', currentLayer.weights.shapeStr(currentLayer.weights.Shape));
+      {$endif}
     currentLayer.forwardGPU(state);
+      {$ifdef DEBUG_GPU}
+    readln;
+      {$endif}
     {$else}
     currentLayer.forward(state);
     {$endif}
     // todo temporary OpenCL output workaroundB
     state.input := @currentLayer.output;
     state.prevLayer := currentLayer;
+    OpsPerSec := OpsPerSec + currentLayer.opCount;
     //writeln(#10, 'Forward ', 100*i/ High(Layers):2:0, '%')
   end;
+  r := CLOCKS_PER_SEC/(clock()-t);
+  OpsPerSec := trunc(r*OpsPerSec);
 end;
 
 procedure TNNet.backward(var state: TNNetState);
 var
   i: SizeInt;
-  original_input: PSingleTensor;
-  original_delta : PSingleTensor;
+  original_input: PNeuralTensor;
+  original_delta : PNeuralTensor;
   prev: TBaseLayer;
   current: TBaseLayer;
 begin
@@ -345,7 +370,7 @@ begin
     current := Layers[i];
     if current.backwardStop then break;
     if current.forwardOnly then continue;
-    write(#13, 'BW [', i:3, '] : ', current.LayerTypeStr:20);
+    //write(#13, 'BW [', i:3, '] : ', current.LayerTypeStr:20);
     {$if defined(USE_OPENCL)}
     {$if defined(CL_EVENTS)}
     current.events := state.events;
@@ -354,7 +379,13 @@ begin
     current.backwardGPU(state);
     ocl.finish();
     {$elseif defined(USE_CUDART)}
+      {$ifdef DEBUG_GPU}
+    writeln(i:3,' BW[',current.LayerTypeStr,' ', current.ActivationType,']', current.weights.shapeStr(current.weights.Shape));
+      {$endif}
     current.backwardGPU(state);
+      {$ifdef DEBUG_GPU}
+    //readln;
+      {$endif}
     {$else}
     current.backward(state);
     {$endif}
@@ -449,7 +480,7 @@ begin
   if assigned(OnAfterPropagation) then OnAfterPropagation(state);
 end;
 
-function TNNet.predict(const tensor: TSingleTensor): PSingleTensor;
+function TNNet.predict(const tensor: TNeuralTensor): PNeuralTensor;
 var
   state: TNNetState;
 begin
@@ -537,7 +568,7 @@ begin
   Result := Result / (batchCount * batch);
 end;
 
-function TNNet.output: PSingleTensor;
+function TNNet.output: PNeuralTensor;
 var
   i: SizeInt;
 begin
@@ -561,6 +592,32 @@ begin
       Inc(Count);
     end;
   Result := Result / Count;
+end;
+
+procedure TNNet.quantize(const qType: TPrecisionType);
+var i:SizeInt;
+begin
+
+  for i:=0 to layerCount()-1 do
+    case layers[i].layerType of
+      ltCONVOLUTIONAL : begin
+        layers[i].quantize(qType);
+      end;
+      ltCONNECTED:
+        ;
+      ltLSTM :
+        ;
+      ltConvLSTM :
+        ;
+      ltRNN :
+        ;
+      ltCRNN:
+        ;
+      ltGRU:
+        ;
+      ltLOCAL:;
+    end;
+  quantizationType:=qType;
 end;
 
 function TNNet.classCount(): SizeInt;
@@ -692,6 +749,14 @@ begin
   for i:= high(Layers) downto 0 do
     if Layers[i].layerType = ltYOLO then
       exit(TYoloLayer(layers[i]).maxBoxes)
+end;
+
+function TNNet.getOpCount: UInt64;
+var i:SizeInt;
+begin
+  result := 0;
+  for i:=0 to layerCount()-1 do
+    result:= result + Layers[i].opCount;
 end;
 
 destructor TNNet.Destroy;

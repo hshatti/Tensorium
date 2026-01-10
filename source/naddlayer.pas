@@ -27,6 +27,7 @@ type
       const aWeightsNormalization: TWeightsNormalization;
       const aActivation: TActivationType; const ATrain: boolean);
 
+    function getOpCount: UInt64; override;
     procedure setTrain(ATrain: boolean); override;
     procedure setBatch(ABatch: SizeInt); override;
     procedure fuseBatchNorm;  override;
@@ -69,11 +70,11 @@ begin
   outputs := w * h * c;
   inputs := outputs;
   inputShape := [batch, c, h, w];
-  output := TSingleTensor.Create([batch, c, h, w], batch);
+  output := TSingleTensor.Create([batch, c, h, w], batch,'add_output');
 
   FTrain := ATrain;
   if FTrain then
-    delta:= TSingleTensor.Create([batch, c, h, w], batch);
+    delta:= TSingleTensor.Create([batch, c, h, w], batch,'add_delta');
   //index := inputLayers[0];
   //nweights := 0;
 
@@ -82,28 +83,34 @@ begin
       begin
           setLength(weightSums, 1);
           setLength(weightMaxes, 1);
-          weights := TSingleTensor.Create([length(inputSizes)+1]);
+          weights := TSingleTensor.Create([length(inputSizes)+1],'add_weights');
           //scale := sqrt(2 / result.nweights);
           weights.fill(1);
           if FTrain then
-              weight_updates := TSingleTensor.Create([length(inputSizes)+1]);
+              weight_updates := TSingleTensor.Create([length(inputSizes)+1],'add_weighs_update');
       end;
     wtPER_CHANNEL :
       begin
           setLength(weightSums, c);
           setLength(weightMaxes, c);
-          weights := TSingleTensor.Create([length(inputSizes)+1, c]);
+          weights := TSingleTensor.Create([length(inputSizes)+1, c],'add_weights');
           //scale := sqrt(2 / result.nweights);
           weights.fill(1);
           if FTrain then
-              weight_updates := TSingleTensor.Create([(length(inputSizes)+1), c]);
+              weight_updates := TSingleTensor.Create([(length(inputSizes)+1), c],'add_weight_update');
       end;
   end;
 {$ifndef GPU}
   if (weightsType <> wtNO_WEIGHTS) and (ActivationType in [acSWISH, acMISH]) then
-      activationInput := TSingleTensor.Create([batch, c, h, w], batch);
+      activationInput := TSingleTensor.Create([batch, c, h, w], batch,'add_act_input');
 {$endif}
+  OpCount := getOpCount;
 
+end;
+
+function TAddLayer.getOpCount: UInt64;
+begin
+  Result:= length(inputLayers)*outputs*Batch*2; // add + activation
 end;
 
 procedure TAddLayer.setTrain(ATrain: boolean);
@@ -113,9 +120,9 @@ begin
   if FTrain then begin
     case weightsType of
       wtPER_FEATURE:
-        weight_updates := TSingleTensor.Create([(length(inputSizes)+1)]);
+        weight_updates := TSingleTensor.Create([(length(inputSizes)+1)],'add_weight_updates');
       wtPER_CHANNEL:
-        weight_updates := TSingleTensor.Create([(length(inputSizes)+1), c]);
+        weight_updates := TSingleTensor.Create([(length(inputSizes)+1), c],'add_weight_updates');
     end;
     delta.resize([batch, c, h, w], batch);
     weight_updates.resize([length(inputSizes)+1, c]);
@@ -139,6 +146,7 @@ begin
     if (weightsType <> wtNO_WEIGHTS) and (ActivationType in [acSWISH, acMISH]) then
         activationInput.resize([batch, c, h, w], batch);
   {$endif}
+  OpCount := getOpCount;
 
 end;
 
@@ -710,14 +718,14 @@ begin
       end;
 
     case ActivationType of
-      acSWISH :
-        activate_array_swish(output, output.Size(), activationInput, output);
+      //acSWISH :
+      //  activate_array_swish(output, output.Size(), activationInput, output);
       acMISH :
         activate_array_mish(output, output.Size(), activationInput, output)
     else
         //activate_array_cpu_custom(l.output, l.outputs * l.batch, l.activation)
         //activate_array(l.output, l.outputs * l.batch, l.activation);
-      activate()
+      activate(0, @activationInput)
     end;
     {$ifdef USE_TELEMETRY}
     if benchmark then metrics.forward.finish(layerType);
@@ -732,12 +740,12 @@ begin
   if benchmark then metrics.backward.start(layerType);
   {$endif}
   case ActivationType of
-    acSWISH :
-      gradient_array_swish(output, outputs * batch, activationInput, delta);
+    //acSWISH :
+    //  gradient_array_swish(output, outputs * batch, activationInput, delta);
     acMISH :
       gradient_array_mish(outputs * batch, activationInput, delta)
   else
-    Derivative;
+    Derivative(0, @activationInput);
   end;
   net := TNNet(state.net);
   if not assigned(layersDelta) then begin
@@ -783,38 +791,60 @@ var
     net : TNNet;
     //a,b:PSingle;
 begin
-    {$ifdef USE_TELEMETRY}
-    if benchmark then metrics.forward.start(layerType);
-    {$endif}
-    output.setOCL;
-    net := TNNet(state.net);
-    //assert(length(inputLayers)=1, '[AddLayerGPU] multiple layer add is not yet implemented');
-    if weightsNormalization=wnNO_NORMALIZATION then begin
-      ocl.copy(state.input.size(), state.input.devData, 0, 1, output.devData, 0, 1);
-      for i:=0 to high(inputLayers) do begin
-        lOutput := net.layers[inputLayers[0]];
-        if not lOutput.output.wasGPU() then lOutput.output.pushToDevice;
-        ocl.addvv(output.size(), output.devData, 0, 1, lOutput.output.devData, 0, 1, output.devData, 0, 1);
-        //state.input.copyTo(output);
-        //output.Add(lOutput.output);
-      end
-    end else begin
-      assert(false, '[add_multilayer_gpu] not implemented');
-      add_multilayer(layersOutput, state.input^, output, weights, weightsNormalization, weightSums, weightMaxes);
+
+  {$ifdef USE_TELEMETRY}
+  if benchmark then metrics.forward.start(layerType);
+  {$endif}
+{$ifdef DEBUG_GPU}
+writeln(sLineBreak, '[', index, ']',LayerTypeStr);
+{$endif}
+
+
+  output.setOCL;
+  net := TNNet(state.net);
+  //assert(length(inputLayers)=1, '[AddLayerGPU] multiple layer add is not yet implemented');
+  if weightsNormalization=wnNO_NORMALIZATION then begin
+    ocl.copy(state.input.size(), state.input.devData, 0, 1, output.devData, 0, 1);
+{$ifdef DEBUG_GPU}
+state.input.copyTo(output);
+{$endif}
+    for i:=0 to high(inputLayers) do begin
+      lOutput := net.layers[inputLayers[0]];
+      if not lOutput.output.wasGPU() then lOutput.output.pushToDevice;
+      ocl.addvv(output.size(), output.devData, 0, 1, lOutput.output.devData, 0, 1, output.devData, 0, 1);
+{$ifdef DEBUG_GPU}
+output.Add(lOutput.output);
+{$endif}
     end;
-    case ActivationType of
-      acSWISH :
-        ocl.activateArraySWISH(output.size(), output.devData, 0, activationInput.devData, output.devData);
-      acMISH : ;
-        //activate_array_mish(output, output.Size(), activationInput, output)
-    else
+{$ifdef DEBUG_GPU}
+output.printGpuSumSqrDiff ;
+{$endif}
+  end else begin
+    assert(false, '[add_multilayer_gpu] not implemented');
+    add_multilayer(layersOutput, state.input^, output, weights, weightsNormalization, weightSums, weightMaxes);
+  end;
+  case ActivationType of
+    acSWISH :
+      ocl.activateArraySWISH(output.size(), output.devData, 0, activationInput.devData, output.devData);
+    acMISH : ;
+      //activate_array_mish(output, output.Size(), activationInput, output)
+  else
+    begin
       ocl.ActivateArray(output.size(), output.devData, 0, longint(ActivationType));
-      //activate()
-    end;
-    {$ifdef USE_TELEMETRY}
-    ocl.finish();
-    if benchmark then metrics.forward.finish(layerType);
-    {$endif}
+{$ifdef DEBUG_GPU}
+activate();
+output.printGpuSumSqrDiff();
+{$endif}
+    end
+  end;
+
+
+//write(LayerTypeStr,' ');
+//output.printGpuSumSqrDiff();
+  {$ifdef USE_TELEMETRY}
+  ocl.finish();
+  if benchmark then metrics.forward.finish(layerType);
+  {$endif}
 end;
 
 

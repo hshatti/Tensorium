@@ -58,9 +58,9 @@ begin
   inputShape     := [batch, inputs];
   temperature    := 1;
   outputs        := Ainputs;
-  loss           := TSingleTensor.Create([batch, Inputs], batch);
-  output         := TSingleTensor.Create([batch, Inputs], batch);
-  delta          := TSingleTensor.Create([batch, Inputs], batch);
+  loss           := TSingleTensor.Create([batch, Inputs], batch,'softmax_loss');
+  output         := TSingleTensor.Create([batch, Inputs], batch,'softmax_output');
+  delta          := TSingleTensor.Create([batch, Inputs], batch,'softmax_delta');
   cost           := [0];
 end;
 
@@ -303,11 +303,32 @@ begin
 //softmaxBatch(pointer(state.input.data), inputs div groups, batch, inputs, groups, inputs div groups, 1, temperature, pointer(output.Data));
   end;
 
+{$ifdef DEBUG_GPU}
+if assigned(softmaxTree) then
+begin     // todo [TSoftmaxLayer::forward SIMDfy & GPU
+count := 0;
+for i := 0 to softmaxTree[0].groups -1 do
+begin
+  group_size := softmaxTree[0].group_size[i];
+  softmaxBatch(pointer(state.input.data+count), group_size, batch, inputs, 1, 0, 1, temperature, pointer(output.data+count));
+  inc(count , group_size)
+end
+end
+else
+  softmaxBatch(pointer(state.input.data), inputs div groups, batch, inputs, groups, inputs div groups, 1, temperature, pointer(output.Data));
+output.printGpuSumSqrDiff();
+{$endif}
+
   if assigned(state.truth.data) and not noloss then begin
     if not state.truth.wasGPU() then
       state.truth.pushToDevice();
     cuda.crossEntropySoftmax(output.size(), output.devData, state.truth.devData, delta.devData, loss.devData);
-//softmaxCrossEntropy(output, state.truth, delta, loss);
+
+{$ifdef DEBUG_GPU}
+softmaxCrossEntropy(output, state.truth, delta, loss);
+delta.printGpuSumSqrDiff();
+loss.printGpuSumSqrDiff();
+{$endif}
 
     loss.pullFromDevice();
     cost[0] := loss.Sum();
@@ -333,6 +354,12 @@ begin
   if not delta.wasGPU() then delta.pushToDevice();
 
   cuda.addvv(delta.size(), delta.devData, 0, 1, state.delta.devData, 0, 1, state.delta.devData, 0, 1);
+
+{$ifdef DEBUG_GPU}
+state.delta.add(delta.Data);
+state.delta.printGpuSumSqrDiff();
+{$endif}
+
 //backward(state);
 //state.delta^.printGpuSumSqrDiff();
   {$ifdef USE_TELEMETRY}

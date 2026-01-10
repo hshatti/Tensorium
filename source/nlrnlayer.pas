@@ -1,4 +1,4 @@
-unit nLRNLayer; // normalization layer
+unit nLRNLayer; // local response normalization
 {$ifdef FPC}
 {$mode Delphi}
 {$endif}

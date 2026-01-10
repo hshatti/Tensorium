@@ -56,7 +56,7 @@ begin
   inputs          := outputs;
   inputShape      := [batch, inputs];
   //delta           := TSingleTensor.Create([batch, output, batch]);
-  output          := TSingleTensor.Create([batch, outputs], batch);
+  output          := TSingleTensor.Create([batch, outputs], batch,'concat_output');
 
 end;
 
@@ -66,9 +66,9 @@ begin
   FTrain := ATrain;
   if FTrain then
     if outC=0 then
-      delta := TSingleTensor.Create([batch, outputs], batch)
+      delta := TSingleTensor.Create([batch, outputs], batch, 'concat_delta')
     else
-      delta := TSingleTensor.Create([batch, outC, outH, outW], batch)
+      delta := TSingleTensor.Create([batch, outC, outH, outW], batch, 'concat_delta')
   else
     delta.free
 end;
@@ -157,21 +157,33 @@ end;
 
 {$if defined(USE_OPENCL)}
 procedure TConcatLayer.forwardGPU(var state: TNNetState);
+//var i, offset:SizeInt;
+//    pt:PSingleTensor;
 var i, offset:SizeInt;
     pt:PSingleTensor;
 begin
   {$ifdef USE_TELEMETRY}
   if benchmark then metrics.forward.start(layerType);
   {$endif}
+{$ifdef DEBUG_GPU}
+writeln(sLineBreak, '[', index, ']',LayerTypeStr);
+{$endif}
   output.setOCL;
   offset := 0;
   for i:=0 to high(inTensors) do begin
       pt := @TNNet(state.net).layers[inputLayers[i]].output;
       if not pt.wasGPU() then pt.pushToDevice;
       ocl.copy(pt.size(), pt.devData, 0, 1,output.devData, offset, 1);
+{$ifdef DEBUG_GPU}
+writeln('concat from [', TNNet(state.net).layers[inputLayers[i]].index,'] ', TNNet(state.net).layers[inputLayers[i]].LayerTypeStr);
+pt^.copyto(output, offset, 1, 0, 1, pt.size());
+output.printGpuSumSqrDiff(pt.size(), offset);
+{$endif}
       inc(offset, pt.Size())
   end;
 
+//write(LayerTypeStr,' ');
+//output.printGpuSumSqrDiff();
   {$ifdef USE_TELEMETRY}
   ocl.finish();
   if benchmark then metrics.forward.finish(layerType);
@@ -219,9 +231,12 @@ begin
       inc(offset, pt.Size())
   end;
 
-//for i:=0 to high(inTensors) do
-//  inTensors[i] := TNNet(state.net).layers[inputLayers[i]].output;
-//output.concat(inTensors);
+{$ifdef DEBUG_GPU}
+for i:=0 to high(inTensors) do
+  inTensors[i] := TNNet(state.net).layers[inputLayers[i]].output;
+output.concat(inTensors);
+output.printGpuSumSqrDiff();
+{$endif}
 
 //write(LayerTypeStr,' ');
 //output.printGpuSumSqrDiff();

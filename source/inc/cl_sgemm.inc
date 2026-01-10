@@ -79,7 +79,7 @@
 + '  // M [.A.]  X K [.B.] => M [.C.]'#10
 + '  //   [...]      [...]      [...]'#10
 + 'typedef enum {'#10
-+ '    acLOGISTIC, acRELU, acRELU6, acRELIE, acLINEAR, acRAMP, acTANH, acPLSE,'#10
++ '    acLINEAR, acLOGISTIC, acRELU, acRELU6, acRELIE, acRAMP, acTANH, acPLSE,'#10
 + '    acREVLEAKY, acLEAKY, acELU, acLOGGY, acSTAIR, acHARDTAN, acLHTAN, acSELU, acSOFTMAX,'#10
 + '    acGELU, acSWISH, acMISH, acHARD_MISH, acNORM_CHAN, acNORM_CHAN_SOFTMAX,'#10
 + '    acNORM_CHAN_SOFTMAX_MAXVAL'#10
@@ -1067,7 +1067,7 @@
 + '          kernel_flip,'#10
 + '          col_buffer, col_offset, im_buffer, im_offset);'#10
 + '}'#10
-+ '__kernel void upsample(__global nfloat* in, const n_int stride, const int isForward, const nfloat scale, __global nfloat* out, const int zero){'#10
++ '__kernel void UpSample(__global nfloat* in, const n_int stride, const int isForward, const nfloat scale, __global nfloat* out, const int zero){'#10
 + '   const n_int c = get_global_id(0);'#10
 + '   const n_int y = get_global_id(1);'#10
 + '   const n_int x = get_global_id(2);'#10
@@ -1143,7 +1143,7 @@
 + '        for(i = 0; i < BLOCK; ++i){'#10
 + '            variance_tmp += buf[i];'#10
 + '        }'#10
-+ '        variance_tmp /= (blocksize * groups);'#10
++ '        variance_tmp /= (blocksize * groups - 1);'#10
 + '        vars[filter] = variance_tmp;'#10
 + '    }'#10
 + '}'#10
@@ -1194,7 +1194,7 @@
 + '        for(i = 0; i < BLOCK; ++i){'#10
 + '            variance_tmp += buf[i];'#10
 + '        }'#10
-+ '        variance_tmp /= (blocksize * groups);'#10
++ '        variance_tmp /= (blocksize * groups - 1);'#10
 + '        vars[filter] = variance_tmp;'#10
 + '    }'#10
 + '    //nfloat m = 0;'#10
@@ -1499,7 +1499,7 @@
 + '   const n_int i = get_global_id(0);'#10
 + '   dst[i*dstStride + dstOffset] = pow(base[i*srcStride + srcOffset], expo);'#10
 + '}'#10
-+ '__kernel void clamp(const nfloat alpha, __global const nfloat* src, __global nfloat* dst, const n_int stride, const n_int offset ){'#10
++ '__kernel void Clamp(const nfloat alpha, __global const nfloat* src, __global nfloat* dst, const n_int stride, const n_int offset ){'#10
 + '   const n_int i = get_global_id(0);'#10
 + '   src += i*stride + offset;'#10
 + '   dst += i*stride + offset;'#10

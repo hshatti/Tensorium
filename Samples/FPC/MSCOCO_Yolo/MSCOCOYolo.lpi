@@ -24,8 +24,8 @@
             <Filename Value="MSCOCOYolo"/>
           </Target>
           <SearchPaths>
-            <Libraries Value="C:\Program Files (x86)\intel\oneAPI\mkl\latest\lib\;C:\Program Files (x86)\intel\oneAPI\tbb\latest\lib\;..\..\..\..\..\..\..\..\..\msys64\usr\lib"/>
-            <OtherUnitFiles Value="..\..\..\..\NN\source;..\..\..\source\3rdparty\clblast\source;..\..\..\source\3rdparty\oneAPI\mkl\source;..\..\..\source\3rdparty\cuda\source"/>
+            <Libraries Value="C:\Program Files (x86)\intel\oneAPI\mkl\latest\lib\;C:\Program Files (x86)\intel\oneAPI\tbb\latest\lib\;..\..\..\..\..\..\..\..\..\msys64\usr\lib;..\..\..\..\..\..\..\..\..\msys64\mingw64\lib;..\..\..\..\..\..\..\..\..\msys64\mingw64\lib\gcc\x86_64-w64-mingw32\15.1.0"/>
+            <OtherUnitFiles Value="..\..\..\..\NN\source;..\..\..\source\3rdparty\clblast\source;..\..\..\source\3rdparty\openblas\source;..\..\..\source\3rdparty\oneAPI\dnnl;..\..\..\source\3rdparty\oneAPI\mkl\source;..\..\..\source\3rdparty\cuda\source"/>
             <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Parsing>
@@ -50,12 +50,11 @@
             <LinkSmart Value="True"/>
           </Linking>
           <Other>
-            <CustomOptions Value="-CfAVX2
--OpCOREAVX2
--dUSE_AVX2
--dBIG_MATRECIES
+            <CustomOptions Value="-dUSE_AVX2
+-dUSE_MULTITHREADING
+-dUSE_TELEMETRY
 -dUSE_CUDART"/>
-            <OtherDefines Count="8">
+            <OtherDefines Count="11">
               <Define0 Value="USE_AVX2"/>
               <Define1 Value="USE_MULTITHREADING"/>
               <Define2 Value="USE_OPENBLAS"/>
@@ -64,6 +63,9 @@
               <Define5 Value="USE_MKL"/>
               <Define6 Value="BIG_MATRECIES"/>
               <Define7 Value="USE_CUDART"/>
+              <Define8 Value="USE_ONEAPI"/>
+              <Define9 Value="DEBUG_GPU"/>
+              <Define10 Value="USE_ONEDNN"/>
             </OtherDefines>
           </Other>
         </CompilerOptions>
@@ -111,6 +113,15 @@
         <IsPartOfProject Value="True"/>
         <UnitName Value="nRegionLayer"/>
       </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\3rdparty\oneAPI\dnnl\dnnl.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\..\..\source\nffmpeg_proc.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="nFFmpeg_proc"/>
+      </Unit>
     </Units>
   </ProjectOptions>
   <CompilerOptions>
@@ -121,8 +132,8 @@
     </Target>
     <SearchPaths>
       <IncludeFiles Value="$(ProjOutDir)"/>
-      <Libraries Value="..\..\..\..\NN\source"/>
-      <OtherUnitFiles Value="..\..\..\..\NN\source;..\..\..\source\3rdparty\oneAPI\mkl\source;..\..\..\source\3rdparty\clblast\source;..\..\..\source\3rdparty\openblas\source;..\..\..\source\3rdparty\cuda\source"/>
+      <Libraries Value="..\..\..\..\NN\source;..\..\..\..\..\..\..\..\..\msys64\mingw64\lib;..\..\..\..\..\..\..\..\..\msys64\usr\lib;..\..\..\..\..\..\..\..\..\msys64\mingw64\lib\gcc\x86_64-w64-mingw32\15.1.0"/>
+      <OtherUnitFiles Value="..\..\..\..\NN\source;..\..\..\source\3rdparty\oneAPI\mkl\source;..\..\..\source\3rdparty\oneAPI\dnnl;..\..\..\source\3rdparty\clblast\source;..\..\..\source\3rdparty\openblas\source;..\..\..\source\3rdparty\cuda\source"/>
       <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
     </SearchPaths>
     <Parsing>
@@ -149,12 +160,12 @@
       </Debugging>
     </Linking>
     <Other>
-      <CustomOptions Value="-CfAVX2
--OpCOREAVX2
--dUSE_AVX2
--dUSE_MKL
+      <CustomOptions Value="-dUSE_AVX2
+-dUSE_MULTITHREADING
+-dUSE_OPENCL
+-dUSE_TELEMETRY
 -dBIG_MATRECIES"/>
-      <OtherDefines Count="8">
+      <OtherDefines Count="11">
         <Define0 Value="USE_AVX2"/>
         <Define1 Value="USE_MULTITHREADING"/>
         <Define2 Value="USE_OPENBLAS"/>
@@ -163,6 +174,9 @@
         <Define5 Value="USE_MKL"/>
         <Define6 Value="BIG_MATRECIES"/>
         <Define7 Value="USE_CUDART"/>
+        <Define8 Value="USE_ONEAPI"/>
+        <Define9 Value="DEBUG_GPU"/>
+        <Define10 Value="USE_ONEDNN"/>
       </OtherDefines>
     </Other>
   </CompilerOptions>

@@ -101,15 +101,9 @@ type
     function toString():string;
   end;
 
-  { TActivationTypeHelper }
-
-  TActivationTypeHelper=type helper for TActivationType
-    class function fromString(s:string):TActivationType; static;
-    function toString():string;
-  end;
-
   function fromFile(const filename: string):TStringArray;
-  function stringsToInts(const strs:TStringArray):TArray<SizeInt>;
+  function stringsToInts(const strs:TStringArray):TArray<SizeInt>;overload;
+  function stringsToInts32(const strs:TStringArray):TArray<LongInt>;overload;
 
 implementation
 uses math;
@@ -139,6 +133,13 @@ begin
     {$else}
     result[i] := StrToInt(trim(strs[i]))
     {$endif};
+end;
+function stringsToInts32(const strs: TStringArray): TArray<longInt>;
+var i : longint;
+begin
+  setLength(result, Length(strs));
+  for i:= 0 to High(strs) do
+    result[i] := StrToInt(trim(strs[i]))
 end;
 
 { TDarknetParser }
@@ -516,7 +517,7 @@ end;
 function TDarknetParser.parseYolo(const opt: TCFGSection): TYoloLayer;
 var
   classes, total, num, max_boxes, maxCounter, i, embedding_layer_id: SizeInt;
-  mask, counters : TArray<SizeInt>;
+  mask, counters : TArray<LongInt>;
   a, cpc, iou_loss, iou_thresh_kind_str, nms_kind, map_file: String;
   le: TBaseConvolutionalLayer;
   vals: TStringArray;
@@ -524,7 +525,7 @@ begin
   classes := opt.getInt( 'classes', 20);
   total := opt.getInt( 'num', 1);
   a := opt.getStr( 'mask', '');
-  mask := stringsToInts(a.split([',']));
+  mask := stringsToInts32(a.split([',']));
   num := length(mask);
   max_boxes := opt.getInt('max', 200, true);
   result := TYoloLayer.Create(params.batch, params.w, params.h, num, total, mask, classes, max_boxes);
@@ -535,7 +536,7 @@ begin
 
   cpc := trim(opt.getStr( 'counters_per_class', ''));
   if cpc <>'' then begin
-    counters := stringsToInts(cpc.split([',']));
+    counters := stringsToInts32(cpc.split([',']));
     if length(counters) <> classes then
       raise Exception.Create(format(' number of values in counters_per_class = %d doesn''t match with classes = %d ', [length(counters), classes]));
     if length(counters)>0 then begin
@@ -545,10 +546,11 @@ begin
           maxCounter := counters[i];
     end;
   end;
-  if assigned(counters) then
-    result.classesMultipliers := TSingleTensor.Create([length(counters)]);
-  for i:= 0 to Result.classesMultipliers.size()-1 do
-    result.classesMultipliers.Data[i] := maxCounter / counters[i];
+  if assigned(counters) then begin
+    result.classesMultipliers := TSingleTensor.Create([length(counters)],'YOLO_class_mul');
+    for i:= 0 to Result.classesMultipliers.size()-1 do
+      result.classesMultipliers.Data[i] := maxCounter / counters[i];
+  end;
 
   result.labelSmoothEps := opt.getFloat( 'label_smooth_eps', 0.0, true);
   result.scaleXY := opt.getFloat( 'scale_x_y', 1, true);
@@ -625,7 +627,7 @@ begin
           write(format(' embedding_layer_id = %d, ', [embedding_layer_id]));
           le := Neural.layers[embedding_layer_id] as TBaseConvolutionalLayer;
           result.embeddingLayerId := embedding_layer_id;
-          result.embeddingOutput := TSingleTensor.Create([le.batch , le.outputs], le.Batch);
+          result.embeddingOutput := TSingleTensor.Create([le.batch , le.outputs], le.Batch,'YOLO_embedding_out');
           result.embeddingSize := le.n div result.n;
           writeln(format(' embedding_size = %d ', [result.embeddingSize]));
           if le.n mod result.n <> 0 then
@@ -633,7 +635,7 @@ begin
       end;
   map_file := opt.getStr( 'map', '');
   if map_file<>'' then
-      result.map := stringsToInts(fromFile(map_file));
+      result.map := stringsToInts32(fromFile(map_file));
   a := opt.getStr('anchors', '');
   if a<>'' then
       begin
@@ -1528,7 +1530,7 @@ class function TLayerTypeHelper.fromString(s: string): TLayerType;
 var i: SizeInt;
 begin
   s := LowerCase(s);
-  if s = 'shortcut'     then exit(ltSHORTCUT);
+  if s = 'shortcut'     then exit(ltADD);
   if s = 'scale_channels' then exit(ltScaleChannels);
   if s = 'sam'          then exit(ltSAM);
   if s = 'crop'         then exit(ltCROP);
@@ -1562,7 +1564,7 @@ begin
   if s = 'batchnorm'    then exit(ltBATCHNORM);
   if (s = 'soft') or (s = 'softmax') then exit(ltSOFTMAX);
   if s = 'constrative'  then exit(ltCONTRASTIVE);
-  if s = 'route'        then exit(ltROUTE);
+  if s = 'route'        then exit(ltCONCAT);
   if s = 'upsample'     then exit(ltUPSAMPLE);
   if (s = 'empty') or (s = 'silence') then exit(ltEMPTY);
   if s = 'implicit'       then exit(ltIMPLICIT);
@@ -1577,42 +1579,6 @@ end;
 function TLayerTypeHelper.toString: string;
 begin
   result := copy(GetEnumName(TypeInfo(TLayerType), ord(Self)), 3, 20)
-end;
-
-{ TActivationTypeHelper }
-
-class function TActivationTypeHelper.fromString(s: string): TActivationType;
-begin
-    s := LowerCase(s);
-    if s = 'logistic' then  exit(acLOGISTIC);
-    if s = 'swish' then exit(acSWISH);
-    if s = 'mish' then exit(acMISH);
-    if s = 'hard_mish' then exit(acHARD_MISH);
-    if s = 'normalize_channels' then exit(acNORM_CHAN);
-    if s = 'normalize_channels_softmax' then exit(acNORM_CHAN_SOFTMAX);
-    if s = 'normalize_channels_softmax_maxval' then exit(acNORM_CHAN_SOFTMAX_MAXVAL);
-    if s = 'loggy' then  exit(acLOGGY);
-    if s = 'relu' then  exit(acRELU);
-    if s = 'relu6' then  exit(acRELU6);
-    if s = 'elu' then  exit(acELU);
-    if s = 'selu' then  exit(acSELU);
-    if s = 'gelu' then  exit(acGELU);
-    if s = 'relie' then  exit(acRELIE);
-    if s = 'plse' then  exit(acPLSE);
-    if s = 'hardtan' then  exit(acHARDTAN);
-    if s = 'lhtan' then  exit(acLHTAN);
-    if s = 'linear' then  exit(acLINEAR);
-    if s = 'ramp' then  exit(acRAMP);
-    if s = 'revleaky' then  exit(acREVLEAKY);
-    if s = 'leaky' then  exit(acLEAKY);
-    if s = 'tanh' then  exit(acTANH);
-    if s = 'stair' then  exit(acSTAIR);
-    //writeln('Couldn''t find activation function ',s,' going with ReLU');
-    exit(acRELU)
-end;
-function TActivationTypeHelper.toString(): string;
-begin
-  result := copy(GetEnumName(TypeInfo(TActivationType), ord(Self)), 3, 20)
 end;
 
 end.

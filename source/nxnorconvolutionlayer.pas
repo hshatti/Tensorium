@@ -10,11 +10,11 @@ uses
 
 type
 
-  { TConvolutionLayer }
+  { TConvolutionalLayer }
 
   { TXNORConvolutionLayer }
 
-  TXNORConvolutionLayer=class(TConvolutionLayer)
+  TXNORConvolutionLayer=class(TConvolutionalLayer)
   private
     procedure setTrain(ATrain: boolean); override;
   public
@@ -37,7 +37,7 @@ type
       const ABatch_normalize: boolean=false; const ABinary: boolean=false;
       const AXnor: boolean=false; const AAdam: boolean=false;
       const AUse_bin_output: boolean=false; const AIndex: SizeInt=0;
-      const AAntialiasing: SizeInt=0; const AShare_layer: TConvolutionLayer=nil;
+      const AAntialiasing: SizeInt=0; const AShare_layer: TConvolutionalLayer=nil;
       const AAssistedExcitation: SizeInt=0; const ADeform: boolean=false;
       const ATrain: boolean=false);
     procedure forward(var state: TNNetState); override;
@@ -560,7 +560,7 @@ constructor TXNORConvolutionLayer.Create(const ABatch, Aheight, Awidth,
   const ABatch_normalize: boolean; const ABinary: boolean;
   const AXnor: boolean; const AAdam: boolean; const AUse_bin_output: boolean;
   const AIndex: SizeInt; const AAntialiasing: SizeInt;
-  const AShare_layer: TConvolutionLayer; const AAssistedExcitation: SizeInt;
+  const AShare_layer: TConvolutionalLayer; const AAssistedExcitation: SizeInt;
   const ADeform: boolean; const ATrain: boolean);
 
 var
@@ -874,8 +874,8 @@ begin
         //add_bias(l.output, l.biases, l.batch, l.n, outH * outW);
         output.Add(biases);
     case ActivationType of
-       acSWISH :
-          activate_array_swish(output, outputs * batch, activationInput, output);
+       //acSWISH :
+       //   activate_array_swish(output, outputs * batch, activationInput, output);
        acMISH :
           activate_array_mish(output, outputs * batch, activationInput, output);
        acHARD_MISH :
@@ -887,7 +887,7 @@ begin
        else
         //activate_array_cpu_custom(l.output, l.outputs * l.batch, l.activation);
             //activate_array(output, outputs * batch, activation);
-           activate()
+           activate(0, @activationInput)
     end;
     if binary or xnor then
         swapBinary();
@@ -922,8 +922,8 @@ begin
       k := outW * outW;
 
       case activationType of
-        acSWISH :
-          gradient_array_swish(output, outputs * batch, ActivationInput, delta) ;
+        //acSWISH :
+        //  gradient_array_swish(output, outputs * batch, ActivationInput, delta) ;
         acMISH  :
           gradient_array_mish(outputs * batch, ActivationInput, delta) ;
         acHARD_MISH :
@@ -933,7 +933,7 @@ begin
         acNORM_CHAN :
           gradient_array_normalize_channels(output, outputs * batch, batch, outC, outW * outW, delta) ;
         else
-          Derivative();
+          Derivative(0, @activationInput);
       end;
       if isBatchNormalized then
           batchNormBack(state)

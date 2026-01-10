@@ -41,9 +41,9 @@ begin
   inputs          := AInputs;
   inputShape      := [batch, inputs];
   outputs         := AInputs;
-  loss            := TSingleTensor.Create([batch, inputs], batch);
-  output          := TSingleTensor.Create([batch, inputs], batch);
-  delta           := TSingleTensor.Create([batch, inputs], batch);
+  loss            := TSingleTensor.Create([batch, inputs], batch,'logistic_loss');
+  output          := TSingleTensor.Create([batch, inputs], batch,'logistic_output');
+  delta           := TSingleTensor.Create([batch, inputs], batch,'logistic_delta');
   cost            := [0]
 
 end;
@@ -127,10 +127,10 @@ begin
   //CLBlastScopy(output.Size, state.input.devData, 0, 1, output.devData, 0, 1, @ocl.ActiveQueue
   //, nil//@ev
   //);
-  ocl.copy(output.size(), state.input.devData, 0, 1, output.devData, 0, 1);
   output.setOCL;
   delta.setOCL;
   loss.setOCL;
+  ocl.copy(output.size(), state.input.devData, 0, 1, output.devData, 0, 1);
 
   ocl.ActivateArray(output.size(), output.devData, 0, longint(ActivationType));
   //ocl.finish();
@@ -187,11 +187,11 @@ begin
   //CLBlastScopy(output.Size, state.input.devData, 0, 1, output.devData, 0, 1, @ocl.ActiveQueue
   //, nil//@ev
   //);
-  cuda.copy(output.size(), state.input.devData, 0, 1, output.devData, 0, 1);
-  //ocl.finish;
   output.setCUDA;
   delta.setCUDA;
   loss.setCUDA;
+  cuda.copy(output.size(), state.input.devData, 0, 1, output.devData, 0, 1);
+  //ocl.finish;
 
   cuda.ActivateArray(output.size(), output.devData, 0, longint(ActivationType));
   //ocl.finish();

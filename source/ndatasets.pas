@@ -163,8 +163,8 @@ begin
     Seek(trImg, FIMGHeadSize);
     Seek(trLbl, FLBLHeadSize);
 
-    TrainingData     := TByteTensor.Create([trainingCount, IMAGE_RES, IMAGE_RES]);
-    TrainingLabels   := TByteTensor.Create([trainingCount, CLASS_COUNT]);
+    TrainingData     := TByteTensor.Create([trainingCount, IMAGE_RES, IMAGE_RES],'mnist_training');
+    TrainingLabels   := TByteTensor.Create([trainingCount, CLASS_COUNT],'mnist_training_labels');
   end;
 
   if (testingCount>0) then begin
@@ -177,8 +177,8 @@ begin
     Seek(tsImg, FIMGHeadSize);
     Seek(tsLbl, FLBLHeadSize);
 
-    TestingData     := TByteTensor.Create([testingCount, IMAGE_RES, IMAGE_RES]);
-    TestingLabels   := TByteTensor.Create([testingCount, CLASS_COUNT]);
+    TestingData     := TByteTensor.Create([testingCount, IMAGE_RES, IMAGE_RES],'mnist_test');
+    TestingLabels   := TByteTensor.Create([testingCount, CLASS_COUNT],'mnist_test_labels');
   end;
 
 end;
@@ -301,15 +301,15 @@ begin
       assignFile(trImg[batch], FSources[batch]);
       reset(trImg[batch]);
     end;
-    TrainingData    := TByteTensor.Create([trainingCount, CHANNELS, IMAGE_RES, IMAGE_RES]);
-    TrainingLabels  := TByteTensor.Create([trainingCount, CLASS_COUNT]);
+    TrainingData    := TByteTensor.Create([trainingCount, CHANNELS, IMAGE_RES, IMAGE_RES],0,'cifar10_training');
+    TrainingLabels  := TByteTensor.Create([trainingCount, CLASS_COUNT],0,'cifar10_training_labels');
   end;
 
   if testingCount>0 then begin
     assignFile(tsImg, FSources[5]);
     reset(tsImg);
-    TestingData   := TByteTensor.Create([testingCount, CHANNELS, IMAGE_RES, IMAGE_RES]);
-    TestingLabels := TByteTensor.Create([testingCount, CLASS_COUNT]);
+    TestingData   := TByteTensor.Create([testingCount, CHANNELS, IMAGE_RES, IMAGE_RES],0,'cifar10_test');
+    TestingLabels := TByteTensor.Create([testingCount, CLASS_COUNT],0,'cifar10_test_labels');
   end;
 
 end;

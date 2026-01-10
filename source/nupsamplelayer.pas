@@ -56,7 +56,7 @@ begin
   inputs := w * h * c;
   scale := AScale;
   //delta := TSingles.Create([batch, c, h, w], batch);
-  output := TSingleTensor.Create([batch, outC, outH, outW], batch);
+  output := TSingleTensor.Create([batch, outC, outH, outW], batch,'upsampe_output');
 end;
 
 procedure TUpSampleLayer.setBatch(ABatch: SizeInt);
@@ -74,7 +74,7 @@ begin
   if FTrain=Atrain then exit;
   FTrain := ATrain;
   if FTrain then
-    delta := TSingleTensor.Create([batch, outC, outH, outW], batch)
+    delta := TSingleTensor.Create([batch, outC, outH, outW], batch,'upsampe_delta')
   else
     delta.free
 
@@ -150,6 +150,12 @@ begin
   {$ifdef USE_TELEMETRY}
   if benchmark then metrics.forward.start(layerType);
   {$endif}
+
+{$ifdef DEBUG_GPU}
+writeln(sLineBreak, '[', index, ']',LayerTypeStr);
+{$endif}
+
+
   output.setOCL;
   if not state.input.wasGPU() then state.input.pushToDevice;
 
@@ -159,6 +165,16 @@ begin
   end
   else
       ocl.upsample(batch, c, h, w, state.input.devData, stride, 1, scale, output.devData);
+
+{$ifdef DEBUG_GPU}
+if reverse then begin        // todo [forward_upsample_layer] why not using rverse as a parameter instead of [if else then]
+  output.fill(0);
+  upsample(pointer(output.data), outW, outH, outC, batch, stride, false, scale, pointer(state.input.data))
+end
+else
+  upsample(pointer(state.input.data), w, h, c, batch, stride, true, scale, pointer(output.data));
+output.printGpuSumSqrDiff();
+{$endif}
 
   {$ifdef USE_TELEMETRY}
   ocl.finish();
@@ -194,16 +210,20 @@ begin
   if reverse then begin        // todo [forward_upsample_layer] why not using rverse as a parameter instead of [if else then]
       //cuda.fill(output.as2dHeight(), output.as2dWidth(), output.devData, 0, 1);
       cuda.upsample(batch, outC, outH, outW, output.devData, stride, 0, scale, state.input.devData, 1);
-//output.fill(0);
-//upsample(output.data, outW, outH, outC, batch, stride, false, scale, state.input.data)
   end
   else begin
       cuda.upsample(batch, c, h, w, state.input.devData, stride, 1, scale, output.devData);
-//upsample(state.input.data, w, h, c, batch, stride, true, scale, output.data);
   end;
 
-//write(LayerTypeStr,' ');
-//output.printGpuSumSqrDiff();
+{$ifdef DEBUG_GPU}
+if reverse then begin        // todo [forward_upsample_layer] why not using rverse as a parameter instead of [if else then]
+  output.fill(0);
+  upsample(pointer(output.data), outW, outH, outC, batch, stride, false, scale, pointer(state.input.data))
+end
+else
+  upsample(pointer(state.input.data), w, h, c, batch, stride, true, scale, pointer(output.data));
+output.printGpuSumSqrDiff();
+{$endif}
 
   {$ifdef USE_TELEMETRY}
   cuda.finish();

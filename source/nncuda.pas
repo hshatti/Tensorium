@@ -226,7 +226,7 @@ procedure EuclidGCD( a, b: SizeInt; var p, q, r:SizeInt);inline;
 //var
 //  cuda : TNNCuda;
 implementation
-
+uses nTensors;
 //procedure SAFE_CALL(const res : CUresult);inline;     overload;
 //var str:PAnsiChar;
 //begin
@@ -841,13 +841,34 @@ begin
 
       case getType() of
         dtHalf:
-          SAFE_CALL(cublasHgemmStridedBatched(cublas, cublasOperation_t(transB), cublasOperation_t(transA), N, M, K, @ALPHA, PHalf(B)+bOffset, ldb, strideB, PHalf(A)+aOffset, lda, strideA, @BETA, PHalf(C)+cOffset, ldc, strideC, batchCount));
+          if strideC=0 then
+            for i:=0 to batchCount-1 do
+              SAFE_CALL(cublasHgemm(cublas, cublasOperation_t(transB), cublasOperation_t(transA), N, M, K,
+              @ALPHA, PHalf(B)+i*strideB+bOffset, ldb,
+              PHalf(A)+i*strideA+aOffset, lda,
+              @BETA, PHalf(C)+i*strideC+cOffset, ldc))
+          else
+            SAFE_CALL(cublasHgemmStridedBatched(cublas, cublasOperation_t(transB), cublasOperation_t(transA), N, M, K, @ALPHA, PHalf(B)+bOffset, ldb, strideB, PHalf(A)+aOffset, lda, strideA, @BETA, PHalf(C)+cOffset, ldc, strideC, batchCount));
         dtSingle:
-          SAFE_CALL(cublasSgemmStridedBatched(cublas, cublasOperation_t(transB), cublasOperation_t(transA), N, M, K, @ALPHA, PSingle(B)+bOffset, ldb, strideB, PSingle(A)+aOffset, lda, strideA, @BETA, PSingle(C)+cOffset, ldc, strideC, batchCount));
+          if strideC=0 then
+            for i:=0 to batchCount-1 do
+              SAFE_CALL(cublasSgemm(cublas, cublasOperation_t(transB), cublasOperation_t(transA), N, M, K,
+              @ALPHA, PSingle(B)+i*strideB+bOffset, ldb,
+              PSingle(A)+i*strideA+aOffset, lda,
+              @BETA, PSingle(C)+i*strideC+cOffset, ldc))
+          else
+            SAFE_CALL(cublasSgemmStridedBatched(cublas, cublasOperation_t(transB), cublasOperation_t(transA), N, M, K, @ALPHA, PSingle(B)+bOffset, ldb, strideB, PSingle(A)+aOffset, lda, strideA, @BETA, PSingle(C)+cOffset, ldc, strideC, batchCount));
           //SAFE_CALL(cublasGemmStridedBatchedEx(cublas, cublasOperation_t(transB), cublasOperation_t(transA), N, M, K, @ALPHA, PSingle(B)+bOffset, CUDA_R_32F, ldb, strideB, PSingle(A)+aOffset, CUDA_R_32F, lda, strideA
           //, @BETA, PSingle(C)+cOffset, CUDA_R_32F, ldc, strideC, batchCount, CUBLAS_COMPUTE_32F_FAST_TF32, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
         dtDouble:
-          SAFE_CALL(cublasDgemmStridedBatched(cublas, cublasOperation_t(transB), cublasOperation_t(transA), N, M, K, @ALPHA, PDouble(B)+bOffset, ldb, strideB, PDouble(A)+aOffset, lda, strideA, @BETA, PDouble(C)+cOffset, ldc, strideC, batchCount));
+          if strideC=0 then
+            for i:=0 to batchCount-1 do
+              SAFE_CALL(cublasDgemm(cublas, cublasOperation_t(transB), cublasOperation_t(transA), N, M, K,
+              @ALPHA, PDouble(B)+i*strideB+bOffset, ldb,
+              PDouble(A)+i*strideA+aOffset, lda,
+              @BETA, PDouble(C)+i*strideC+cOffset, ldc))
+          else
+            SAFE_CALL(cublasDgemmStridedBatched(cublas, cublasOperation_t(transB), cublasOperation_t(transA), N, M, K, @ALPHA, PDouble(B)+bOffset, ldb, strideB, PDouble(A)+aOffset, lda, strideA, @BETA, PDouble(C)+cOffset, ldc, strideC, batchCount));
       end;
       goto done;// yes goto! and there is nothing you can do about it!
     end;

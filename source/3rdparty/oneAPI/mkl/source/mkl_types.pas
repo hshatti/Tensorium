@@ -122,7 +122,7 @@ uses types;
 {$endif}
 {$ifndef MKL_INT8}
     PMKL_INT8 = ^MKL_INT8;    
-    MKL_INT8 = char;    
+    MKL_INT8 = shortint;
 {$endif}
 {$ifndef MKL_INT16}
     PMKL_INT16 = ^MKL_INT16;    

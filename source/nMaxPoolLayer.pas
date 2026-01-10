@@ -4,6 +4,7 @@ unit nMaxPoolLayer;
 {$mode Delphi}
 {$endif}
 {$pointermath on}
+{$T+}
 
 interface
 
@@ -25,6 +26,7 @@ type
     procedure prepareAntialiase(const aStrideX, AStrideY: SizeInt);
     procedure setBatch(ABatch: SizeInt); override;
     procedure setTrain(ATrain: boolean); override;
+    function getOpCount: UInt64; override;
     procedure forwardMaxPool(var state : TNNetState);
     procedure forwardAvgPool(var state : TNNetState);
     procedure backwardMaxPool(var state : TNNetState);
@@ -51,7 +53,7 @@ end;
 implementation
 
 {$ifdef USE_TELEMETRY}
-  uses nBaseLayer;
+  uses nBaseLayer, nnet;
 {$endif}
 
 { TMaxPoolLayer }
@@ -117,10 +119,11 @@ begin
     if train then
         begin
             if not AvgPool then
-                indexes := TSizeIntTensor.Create([batch, outC, outH, outW], batch);
-            delta := TSingleTensor.Create([batch, outC, outH, outW], batch);
+                indexes := TSizeIntTensor.Create([batch, outC, outH, outW], batch,'maxpool_indexes');
+            delta := TSingleTensor.Create([batch, outC, outH, outW], batch,'maxpool_delta');
         end;
-    output := TSingleTensor.Create([batch, outC, outH, outW], batch);
+    output := TSingleTensor.Create([batch, outC, outH, outW], batch,'maxpool_output');
+    OpCount := getOpCount;
 
     //result.bflops := (result.size * result.size * result.c * result.out_h * result.out_w) / 1000000000.0;
     //if avgpool then
@@ -149,7 +152,7 @@ begin
     //                blur_size := 2;
     //                blur_pad := 0
     //            end;
-    //        inputLayer := TConvolutionLayer.Create(batch, 1, outH, outW, outC, outC, outC, blur_size, blur_stride_x, blur_stride_y, 1, blur_pad, acLINEAR, false, false, 1, 0, nil, 0, false, train);
+    //        inputLayer := TConvolutionalLayer.Create(batch, 1, outH, outW, outC, outC, outC, blur_size, blur_stride_x, blur_stride_y, 1, blur_pad, acLINEAR, false, false, 1, 0, nil, 0, false, train);
     //        blur_nweights := outC * blur_size * blur_size;
     //        if blur_size = 2 then begin
     //            i := 0;
@@ -239,6 +242,7 @@ begin
       end;
 
   output.resize([batch, outC, outH, outW], batch);
+  opCount := getOpCount;
   if antialiasing<>0 then
       inputLayer.setBatch(batch);
 
@@ -251,7 +255,7 @@ begin
   if FTrain then begin
       if not AvgPool then
           indexes.reSize([batch, outC, outH, outW], batch);
-      delta := TSingleTensor.Create([batch, outC, outH, outW], batch);
+      delta := TSingleTensor.Create([batch, outC, outH, outW], batch,'maxpool_delta');
   end else begin
       if not AvgPool then
           indexes.free;
@@ -260,6 +264,11 @@ begin
   if assigned(inputLayer) then
       prepareAntialiase(inputLayer.stride_x, inputLayer.stride_y);
 
+end;
+
+function TMaxPoolLayer.getOpCount: UInt64;
+begin
+  result := c * batch * outH * outW * sqr(kernelSize)
 end;
 
 procedure maxpoolMP(const f,t:IntPtr; const p:pointer=nil);
@@ -299,7 +308,7 @@ begin
                                   cur_h := h_offset+i * stride+n;
                                   cur_w := w_offset+j * stride+m;
                                   index := cur_w + w * (cur_h + h * (k+b * c));
-                                  if (cur_h >= 0) and (cur_h < h) and (cur_w >= 0) and (cur_w < w) then
+                                  if (SizeUInt(cur_h) < SizeUInt(h)) and (SizeUInt(cur_w) < SizeUInt(w)) then
                                       val := src[index]
                                   else
                                       val := -MaxSingle;
@@ -403,53 +412,55 @@ begin
                             end;
             exit()
         end;
-    if not state.isTraining and (stride_x = stride_y) then
-        forward_maxpool_layer_avx(state.input^, output, Pointer(indexes.data), kernelSize, w, h, outW, outH, outC, Padding, stride, batch)
-    else
-        begin
-            w_offset := -Padding div 2;
-            h_offset := -Padding div 2;
-            //_h := out_h;
-            //_w := out_w;
-            //_c := c;
-            for b := 0 to batch -1 do
-                for k := 0 to outC -1 do
-                    for i := 0 to outH -1 do
-                        for j := 0 to outW -1 do
-                            begin
-                                out_index := j+outW * (i+outH * (k+outC * b));
-                                max := -MaxSingle;
-                                max_i := -1;
-                                //spacialMove(state.input.data + h_offset + i*stride_y, w, @local, kernelSize, kernelSize);
-                                for _n := 0 to kernelSize -1 do
-                                    for m := 0 to kernelSize -1 do
-                                        begin
-                                            cur_h := h_offset+i * stride_y+_n;
-                                            cur_w := w_offset+j * stride_x+m;
-                                            index := cur_w+w * (cur_h+h * (k+b * outC));
-                                            if (cur_h >= 0) and (cur_h < h) and (cur_w >= 0) and (cur_w < w) then
-                                                val := state.input.data[index]
-                                            else
-                                                val := -MaxSingle;
-                                            if val > max then begin
-                                              max_i := index;
-                                              max := val
-                                            end;
-                                            //if (val > max) then
-                                            //    max_i := index;
-                                            //else
-                                            //    max_i := max_i;
-                                            //if (val > max) then
-                                            //    max := val;
-                                            //else
-                                            //    max := max
-                                        end;
-                                output.data[out_index] := max;
-                                if assigned(indexes.data) then begin
-                                    indexes.data[out_index] := max_i
-                                end
-                            end
-        end;
+    state.input.maxpool(output, kernelSize, stride_x, padding, indexes);
+    //if not state.isTraining and (stride_x = stride_y) then
+    //    forward_maxpool_layer_avx(state.input^.Data, output.Data, Pointer(indexes.data), kernelSize, w, h, outW, outH, outC, Padding, stride, batch)
+    //else
+    //    begin
+    //        w_offset := -Padding div 2;
+    //        h_offset := -Padding div 2;
+    //        //_h := out_h;
+    //        //_w := out_w;
+    //        //_c := c;
+    //        for b := 0 to batch -1 do
+    //            for k := 0 to outC -1 do
+    //                for i := 0 to outH -1 do
+    //                    for j := 0 to outW -1 do
+    //                        begin
+    //                            out_index := j+outW * (i+outH * (k+outC * b));
+    //                            max := -MaxSingle;
+    //                            max_i := -1;
+    //                            //spacialMove(state.input.data + h_offset + i*stride_y, w, @local, kernelSize, kernelSize);
+    //                            for _n := 0 to kernelSize -1 do
+    //                                for m := 0 to kernelSize -1 do
+    //                                    begin
+    //                                        cur_h := h_offset+i * stride_y+_n;
+    //                                        cur_w := w_offset+j * stride_x+m;
+    //                                        index := cur_w+w * (cur_h+h * (k+b * outC));
+    //                                        //index
+    //                                        if (cur_h >= 0) and (cur_h < h) and (cur_w >= 0) and (cur_w < w) then
+    //                                            val := state.input.data[index]
+    //                                        else
+    //                                            val := -MaxSingle;
+    //                                        if val > max then begin
+    //                                          max_i := index;
+    //                                          max := val
+    //                                        end;
+    //                                        //if (val > max) then
+    //                                        //    max_i := index;
+    //                                        //else
+    //                                        //    max_i := max_i;
+    //                                        //if (val > max) then
+    //                                        //    max := val;
+    //                                        //else
+    //                                        //    max := max
+    //                                    end;
+    //                            output.data[out_index] := max;
+    //                            if assigned(indexes.data) then begin
+    //                                indexes.data[out_index] := max_i
+    //                            end
+    //                        end
+    //    end;
     if antialiasing<>0 then
         begin
             s := default(TNNetState);
@@ -576,15 +587,19 @@ begin
   {$ifdef USE_TELEMETRY}
   if benchmark then metrics.forward.start(layerType);
   {$endif}
+{$ifdef DEBUG_GPU}
+writeln(sLineBreak, '[', index, ']',LayerTypeStr);
+{$endif}
+
+
   if not state.input.wasGPU() then state.input.pushToDevice;
+  output.setOCL;
+  indexes.setOCL;
   if avgPool then begin end
   else begin
-    ocl.forwardMaxPool(batch, outC, outH, outW, state.input.devData, c, h, w, stride_x, stride_y, padding, kernelSize, indexes.devData, output.devData
-    {$IFDEF CL_EVENTS}
-    , batch, pointer(events), pointer(events));
-    {$ELSE}
-    );
-    {$ENDIF}
+    ocl.forwardMaxPool(batch, outC, outH, outW, state.input.devData, c, h, w, stride_x, stride_y, padding, kernelSize, indexes.devData, output.devData);
+
+//forward(state);
     if antialiasing<>0 then
         begin
             s := default(TNNetState);
@@ -598,18 +613,16 @@ begin
 
   end;
 
-  //forwardMaxPool(state);
-  //output.pullFromDevice(t);
-  //writeln(state.index, ' MAXPOOL FW: ');
-  //t.printStat();
-  //output.printStat();
-  //writeln(' sumSQRDiff : ', t.sumSqrDiff(output):1:6);
-  //readln;
+{$ifdef DEBUG_GPU}
+if avgPool then
+    forwardAvgPool(state)
+else
+    forwardMaxPool(state);
+output.printGpuSumSqrDiff();
+if assigned(indexes.data) then
+    indexes.printGpuSumSqrDiff();
+{$endif}
 
-  output.setOCL;
-  indexes.setOCL;
-  //ocl.waitForEvents(batch, pointer(events));
-  //ocl.finish();
   {$ifdef USE_TELEMETRY}
   ocl.finish();
   if benchmark then metrics.forward.finish(layerType);
@@ -652,6 +665,7 @@ begin
   if benchmark then metrics.backward.finish(layerType);
   {$endif}
 end;
+
 {$elseif defined(USE_CUDART)}
 procedure TMaxPoolLayer.forwardGPU(var state: TNNetState);
 var s:TNNetState;
@@ -679,6 +693,15 @@ begin
 
   end;
 
+{$ifdef DEBUG_GPU}
+if avgPool then
+    forwardAvgPool(state)
+else
+    forwardMaxPool(state);
+output.printGpuSumSqrDiff();
+if assigned(indexes.data) then
+    indexes.printGpuSumSqrDiff();
+{$endif}
 //output.printGpuSumSqrDiff();
   {$ifdef USE_TELEMETRY}
   cuda.finish();
@@ -697,8 +720,15 @@ begin
   if avgpool then
   else
     cuda.backwardMaxPool(batch, outC, outH, outW, state.delta.devData, indexes.devData, delta.devData);
-//backward(state);
-//state.delta^.printGpuSumSqrDiff();
+
+{$ifdef DEBUG_GPU}
+if avgPool then
+    backwardAvgPool(state)
+else
+    backwardMaxPool(state);
+state.delta.printGpuSumSqrDiff();
+{$endif}
+
   {$ifdef USE_TELEMETRY}
   cuda.finish();
   if benchmark then metrics.backward.finish(layerType);

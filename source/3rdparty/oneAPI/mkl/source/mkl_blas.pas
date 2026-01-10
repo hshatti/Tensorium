@@ -3588,7 +3588,7 @@ uses types, mkl_types;
   procedure DAXPY_BATCH(const n:PMKL_INT; const alpha:Pdouble; const x:PPdouble; const incx:PMKL_INT; const y:PPdouble; const 
               incy:PMKL_INT; const group_count:PMKL_INT; const group_size:PMKL_INT);winapi; external {$ifdef libmkl} libmkl{$endif};
 {$endif}
-{ifdef LOWERCASE_DECL}
+{$ifdef LOWERCASE_DECL}
   procedure daxpy_batch(const n:PMKL_INT; const alpha:Pdouble; const x:PPdouble; const incx:PMKL_INT; const y:PPdouble; const 
               incy:PMKL_INT; const group_count:PMKL_INT; const group_size:PMKL_INT);winapi; external {$ifdef libmkl} libmkl{$endif};
 {$endif}

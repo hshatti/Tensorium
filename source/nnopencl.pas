@@ -55,7 +55,7 @@ uses
     'normvv',
     'means_vars',
     'fmavss',
-    'upsample',
+    'UpSample',
     'Xcol2imKernelNormal',
     'Xcol2imKernelFlip',
     'Xim2colKernelNormal',
@@ -81,7 +81,7 @@ uses
     'sgemm1_nt',
     'sgemm2_nn',
     'sgemm1_nn',
-    'clamp',
+    'Clamp',
     'inverse_sqrt'
   );
 
@@ -370,7 +370,9 @@ var
   function ceil(const a, b: SizeInt):SizeInt;  overload;
 
 implementation
-
+{$ifdef USE_TELEMETRY}
+uses nTensors;
+{$endif}
 
 //// Solve Bezout's identity
 //// a * p + b * q = r = GCD(a, b)
@@ -723,7 +725,7 @@ begin
   //   [...]      [...]      [...]
 
 
-  if (useBLAS = CL_LIB_BLAS) or ((useBLAS=CL_LIB_BLAST) and (StrideC=0))then begin
+  if (useBLAS = CL_LIB_BLAS) or ((useBLAS=CL_LIB_BLAST) and (StrideC=0)) then begin
     for i:= 0 to batchCount-1 do
       gemm(
         transA, transB
@@ -782,7 +784,7 @@ begin
     goto done
   end;
 
-  if strideC=0 then begin
+  if (strideC=0) then
     for i:= 0 to batchCount-1 do
       sgemm.DoGemm(
       loRowMajor, TTranspose(transA), TTranspose(transB)
@@ -791,7 +793,6 @@ begin
         , B, bOffset + i*strideB, ldb
         , PSingle(@beta)^, C, cOffset + i*strideC, ldc
       )
-  end
   else
     sgemm.DoGemmStridedBatch(
         loRowMajor, TTranspose(transA), TTranspose(transB)
@@ -803,8 +804,8 @@ begin
         , C, cOffset, ldc, strideC
         , batchCount
     );
-  goto done;
-
+  goto done; // goto because why not
+  // below is the old gemm kernel for testing, slower and redundant
 
   if (not transA) and (not transB)then
     if N > M then begin

@@ -51,7 +51,7 @@ begin
   inputs := aInputs;
   outputs := aOutputs;
   inputShape := [steps*batch, inputs];
-  state := TSingleTensor.Create([(steps+1)* batch, hidden], (steps+1)* batch);
+  state := TSingleTensor.Create([(steps+1)* batch, hidden], (steps+1)* batch,'RNN_state');
   ActivationType := aActivation;
   isBatchNormalized := aBatchNormalized;
   //writeln('rand_seed ',rand_seed);

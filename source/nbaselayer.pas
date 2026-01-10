@@ -1,11 +1,15 @@
 unit nBaseLayer;
 {$ifdef FPC}
 {$mode Delphi}{$H+}
+{$ModeSwitch nestedprocvars}
 {$endif}
 interface
 
 uses
   SysUtils, ntypes, ntensors, nActivation
+  {$ifdef USE_MULTITHREADING}
+  , steroids
+  {$endif}
   {$ifdef USE_TELEMETRY}
   , nOpMetrics
   {$endif}
@@ -27,68 +31,74 @@ type
   { TBaseLayer }
 
   TBaseLayer = class(TInterfacedObject)
+
   protected
     procedure setTrain(ATrain: boolean); virtual; abstract;
   public
     FTrain                   : boolean;
     layerType                : TLayerType;
     inputShape               : TArray<SizeInt>;
-    output                   : TSingleTensor;
+    output                   : TNeuralTensor;
     Batch, Steps, Groups,
       inputs, outputs        : SizeInt;
-    weights                  : TSingleTensor;
-    biases                   : TSingleTensor;
+    weights                  : TNeuralTensor;
+    biases                   : TNeuralTensor;
 
-    weight_updates           : TSingleTensor;
-    bias_updates             : TSingleTensor;
+    weight_updates           : TNeuralTensor;
+    bias_updates             : TNeuralTensor;
 
-    delta                    : TSingleTensor;
+    delta                    : TNeuralTensor;
 
-    //gradient                 : TSingleTensor;
-    //activated                : TSingleTensor;
+    //gradient                 : TNeuralTensor;
+    //activated                : TNeuralTensor;
     ActivationType           : TActivationType;
     id                       : SizeInt;
     isBatchNormalized        : boolean;
     bnMomentum               : single ;
+    quantizationType         : TPrecisionType;
     backwardStop, forwardOnly: boolean;
     dontLoad, dontLoadScales  : boolean;
     // for batch normalization
-    scales                   : TSingleTensor;
-    scale_updates            : TSingleTensor;
-    mean                     : TSingleTensor;
-    mean_delta               : TSingleTensor;
-    variance                 : TSingleTensor;
-    variance_delta           : TSingleTensor;
-    rolling_mean             : TSingleTensor;
-    rolling_variance         : TSingleTensor;
-    x                        : TSingleTensor;
-    x_norm                   : TSingleTensor;
-    workspace                : TSingleTensor;
+    scales                   : TNeuralTensor;
+    scale_updates            : TNeuralTensor;
+    mean                     : TNeuralTensor;
+    mean_delta               : TNeuralTensor;
+    variance                 : TNeuralTensor;
+    variance_delta           : TNeuralTensor;
+    rolling_mean             : TNeuralTensor;
+    rolling_variance         : TNeuralTensor;
+    x                        : TNeuralTensor;
+    x_norm                   : TNeuralTensor;
+    workspace                : TNeuralTensor;
     // for ADAM optimization
-    m                        : TSingleTensor;
-    v                        : TSingleTensor;
-    bias_m                   : TSingleTensor;
-    scale_m                  : TSingleTensor;
-    bias_v                   : TSingleTensor;
-    scale_v                  : TSingleTensor;
+    m                        : TNeuralTensor;
+    v                        : TNeuralTensor;
+    bias_m                   : TNeuralTensor;
+    scale_m                  : TNeuralTensor;
+    bias_v                   : TNeuralTensor;
+    scale_v                  : TNeuralTensor;
 
     // Exponential Moving Average
-    weights_ema, biases_ema  : TSingleTensor;
-    scales_ema               : TSingleTensor;
+    weights_ema, biases_ema  : TNeuralTensor;
+    scales_ema               : TNeuralTensor;
 
     // cost array must be nil or size of [1]
     cost                     : TArray<Single>;
+    tempBuffer               : TArray<Byte>;
     index                    : SizeInt;
     net                      : TObject;
+    opCount                  : UInt64;
     constructor Create(); virtual;
     procedure setBatch(ABatch :SizeInt); virtual; abstract;
     function getWorkspaceSize():SizeInt; virtual;
-    procedure Activate(const offset: SizeInt =0);   virtual;
-    procedure Derivative(const offset: SizeInt =0); virtual;
+    function getOpCount():UInt64; virtual;
+    procedure Activate(const offset: SizeInt =0; const activeOutput:PNeuralTensor = nil);   virtual;
+    procedure Derivative(const offset: SizeInt =0; const activeOutput:PNeuralTensor = nil); virtual;
     procedure reGroup(const stepBatch :SizeInt);
 
     function LayerTypeStr:string;
     procedure freeBatchNorm;
+    procedure quantize(const qType:TPrecisionType); virtual;
     //destructor Destroy();override;
     procedure forward(var state : TNNetState); virtual; abstract;
     procedure backward(var state : TNNetState); virtual; abstract;
@@ -193,9 +203,26 @@ begin
   result :=0;
 end;
 
-procedure TBaseLayer.Activate(const offset: SizeInt);
+function TBaseLayer.getOpCount: UInt64;
 begin
-  {$ifdef _USE_OPENCL}
+  result := batch*outputs*(2*inputs-1) // gemm
+      + batch*outputs*2                   // activation
+      + batch*outputs                   // bias
+      + ord(isBatchNormalized)*(5*batch*outputs) // batch normalization
+      ;
+end;
+
+procedure TBaseLayer.Activate(const offset: SizeInt; const activeOutput: PNeuralTensor);
+var o:Pointer;
+begin
+{$ifdef USE_TELEMETRY}
+  if benchmark then tensorMetrics.start(opActivate);
+{$endif}
+  if assigned(activeOutput) and assigned(activeOutput.Data) then
+    o := activeOutput.Data + offset
+  else
+    o := nil;
+{$ifdef _USE_OPENCL}
   if output.computingDevice=cdOpenCL then begin;
     if not output.wasGPU then
       output.pushToDevice;
@@ -203,12 +230,24 @@ begin
   end else
   {$endif}
   assert(output.Size() - offset - batch * outputs >= 0, '[Activation] out of range!');
+  activate_array(batch * outputs, Pointer(output.Data + offset), ActivationType, o);
 
-  activate_array(Pointer(output.Data + offset), batch * outputs, ActivationType);
+{$ifdef USE_TELEMETRY}
+  if benchmark then tensorMetrics.finish(opActivate);
+{$endif}
 end;
 
-procedure TBaseLayer.Derivative(const offset: SizeInt);
+procedure TBaseLayer.Derivative(const offset: SizeInt; const activeOutput: PNeuralTensor);
+var
+  o:Pointer;
 begin
+{$ifdef USE_TELEMETRY}
+  if benchmark then tensorMetrics.start(opDerive);
+{$endif}
+  if assigned(activeOutput) and assigned(activeOutput.Data) then
+    o := activeOutput.Data + offset
+  else
+    o := nil;
   {$if defined(_USE_OPENCL)}
   if output.computingDevice = cdOpenCL then begin
     if not output.wasGPU then
@@ -221,7 +260,10 @@ begin
   {$endif}
   assert((IntPtr(output.data) >= IntPtr(output.DynData)) and (output.Size() - offset - batch * outputs >= 0), '[Gradient] Output out of range!');
   assert((IntPtr(delta.data)  >= IntPtr(delta.DynData))  and (delta.Size()  - offset - batch * outputs >= 0), '[Gradient] Delta out of range!');
-  gradient_array(pointer(output.Data + offset), batch * outputs, ActivationType, pointer(Delta.Data + offset));
+  gradient_array(batch * outputs, pointer(output.Data + offset), pointer(Delta.Data + offset), ActivationType, o);
+{$ifdef USE_TELEMETRY}
+  if benchmark then tensorMetrics.finish(opDerive);
+{$endif}
 end;
 
 procedure TBaseLayer.reGroup(const stepBatch: SizeInt);
@@ -313,6 +355,11 @@ begin
   x_norm.free
 end;
 
+procedure TBaseLayer.quantize(const qType: TPrecisionType);
+begin
+  //
+end;
+
 //destructor TBaseLayer.Destroy;
 //begin
 //  inherited Destroy;
@@ -383,8 +430,8 @@ begin
 
   // add scales to all delta batches
   delta.forwardScale(scales, offset, stepSize);
-  TSingleTensor.MeansAndVarsDelta(delta, x, mean, variance, mean_delta, variance_delta, offset);
-  TSingleTensor.normalizeDelta(x, mean, variance, mean_delta, variance_delta, delta, offset);
+  TNeuralTensor.MeansAndVarsDelta(delta, x, mean, variance, mean_delta, variance_delta, offset);
+  TNeuralTensor.normalizeDelta(x, mean, variance, mean_delta, variance_delta, delta, offset);
   if layerType = ltBATCHNORM then
     delta.copyTo(state.delta^);
 
@@ -426,6 +473,8 @@ begin
     if not scales.wasGPU() then scales.pushToDevice;
     if not rolling_mean.wasGPU() then rolling_mean.pushToDevice;
     if not rolling_variance.wasGPU() then rolling_variance.pushToDevice;
+    if not mean.wasGPU() then mean.setOCL;
+    if not variance.wasGPU() then variance.setOCL;
 
     outputStep := batch*outputs;
     offset := state.step*outputStep;
@@ -439,9 +488,9 @@ begin
     //    outH :=1;
     //    outW:=1;
     //end;
-    if not scales.wasGPU() then scales.pushToDevice;
-    if not rolling_mean.wasGPU() then rolling_mean.pushToDevice;
-    if not rolling_variance.wasGPU() then rolling_variance.pushToDevice;
+    //if not scales.wasGPU() then scales.pushToDevice;
+    //if not rolling_mean.wasGPU() then rolling_mean.pushToDevice;
+    //if not rolling_variance.wasGPU() then rolling_variance.pushToDevice;
 
     if state.isTraining and not state.adversarial then begin
         //output.MeansAndVars(mean, variance);
@@ -492,6 +541,9 @@ begin
   if benchmark then metrics.backward.start(ltBATCHNORM);
   {$endif}
 
+  if not mean_delta.wasGPU() then mean_delta.setOCL;
+  if not variance_delta.wasGPU() then variance_delta.setOCL;
+  if not scale_updates.wasGPU() then scale_updates.setOCL;
   // spatial dot (x_norm . delta) then add to scale_updates
   //scale_updates.addDots(x_norm, delta);
   //
@@ -558,6 +610,8 @@ begin
   if not scales.wasGPU() then scales.pushToDevice;
   if not rolling_mean.wasGPU() then rolling_mean.pushToDevice;
   if not rolling_variance.wasGPU() then rolling_variance.pushToDevice;
+  if not mean.wasGPU() then mean.setCUDA;
+  if not variance.wasGPU() then variance.setCUDA;
 
   outputStep := batch*outputs;
   offset := state.step*outputStep;
@@ -574,9 +628,9 @@ state.input.copyTo(output);
   //    outH :=1;
   //    outW:=1;
   //end;
-  if not scales.wasGPU() then scales.pushToDevice;
-  if not rolling_mean.wasGPU() then rolling_mean.pushToDevice;
-  if not rolling_variance.wasGPU() then rolling_variance.pushToDevice;
+  //if not scales.wasGPU() then scales.pushToDevice;
+  //if not rolling_mean.wasGPU() then rolling_mean.pushToDevice;
+  //if not rolling_variance.wasGPU() then rolling_variance.pushToDevice;
 
   if state.isTraining and not state.adversarial then begin
       //cuda.meansAndVars(outputStep, mean.Size(), output.Groups, output.devData, offset, mean.devData, variance.devData);
@@ -619,7 +673,7 @@ x.printGpuSumSqrDiff();
 
       cuda.normalize(mean.Size(), outputStep, output.groups, mean.devData, 1, variance.devData, 1, output.devData, offset);
 {$ifdef DEBUG_GPU}
-output.Normalize(mean, variance);
+output.blockNormalize(mean, variance);
 output.printGpuSumSqrDiff();
 {$endif}
 
@@ -631,7 +685,7 @@ x_norm.printGpuSumSqrDiff();
   end else begin
       cuda.normalize(rolling_mean.Size(), outputStep, output.Groups, rolling_mean.devData, 1, rolling_variance.devData, 1, output.devData, 0);
 {$ifdef DEBUG_GPU}
-output.Normalize(rolling_mean, rolling_variance);
+output.blockNormalize(rolling_mean, rolling_variance);
 output.printGpuSumSqrDiff();
 {$endif}
   end;
@@ -639,16 +693,19 @@ output.printGpuSumSqrDiff();
 
 
   //cuda.forwardScaleAdd(outputStep, output.devData, offset, scales.size(), scales.devData, biases.devData, 1, output.groups);
+
   cuda.forwardScale(outputStep, output.devData, offset, scales.size(), scales.devData, 1, output.groups);
-  cuda.forwardBias(outputStep, output.devData, offset, biases.size(), biases.devData, 1, output.groups);
 {$ifdef DEBUG_GPU}
 output.forwardScale(scales);
+output.printGpuSumSqrDiff();
+{$endif}
+  if assigned(biases.devData) then
+    cuda.forwardBias(outputStep, output.devData, offset, biases.size(), biases.devData, 1, output.groups);
+{$ifdef DEBUG_GPU}
+if assigned(biases.Data) then begin
 output.forwardBias(biases);
 output.printGpuSumSqrDiff();
-mean.printGpuSumSqrDiff();
-variance.printGpuSumSqrDiff();
-x.printGpuSumSqrDiff();
-x_norm.printGpuSumSqrDiff();
+end;
 {$endif}
 
 
@@ -666,6 +723,9 @@ begin
 {$ifdef USE_TELEMETRY}
   if benchmark then metrics.backward.start(ltBATCHNORM);
 {$endif}
+  if not mean_delta.wasGPU() then mean_delta.setCUDA;
+  if not variance_delta.wasGPU() then variance_delta.setCUDA;
+  if not scale_updates.wasGPU() then scale_updates.setCUDA;
 
   // spatial dot (x_norm . delta) then add to scale_updates
   //scale_updates.addDots(x_norm, delta);
@@ -694,14 +754,14 @@ delta.printGpuSumSqrDiff();
 
   cuda.meansAndVarsDelta(outputStep, mean.size(), delta.groups, delta.devData, x.devData, offset, mean.devData, variance.devData, mean_delta.devData, variance_delta.devData);
 {$ifdef DEBUG_GPU}
-TSingleTensor.MeansAndVarsDelta(delta, x, mean, variance, mean_delta, variance_delta, offset);
+TSNeuralensor.MeansAndVarsDelta(delta, x, mean, variance, mean_delta, variance_delta, offset);
 mean_delta.printGpuSumSqrDiff();
 variance_delta.printGpuSumSqrDiff();
 {$endif}
 
   cuda.normalizeDelta(outputStep, mean.size(), delta.groups, delta.devData, x.devData, offset, mean.devData, variance.devData, mean_delta.devData, variance_delta.devData);
 {$ifdef DEBUG_GPU}
-TSingleTensor.normalizeDelta(x, mean, variance, mean_delta, variance_delta, delta, offset);
+TNeuralTensor.normalizeDelta(x, mean, variance, mean_delta, variance_delta, delta, offset);
 delta.printGpuSumSqrDiff();
 {$endif}
 
